@@ -1,0 +1,12 @@
+# Clippy 配置
+# 详见: https://rust-lang.github.io/rust-clippy/master/index.html
+
+# 允许的 lints
+# allow-mixed-uninlined-format-args = true
+
+# 警告级别
+# warn-on-all-wildcard-imports = true
+
+# 性能相关
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250

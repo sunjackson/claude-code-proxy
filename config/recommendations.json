@@ -1,0 +1,40 @@
+{
+  "services": [
+    {
+      "site_name": "Claude API 中转服务 A",
+      "promotion_url": "https://example-service-a.com?ref=claude-code-router",
+      "is_recommended": true,
+      "hotness_score": 95
+    },
+    {
+      "site_name": "Claude API 中转服务 B",
+      "promotion_url": "https://example-service-b.com?ref=claude-code-router",
+      "is_recommended": true,
+      "hotness_score": 88
+    },
+    {
+      "site_name": "Claude API 中转服务 C",
+      "promotion_url": "https://example-service-c.com?ref=claude-code-router",
+      "is_recommended": false,
+      "hotness_score": 72
+    },
+    {
+      "site_name": "Claude API 中转服务 D",
+      "promotion_url": "https://example-service-d.com?ref=claude-code-router",
+      "is_recommended": true,
+      "hotness_score": 65
+    },
+    {
+      "site_name": "Claude API 中转服务 E",
+      "promotion_url": "https://example-service-e.com?ref=claude-code-router",
+      "is_recommended": false,
+      "hotness_score": 50
+    },
+    {
+      "site_name": "Claude API 中转服务 F",
+      "promotion_url": "https://example-service-f.com?ref=claude-code-router",
+      "is_recommended": false,
+      "hotness_score": 42
+    }
+  ]
+}

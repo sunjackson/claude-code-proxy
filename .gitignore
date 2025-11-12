@@ -1,0 +1,87 @@
+# Rust
+target/
+debug/
+release/
+**/*.rs.bk
+*.rlib
+*.prof*
+Cargo.lock
+
+# Node.js / JavaScript / TypeScript
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.eslintcache
+.yarn-integrity
+
+# Environment variables
+.env
+.env.*
+!.env.example
+*.local
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.iml
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Tauri specific
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/WixTools
+
+# Build outputs
+src-ui/dist/
+src-ui/build/
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Application specific
+.claude-code-proxy/
+backups/
+logs/
+*.log
+
+# Package manager locks (optional - uncomment if you want to ignore them)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

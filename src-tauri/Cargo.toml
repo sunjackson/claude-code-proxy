@@ -1,0 +1,73 @@
+[package]
+name = "claude-code-router"
+version = "1.0.0"
+description = "Claude Code 代理服务管理应用"
+authors = ["Your Name"]
+license = ""
+repository = ""
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri 框架
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-http = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 异步运行时
+tokio = { version = "1.35", features = ["full"] }
+
+# HTTP 代理服务器
+hyper = { version = "1.5", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+hyper-rustls = "0.27"
+tokio-rustls = "0.26"
+rustls = "0.23"
+webpki-roots = "0.26"
+tower = "0.4"
+
+# 数据库
+rusqlite = { version = "0.30", features = ["bundled"] }
+
+# 日志
+log = "0.4"
+env_logger = "0.11"
+
+# 系统密钥链
+keyring = "2.2"
+
+# 错误处理
+thiserror = "1.0"
+anyhow = "1.0"
+
+# 时间处理
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP 客户端(用于 API 测试)
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+
+# 跨平台路径
+dirs = "5.0"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# macOS 特定依赖(如需)
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Windows 特定依赖(如需)
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Linux 特定依赖(如需)

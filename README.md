@@ -90,21 +90,61 @@ Claude Code Router 是一个专为 Claude Code 设计的本地代理管理工具
 
 1. 访问 [Releases 页面](https://github.com/your-org/claude-code-router/releases)
 2. 下载对应平台的安装包：
-   - **Windows**: `claude-code-router_x.x.x_x64.msi`
-   - **macOS**: `claude-code-router_x.x.x_x64.dmg`
-   - **Linux**: `claude-code-router_x.x.x_amd64.deb`
-3. 双击安装包并按提示完成安装
+   - **Windows**: `ClaudeCodeProxy_x.x.x_x64.msi`
+   - **macOS**: `ClaudeCodeProxy_x.x.x_macOS_Installer.dmg`
+   - **Linux**: `ClaudeCodeProxy_x.x.x_amd64.deb`
 
 #### 方式 2: 从源码构建
 
 详见 [开发文档](#开发文档) 部分。
 
+### 安装说明
+
+#### macOS 安装步骤
+
+1. **下载并打开 DMG 文件**
+   - 双击 `ClaudeCodeProxy_x.x.x_macOS_Installer.dmg` 打开安装镜像
+   - 等待镜像挂载完成
+
+2. **安装应用**
+   - 在打开的窗口中，将 `ClaudeCodeProxy` 图标拖拽到 `Applications` 文件夹图标
+   - 等待复制完成
+
+3. **首次运行**
+   - 打开「应用程序」文件夹，找到 ClaudeCodeProxy
+   - **重要**：右键点击应用图标，选择「打开」（不要双击）
+   - 在弹出的安全提示中，点击「打开」按钮
+   - 后续使用可以正常双击打开
+
+> **💡 为什么需要右键打开？**
+>
+> 由于应用未经过 Apple 公证，macOS Gatekeeper 会阻止直接运行。右键打开是安全地运行未签名应用的标准方式。
+>
+> 如果右键打开仍然被阻止，请前往「系统设置 > 隐私与安全性」，在底部找到相关提示并点击「仍要打开」。
+
+#### Windows 安装步骤
+
+1. 双击 `.msi` 安装包
+2. 按照安装向导提示完成安装
+3. 如遇到 Windows Defender 提示，点击"更多信息"然后"仍要运行"
+
+#### Linux 安装步骤
+
+```bash
+# Ubuntu/Debian
+sudo dpkg -i ClaudeCodeProxy_x.x.x_amd64.deb
+sudo apt-get install -f  # 安装依赖
+
+# 运行
+claude-code-proxy
+```
+
 ### 首次启动
 
 1. **启动应用**
    - Windows: 从开始菜单或桌面快捷方式启动
-   - macOS: 从应用程序文件夹启动
-   - Linux: 从应用菜单或终端运行 `claude-code-router`
+   - macOS: 从应用程序文件夹启动（首次使用右键打开）
+   - Linux: 从应用菜单或终端运行 `claude-code-proxy`
 
 2. **添加 API 配置**
    - 点击"配置管理"进入配置页面

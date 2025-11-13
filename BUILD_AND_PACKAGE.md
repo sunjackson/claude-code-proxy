@@ -123,12 +123,68 @@ curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
-## 分发安装包
+## 打包分发版本
 
-### macOS
-1. 分发 `.dmg` 文件给用户
-2. 用户双击 `.dmg` 文件
-3. 将应用拖拽到"应用程序"文件夹
+### macOS DMG 打包
+
+项目提供了专门的 DMG 打包脚本，创建带有"应用程序"文件夹链接的专业安装镜像。
+
+#### 使用打包脚本（推荐）
+
+```bash
+# 1. 先构建应用
+./build.sh
+
+# 2. 使用简化脚本创建 DMG（推荐）
+./create-dmg-simple.sh
+
+# 或使用标准脚本
+./create-dmg.sh
+```
+
+**脚本说明：**
+- `create-dmg-simple.sh`: 推荐使用，创建带有 Applications 链接的标准 DMG
+- `create-dmg.sh`: 基础版本，仅打包 .app 文件
+- `create-dmg-enhanced.sh`: 增强版，尝试自定义窗口布局（可能需要额外配置）
+
+**输出文件位置：**
+- 标准 DMG: `dist/ClaudeCodeProxy_1.0.0_macOS.dmg`
+- 安装版 DMG: `dist/ClaudeCodeProxy_1.0.0_macOS_Installer.dmg`
+
+**DMG 特性：**
+- ✅ 包含应用程序文件夹链接，方便用户拖拽安装
+- ✅ UDZO 格式压缩，减小文件体积
+- ✅ 自动验证 DMG 完整性
+- ✅ 提供详细的安装说明
+
+#### 手动创建 DMG
+
+如果需要自定义 DMG 内容：
+
+```bash
+# 1. 创建临时目录
+mkdir -p dmg_temp
+cp -R src-tauri/target/release/bundle/macos/ClaudeCodeProxy.app dmg_temp/
+ln -s /Applications dmg_temp/Applications
+
+# 2. 创建 DMG
+hdiutil create \
+    -volname "ClaudeCodeProxy" \
+    -srcfolder dmg_temp \
+    -ov \
+    -format UDZO \
+    -imagekey zlib-level=9 \
+    ClaudeCodeProxy_Installer.dmg
+
+# 3. 清理
+rm -rf dmg_temp
+```
+
+### macOS 分发指南
+1. 使用打包脚本生成 DMG 文件
+2. 分发 `ClaudeCodeProxy_x.x.x_macOS_Installer.dmg` 给用户
+3. 用户双击 DMG 文件后，将应用拖拽到 Applications 文件夹
+4. 首次运行需要右键点击选择"打开"（未签名应用）
 
 ### Windows
 1. 分发 `.msi` 或 `.exe` 安装程序给用户

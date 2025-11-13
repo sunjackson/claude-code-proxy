@@ -245,7 +245,7 @@ CREATE TABLE api_configs (
 const keytar = require('keytar');
 
 class ApiKeyManager {
-  private readonly SERVICE_NAME = 'claude-code-router';
+  private readonly SERVICE_NAME = 'claude-code-proxy';
 
   async saveApiKey(configName: string, apiKey: string): Promise<void> {
     await keytar.setPassword(this.SERVICE_NAME, configName, apiKey);
@@ -280,7 +280,7 @@ class ApiKeyManager {
 2. **文件权限设置**
    ```bash
    # macOS/Linux
-   chmod 600 ~/.claude-code-router/config.db
+   chmod 600 ~/.claude-code-proxy/config.db
 
    # Windows (自动继承,无需手动设置)
    ```

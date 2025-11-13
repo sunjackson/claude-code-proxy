@@ -87,6 +87,13 @@ export interface ConfigGroup {
 }
 
 /**
+ * 供应商分类
+ */
+export type VendorCategory = 'official' | 'cn_official' | 'aggregator' | 'third_party' | 'custom';
+// ProviderCategory 是 VendorCategory 的别名，用于兼容
+export type ProviderCategory = VendorCategory;
+
+/**
  * API 配置
  */
 export interface ApiConfig {
@@ -111,6 +118,22 @@ export interface ApiConfig {
   /** 最后测试延迟(毫秒) */
   last_latency_ms: number | null;
 
+  /** 供应商分类 */
+  category: VendorCategory;
+  /** 是否为合作伙伴 */
+  is_partner: boolean;
+
+  // 视觉主题配置
+  /** 图标类型 */
+  theme_icon: string | null;
+  /** 背景色 */
+  theme_bg_color: string | null;
+  /** 文字色 */
+  theme_text_color: string | null;
+
+  /** 元数据（JSON字符串） */
+  meta: string;
+
   // Claude 模型配置
   /** 默认模型 */
   default_model: string | null;
@@ -129,6 +152,24 @@ export interface ApiConfig {
   /** 最大输出令牌数 */
   max_output_tokens: number | null;
 
+  // 余额查询相关
+  /** 余额查询URL */
+  balance_query_url: string | null;
+  /** 最后查询到的余额 */
+  last_balance: number | null;
+  /** 余额货币单位 */
+  balance_currency: string | null;
+  /** 最后余额查询时间 */
+  last_balance_check_at: string | null;
+  /** 余额查询状态 */
+  balance_query_status: 'success' | 'failed' | 'pending' | null;
+  /** 余额查询错误信息 */
+  balance_query_error: string | null;
+  /** 是否启用自动余额查询 */
+  auto_balance_check: boolean;
+  /** 余额查询间隔（秒） */
+  balance_check_interval_sec: number | null;
+
   /** 创建时间 */
   created_at: string;
   /** 更新时间 */
@@ -146,6 +187,14 @@ export interface CreateApiConfigInput {
   group_id?: number | null;
   sort_order?: number;
 
+  // 供应商分类和主题
+  category?: VendorCategory;
+  is_partner?: boolean;
+  theme_icon?: string;
+  theme_bg_color?: string;
+  theme_text_color?: string;
+  meta?: string;
+
   // Claude 模型配置
   default_model?: string;
   haiku_model?: string;
@@ -156,6 +205,12 @@ export interface CreateApiConfigInput {
   // API 高级设置
   api_timeout_ms?: number;
   max_output_tokens?: number;
+
+  // 余额查询配置
+  balance_query_url?: string;
+  auto_balance_check?: boolean;
+  balance_check_interval_sec?: number;
+  balance_currency?: string;
 }
 
 /**
@@ -171,6 +226,14 @@ export interface UpdateApiConfigInput {
   sort_order?: number;
   is_available?: boolean;
 
+  // 供应商分类和主题
+  category?: VendorCategory;
+  is_partner?: boolean;
+  theme_icon?: string;
+  theme_bg_color?: string;
+  theme_text_color?: string;
+  meta?: string;
+
   // Claude 模型配置
   default_model?: string;
   haiku_model?: string;
@@ -181,6 +244,12 @@ export interface UpdateApiConfigInput {
   // API 高级设置
   api_timeout_ms?: number;
   max_output_tokens?: number;
+
+  // 余额查询配置
+  balance_query_url?: string;
+  auto_balance_check?: boolean;
+  balance_check_interval_sec?: number;
+  balance_currency?: string;
 }
 
 /**
@@ -209,6 +278,11 @@ export interface ProxyService {
 }
 
 /**
+ * 测试状态
+ */
+export type TestStatus = 'success' | 'failed' | 'timeout';
+
+/**
  * API 测试结果
  */
 export interface TestResult {
@@ -216,14 +290,24 @@ export interface TestResult {
   id: number;
   /** API 配置 ID */
   config_id: number;
-  /** 测试时间(Unix 时间戳) */
-  test_time: number;
-  /** 是否成功 */
-  is_success: boolean;
+  /** 所属分组 ID */
+  group_id: number | null;
+  /** 测试时间 */
+  test_at: string;
+  /** 连接状态 */
+  status: TestStatus;
   /** 延迟(毫秒) */
   latency_ms: number | null;
   /** 错误信息 */
   error_message: string | null;
+  /** API 密钥是否有效 */
+  is_valid_key: boolean | null;
+  /** API 响应内容 */
+  response_text: string | null;
+  /** 测试使用的模型 */
+  test_model: string | null;
+  /** 尝试次数 */
+  attempt: number | null;
 }
 
 /**
@@ -241,18 +325,18 @@ export interface SwitchLog {
   switch_at: string;
   /** 切换原因 */
   reason: SwitchReason;
-  /** 源配置(可能已删除) */
-  source_config: ApiConfig | null;
-  /** 目标配置 */
-  target_config: ApiConfig;
-  /** 所属分组 */
-  group: ConfigGroup;
-  /** 是否跨分组切换(应始终为 false) */
-  is_cross_group: boolean;
+  /** 源配置名称(可能已删除) */
+  source_config_name: string | null;
+  /** 目标配置名称 */
+  target_config_name: string;
+  /** 所属分组名称 */
+  group_name: string;
   /** 切换前延迟(毫秒) */
   latency_before_ms: number | null;
   /** 切换后延迟(毫秒) */
   latency_after_ms: number | null;
+  /** 延迟改善(毫秒) */
+  latency_improvement_ms: number | null;
   /** 错误信息 */
   error_message: string | null;
 }
@@ -296,4 +380,29 @@ export interface EnvironmentVariable {
   value: string;
   /** 是否为 Anthropic 相关变量 */
   is_anthropic: boolean;
+}
+
+/**
+ * 余额查询状态
+ */
+export type BalanceQueryStatus = 'success' | 'failed' | 'pending';
+
+/**
+ * 余额查询结果
+ */
+export interface BalanceInfo {
+  /** 配置ID */
+  config_id: number;
+  /** 配置名称 */
+  config_name: string;
+  /** 余额 */
+  balance: number | null;
+  /** 货币单位 */
+  currency: string | null;
+  /** 查询状态 */
+  status: BalanceQueryStatus;
+  /** 查询时间 */
+  checked_at: string;
+  /** 错误信息 */
+  error_message: string | null;
 }

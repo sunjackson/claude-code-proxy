@@ -252,6 +252,7 @@ mod tests {
 
             // 模拟错误,触发回滚
             Err(AppError::ValidationError {
+                field: "test".to_string(),
                 message: "测试回滚".to_string(),
             })
         });

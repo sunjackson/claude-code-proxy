@@ -634,13 +634,13 @@ ORDER BY hotness_score DESC, is_recommended DESC;
 **存储方式** (见 research.md 第 3.1 节):
 ```javascript
 // 保存时
-await keytar.setPassword('claude-code-router', `api_config_${config.id}`, config.api_key);
+await keytar.setPassword('claude-code-proxy', `api_config_${config.id}`, config.api_key);
 
 // 数据库中只存储引用 ID,不存储实际密钥
 INSERT INTO ApiConfig (name, api_key, ...) VALUES ('Config 1', '[ENCRYPTED]', ...);
 
 // 读取时
-const apiKey = await keytar.getPassword('claude-code-router', `api_config_${config.id}`);
+const apiKey = await keytar.getPassword('claude-code-proxy', `api_config_${config.id}`);
 ```
 
 **备份和恢复**:

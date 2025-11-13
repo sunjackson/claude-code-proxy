@@ -1,5 +1,6 @@
 pub mod api_config;
 pub mod app_settings;
+pub mod balance;
 pub mod config_backup;
 pub mod config_group;
 pub mod environment_variable;

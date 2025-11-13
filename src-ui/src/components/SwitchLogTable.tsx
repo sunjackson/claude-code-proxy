@@ -158,22 +158,22 @@ export const SwitchLogTable: React.FC<SwitchLogTableProps> = ({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-300">
-                      {log.source_config ? (
-                        <div className="truncate max-w-[200px]" title={log.source_config.name}>
-                          {log.source_config.name}
+                      {log.source_config_name ? (
+                        <div className="truncate max-w-[200px]" title={log.source_config_name}>
+                          {log.source_config_name}
                         </div>
                       ) : (
                         <span className="text-gray-500 italic">已删除</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-amber-400 font-medium">
-                      <div className="truncate max-w-[200px]" title={log.target_config.name}>
-                        {log.target_config.name}
+                      <div className="truncate max-w-[200px]" title={log.target_config_name}>
+                        {log.target_config_name}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-300">
-                      <div className="truncate max-w-[150px]" title={log.group.name}>
-                        {log.group.name}
+                      <div className="truncate max-w-[150px]" title={log.group_name}>
+                        {log.group_name}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm">

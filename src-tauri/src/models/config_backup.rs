@@ -244,9 +244,13 @@ mod tests {
         let backup = ConfigBackup {
             id: 1,
             file_path: "/backup/file.json".to_string(),
+            file_name: "file.json".to_string(),
             original_path: "/original/file.json".to_string(),
             content: "a".repeat(1024), // 1 KB
             backup_at: "2025-11-09".to_string(),
+            backup_time: "2025-11-09".to_string(),
+            reason: "test".to_string(),
+            file_size: 1024,
             platform: Platform::MacOS,
             is_restored: false,
         };

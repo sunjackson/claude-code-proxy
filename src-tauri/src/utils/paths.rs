@@ -28,15 +28,15 @@ pub fn get_claude_code_config_dir() -> Result<PathBuf, String> {
 }
 
 /// 获取应用数据目录
-/// Windows: C:\Users\<用户名>\AppData\Roaming\claude-code-router
-/// macOS: ~/Library/Application Support/com.claude-code-router
-/// Linux: ~/.local/share/claude-code-router
+/// Windows: C:\Users\<用户名>\AppData\Roaming\claude-code-proxy
+/// macOS: ~/Library/Application Support/com.claude-code-proxy
+/// Linux: ~/.local/share/claude-code-proxy
 pub fn get_app_data_dir() -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| "无法获取应用数据目录".to_string())?
-            .join("claude-code-router");
+            .join("claude-code-proxy");
         Ok(data_dir)
     }
 
@@ -44,7 +44,7 @@ pub fn get_app_data_dir() -> Result<PathBuf, String> {
     {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| "无法获取应用数据目录".to_string())?
-            .join("com.claude-code-router");
+            .join("com.claude-code-proxy");
         Ok(data_dir)
     }
 
@@ -52,7 +52,7 @@ pub fn get_app_data_dir() -> Result<PathBuf, String> {
     {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| "无法获取应用数据目录".to_string())?
-            .join("claude-code-router");
+            .join("claude-code-proxy");
         Ok(data_dir)
     }
 }
@@ -63,7 +63,7 @@ pub fn get_app_config_dir() -> Result<PathBuf, String> {
     {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| "无法获取配置目录".to_string())?
-            .join("claude-code-router");
+            .join("claude-code-proxy");
         Ok(config_dir)
     }
 
@@ -71,7 +71,7 @@ pub fn get_app_config_dir() -> Result<PathBuf, String> {
     {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| "无法获取配置目录".to_string())?
-            .join("com.claude-code-router");
+            .join("com.claude-code-proxy");
         Ok(config_dir)
     }
 
@@ -79,7 +79,7 @@ pub fn get_app_config_dir() -> Result<PathBuf, String> {
     {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| "无法获取配置目录".to_string())?
-            .join("claude-code-router");
+            .join("claude-code-proxy");
         Ok(config_dir)
     }
 }
@@ -132,7 +132,7 @@ mod tests {
         let dir = get_app_data_dir();
         assert!(dir.is_ok());
         let dir = dir.unwrap();
-        assert!(dir.to_string_lossy().contains("claude-code-router"));
+        assert!(dir.to_string_lossy().contains("claude-code-proxy"));
     }
 
     #[test]

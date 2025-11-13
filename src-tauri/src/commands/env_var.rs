@@ -6,12 +6,11 @@
 use crate::models::error::AppResult;
 use crate::services::env_var::EnvironmentVariableService;
 use crate::services::ApiConfigService;
-use rusqlite::Connection;
+use crate::db::DbPool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
-use tokio::sync::Mutex;
 
 /// 环境变量信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,15 +102,15 @@ pub fn unset_environment_variable(
 /// # 参数
 /// - `config_id`: API 配置 ID
 #[tauri::command]
-pub async fn apply_config_to_env(
+pub fn apply_config_to_env(
     config_id: i64,
-    db_pool: State<'_, Arc<Mutex<Connection>>>,
+    db_pool: State<'_, Arc<DbPool>>,
     env_state: State<'_, EnvironmentVariableState>,
 ) -> AppResult<()> {
     // 获取 API 配置
-    let db = db_pool.lock().await;
-    let config = ApiConfigService::get_config_by_id(&db, config_id)?;
-    drop(db);
+    let config = db_pool.with_connection(|conn| {
+        ApiConfigService::get_config_by_id(conn, config_id)
+    })?;
 
     // 应用环境变量
     let env_service = env_state.service();

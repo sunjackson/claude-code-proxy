@@ -6,26 +6,30 @@ mod db;
 mod models;
 mod proxy;
 mod services;
+mod tray;
 mod utils;
 
 use commands::{
     apply_config_to_env, check_anthropic_env, clear_all_claude_code_backups, clear_anthropic_env,
-    count_configs_in_group, create_api_config, create_claude_code_backup, create_config_group,
-    delete_api_config, delete_claude_code_backup, delete_config_group, detect_claude_code_path,
-    disable_claude_code_proxy, enable_claude_code_proxy, get_api_config, get_api_key,
-    get_claude_code_proxy, get_claude_code_settings, get_config_group, get_environment_variable,
+    clear_switch_logs, count_configs_in_group, create_api_config, create_claude_code_backup,
+    create_config_group, delete_api_config, delete_claude_code_backup, delete_config_group,
+    detect_claude_code_path, disable_claude_code_proxy, enable_claude_code_proxy,
+    get_all_balance_info, get_api_config, get_api_key, get_claude_code_proxy,
+    get_claude_code_settings, get_config_group, get_environment_variable,
     get_provider_categories, get_provider_preset, get_provider_presets_by_category,
     get_proxy_status, get_recommended_provider_presets, get_switch_logs, get_test_results,
     list_api_configs, list_claude_code_backups, list_config_groups, list_environment_variables,
     list_provider_presets, load_recommended_services, preview_claude_code_backup,
-    reorder_api_config, refresh_recommended_services, restore_claude_code_backup,
-    restore_claude_code_config, set_environment_variable, set_environment_variables,
-    start_proxy_service, stop_proxy_service, switch_proxy_config, switch_proxy_group,
-    test_api_config, test_api_endpoints, test_group_configs, toggle_auto_switch,
-    unset_environment_variable, update_api_config, update_config_group, EnvironmentVariableState,
-    ProxyServiceState, RecommendationServiceState,
+    query_all_balances, query_balance, quick_test_config_url, reorder_api_config,
+    refresh_recommended_services, restore_claude_code_backup, restore_claude_code_config,
+    set_environment_variable, set_environment_variables, start_proxy_service,
+    stop_proxy_service, switch_proxy_config, switch_proxy_group, test_api_config,
+    test_api_endpoints, test_group_configs, toggle_auto_switch, unset_environment_variable,
+    update_api_config, update_config_group, EnvironmentVariableState, ProxyServiceState,
+    RecommendationServiceState,
 };
 use db::{initialize_database, DbPool};
+use services::balance_scheduler::BalanceScheduler;
 use services::proxy_service::ProxyService;
 use std::sync::Arc;
 use utils::logger;
@@ -33,6 +37,11 @@ use utils::logger;
 fn main() {
     // 初始化日志系统
     logger::init_logger();
+
+    // 初始化 Rustls 加密提供程序
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
 
     // 初始化数据库
     let conn = initialize_database().expect("无法初始化数据库");
@@ -47,9 +56,10 @@ fn main() {
     log::info!("代理服务已初始化");
 
     // 初始化推荐服务
+    // 注意: 本地配置已内嵌到 ProviderPresetService 中，不再需要外部文件路径
     let recommendation_state = RecommendationServiceState::new(
         None, // 远程 URL 可以从配置加载
-        Some(std::path::PathBuf::from("../config/providers.json")),
+        None, // 不使用本地文件，改用内嵌的 providers.json
         3600, // 默认 TTL 1小时
     );
 
@@ -59,6 +69,11 @@ fn main() {
     let env_var_state = EnvironmentVariableState::new();
 
     log::info!("环境变量服务已初始化");
+
+    // 初始化余额查询调度器
+    let balance_scheduler = Arc::new(BalanceScheduler::new(db_pool.clone()));
+
+    log::info!("余额查询调度器已初始化");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -76,7 +91,30 @@ fn main() {
                 proxy_state.service().set_app_handle(handle.clone()).await;
             });
             log::info!("Tauri app handle configured for proxy service");
+
+            // 创建系统托盘
+            if let Err(e) = tray::create_tray(&app.handle()) {
+                log::error!("Failed to create system tray: {}", e);
+            }
+
+            // 启动余额查询调度器
+            let scheduler_clone = balance_scheduler.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = scheduler_clone.start().await {
+                    log::error!("Failed to start balance scheduler: {}", e);
+                } else {
+                    log::info!("Balance scheduler started successfully");
+                }
+            });
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 阻止默认关闭行为，改为隐藏窗口
+                window.hide().unwrap();
+                api.prevent_close();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             detect_claude_code_path,
@@ -106,8 +144,12 @@ fn main() {
             get_api_key,
             test_api_config,
             test_api_endpoints,
+            quick_test_config_url,
             test_group_configs,
             get_test_results,
+            query_balance,
+            query_all_balances,
+            get_all_balance_info,
             start_proxy_service,
             stop_proxy_service,
             get_proxy_status,
@@ -115,6 +157,7 @@ fn main() {
             switch_proxy_config,
             toggle_auto_switch,
             get_switch_logs,
+            clear_switch_logs,
             load_recommended_services,
             refresh_recommended_services,
             list_provider_presets,

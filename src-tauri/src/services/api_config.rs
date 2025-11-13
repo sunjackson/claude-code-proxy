@@ -49,8 +49,16 @@ fn map_row_to_config(row: &Row) -> rusqlite::Result<ApiConfig> {
         small_fast_model: row.get(20)?,
         api_timeout_ms: row.get(21)?,
         max_output_tokens: row.get(22)?,
-        created_at: row.get(23)?,
-        updated_at: row.get(24)?,
+        balance_query_url: row.get(23)?,
+        last_balance: row.get(24)?,
+        balance_currency: row.get(25)?,
+        last_balance_check_at: row.get(26)?,
+        balance_query_status: row.get(27)?,
+        balance_query_error: row.get(28)?,
+        auto_balance_check: row.get::<_, i32>(29)? != 0,
+        balance_check_interval_sec: row.get(30)?,
+        created_at: row.get(31)?,
+        updated_at: row.get(32)?,
     })
 }
 
@@ -139,17 +147,25 @@ impl ApiConfigService {
         let is_partner = input.is_partner.unwrap_or(false);
         let meta = input.meta.as_deref().unwrap_or("{}");
 
+        // 处理余额查询默认值
+        let auto_balance_check = input.auto_balance_check.unwrap_or(true);
+        let balance_currency = input.balance_currency.as_deref().unwrap_or("CNY");
+
         // 插入配置(API密钥直接存储到数据库)
         // 使用命名参数以避免 Rusqlite 的 16 参数限制
         conn.execute(
             "INSERT INTO ApiConfig (name, api_key, server_url, server_port, group_id, sort_order,
                                     category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                                     default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
-                                    api_timeout_ms, max_output_tokens, created_at, updated_at)
+                                    api_timeout_ms, max_output_tokens,
+                                    balance_query_url, auto_balance_check, balance_check_interval_sec, balance_currency,
+                                    created_at, updated_at)
              VALUES (:name, :api_key, :server_url, :server_port, :group_id, :sort_order,
                      :category, :is_partner, :theme_icon, :theme_bg_color, :theme_text_color, :meta,
                      :default_model, :haiku_model, :sonnet_model, :opus_model, :small_fast_model,
-                     :api_timeout_ms, :max_output_tokens, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                     :api_timeout_ms, :max_output_tokens,
+                     :balance_query_url, :auto_balance_check, :balance_check_interval_sec, :balance_currency,
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
             rusqlite::named_params! {
                 ":name": &input.name,
                 ":api_key": &input.api_key,
@@ -170,6 +186,10 @@ impl ApiConfigService {
                 ":small_fast_model": &input.small_fast_model,
                 ":api_timeout_ms": &input.api_timeout_ms,
                 ":max_output_tokens": &input.max_output_tokens,
+                ":balance_query_url": &input.balance_query_url,
+                ":auto_balance_check": auto_balance_check,
+                ":balance_check_interval_sec": &input.balance_check_interval_sec,
+                ":balance_currency": balance_currency,
             },
         )
         .map_err(|e| AppError::DatabaseError {
@@ -190,7 +210,10 @@ impl ApiConfigService {
                     is_available, last_test_at, last_latency_ms,
                     category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                     default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
-                    api_timeout_ms, max_output_tokens, created_at, updated_at
+                    api_timeout_ms, max_output_tokens,
+                    balance_query_url, last_balance, balance_currency, last_balance_check_at,
+                    balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
+                    created_at, updated_at
              FROM ApiConfig WHERE id = ?1",
             [id],
             map_row_to_config,
@@ -221,7 +244,10 @@ impl ApiConfigService {
                         is_available, last_test_at, last_latency_ms,
                         category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                         default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
-                        api_timeout_ms, max_output_tokens, created_at, updated_at
+                        api_timeout_ms, max_output_tokens,
+                        balance_query_url, last_balance, balance_currency, last_balance_check_at,
+                        balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
+                        created_at, updated_at
                  FROM ApiConfig WHERE group_id = ?1 ORDER BY sort_order ASC".to_string(),
                 vec![Some(gid)],
             )
@@ -231,7 +257,10 @@ impl ApiConfigService {
                         is_available, last_test_at, last_latency_ms,
                         category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                         default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
-                        api_timeout_ms, max_output_tokens, created_at, updated_at
+                        api_timeout_ms, max_output_tokens,
+                        balance_query_url, last_balance, balance_currency, last_balance_check_at,
+                        balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
+                        created_at, updated_at
                  FROM ApiConfig ORDER BY group_id ASC, sort_order ASC".to_string(),
                 vec![],
             )
@@ -455,6 +484,27 @@ impl ApiConfigService {
             params.push(Box::new(meta.clone()));
         }
 
+        // 余额查询字段
+        if let Some(ref balance_query_url) = input.balance_query_url {
+            updates.push("balance_query_url = ?");
+            params.push(Box::new(balance_query_url.clone()));
+        }
+
+        if let Some(auto_balance_check) = input.auto_balance_check {
+            updates.push("auto_balance_check = ?");
+            params.push(Box::new(auto_balance_check));
+        }
+
+        if let Some(balance_check_interval_sec) = input.balance_check_interval_sec {
+            updates.push("balance_check_interval_sec = ?");
+            params.push(Box::new(balance_check_interval_sec));
+        }
+
+        if let Some(ref balance_currency) = input.balance_currency {
+            updates.push("balance_currency = ?");
+            params.push(Box::new(balance_currency.clone()));
+        }
+
         // 如果有字段需要更新
         if !updates.is_empty() {
             updates.push("updated_at = CURRENT_TIMESTAMP");
@@ -504,6 +554,21 @@ impl ApiConfigService {
                 resource: "ApiConfig".to_string(),
                 id: config_id.to_string(),
             });
+        }
+
+        // 删除所有引用该配置的切换日志（由于外键约束 ON DELETE RESTRICT）
+        // 这包括 source_config_id 和 target_config_id
+        let deleted_logs = conn
+            .execute(
+                "DELETE FROM SwitchLog WHERE source_config_id = ?1 OR target_config_id = ?1",
+                [config_id],
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("删除相关切换日志失败: {}", e),
+            })?;
+
+        if deleted_logs > 0 {
+            log::info!("已删除 {} 条引用该配置的切换日志", deleted_logs);
         }
 
         // 删除数据库中的配置
@@ -617,6 +682,38 @@ impl ApiConfigService {
             message: format!("获取 API 密钥失败: {}", e),
         })
     }
+
+    /// 更新配置的延迟信息
+    ///
+    /// 在每次请求成功收到响应时调用，记录响应延迟
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `config_id`: 配置ID
+    /// - `latency_ms`: 延迟时间（毫秒）
+    ///
+    /// # 返回
+    /// - `Ok(())`: 更新成功
+    /// - `Err(AppError)`: 更新失败
+    pub fn update_latency(conn: &Connection, config_id: i64, latency_ms: i32) -> AppResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        conn.execute(
+            "UPDATE ApiConfig SET last_test_at = ?1, last_latency_ms = ?2, updated_at = ?3 WHERE id = ?4",
+            (now.clone(), latency_ms, now, config_id),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("更新配置延迟失败: {}", e),
+        })?;
+
+        log::debug!(
+            "已更新配置延迟: config_id={}, latency_ms={}",
+            config_id,
+            latency_ms
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -635,7 +732,7 @@ mod tests {
                 name TEXT NOT NULL UNIQUE,
                 description TEXT,
                 auto_switch_enabled BOOLEAN NOT NULL DEFAULT 0,
-                latency_threshold_ms INTEGER NOT NULL DEFAULT 3000,
+                latency_threshold_ms INTEGER NOT NULL DEFAULT 30000,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )",
@@ -676,7 +773,7 @@ mod tests {
             name: "测试分组".to_string(),
             description: Some("测试用".to_string()),
             auto_switch_enabled: false,
-            latency_threshold_ms: 3000,
+            latency_threshold_ms: 30000,
             created_at: chrono::Local::now().naive_local().to_string(),
             updated_at: chrono::Local::now().naive_local().to_string(),
         };
@@ -696,6 +793,23 @@ mod tests {
             server_port: Some(443),
             group_id: Some(1),
             sort_order: Some(1),
+            category: None,
+            is_partner: None,
+            theme_icon: None,
+            theme_bg_color: None,
+            theme_text_color: None,
+            meta: None,
+            default_model: None,
+            haiku_model: None,
+            sonnet_model: None,
+            opus_model: None,
+            small_fast_model: None,
+            api_timeout_ms: None,
+            max_output_tokens: None,
+            balance_query_url: None,
+            auto_balance_check: None,
+            balance_check_interval_sec: None,
+            balance_currency: None,
         };
 
         let result = ApiConfigService::create_config(&conn, &input);
@@ -719,6 +833,23 @@ mod tests {
             server_port: Some(443),
             group_id: Some(1),
             sort_order: Some(1),
+            category: None,
+            is_partner: None,
+            theme_icon: None,
+            theme_bg_color: None,
+            theme_text_color: None,
+            meta: None,
+            default_model: None,
+            haiku_model: None,
+            sonnet_model: None,
+            opus_model: None,
+            small_fast_model: None,
+            api_timeout_ms: None,
+            max_output_tokens: None,
+            balance_query_url: None,
+            auto_balance_check: None,
+            balance_check_interval_sec: None,
+            balance_currency: None,
         };
         ApiConfigService::create_config(&conn, &input1).unwrap();
 
@@ -729,6 +860,23 @@ mod tests {
             server_port: Some(443),
             group_id: Some(1),
             sort_order: Some(2),
+            category: None,
+            is_partner: None,
+            theme_icon: None,
+            theme_bg_color: None,
+            theme_text_color: None,
+            meta: None,
+            default_model: None,
+            haiku_model: None,
+            sonnet_model: None,
+            opus_model: None,
+            small_fast_model: None,
+            api_timeout_ms: None,
+            max_output_tokens: None,
+            balance_query_url: None,
+            auto_balance_check: None,
+            balance_check_interval_sec: None,
+            balance_currency: None,
         };
         ApiConfigService::create_config(&conn, &input2).unwrap();
 
@@ -752,6 +900,23 @@ mod tests {
             server_port: Some(443),
             group_id: Some(1),
             sort_order: Some(1),
+            category: None,
+            is_partner: None,
+            theme_icon: None,
+            theme_bg_color: None,
+            theme_text_color: None,
+            meta: None,
+            default_model: None,
+            haiku_model: None,
+            sonnet_model: None,
+            opus_model: None,
+            small_fast_model: None,
+            api_timeout_ms: None,
+            max_output_tokens: None,
+            balance_query_url: None,
+            auto_balance_check: None,
+            balance_check_interval_sec: None,
+            balance_currency: None,
         };
         let config = ApiConfigService::create_config(&conn, &input).unwrap();
 
@@ -764,6 +929,23 @@ mod tests {
             group_id: None,
             sort_order: None,
             is_available: None,
+            category: None,
+            is_partner: None,
+            theme_icon: None,
+            theme_bg_color: None,
+            theme_text_color: None,
+            meta: None,
+            default_model: None,
+            haiku_model: None,
+            sonnet_model: None,
+            opus_model: None,
+            small_fast_model: None,
+            api_timeout_ms: None,
+            max_output_tokens: None,
+            balance_query_url: None,
+            auto_balance_check: None,
+            balance_check_interval_sec: None,
+            balance_currency: None,
         };
 
         let result = ApiConfigService::update_config(&conn, &update_input);
@@ -784,6 +966,23 @@ mod tests {
             server_port: Some(443),
             group_id: Some(1),
             sort_order: Some(1),
+            category: None,
+            is_partner: None,
+            theme_icon: None,
+            theme_bg_color: None,
+            theme_text_color: None,
+            meta: None,
+            default_model: None,
+            haiku_model: None,
+            sonnet_model: None,
+            opus_model: None,
+            small_fast_model: None,
+            api_timeout_ms: None,
+            max_output_tokens: None,
+            balance_query_url: None,
+            auto_balance_check: None,
+            balance_check_interval_sec: None,
+            balance_currency: None,
         };
         let config = ApiConfigService::create_config(&conn, &input).unwrap();
 

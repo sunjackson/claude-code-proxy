@@ -6,7 +6,7 @@
  * - Singleton instance management
  * - Start/stop proxy server
  * - Switch active configuration/group
- * - Port availability checking
+ * - Auto port fallback (handled by ProxyServer)
  * - Status reporting
  */
 
@@ -14,7 +14,6 @@ use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::models::proxy_status::{ProxyService as ProxyServiceModel, ProxyStatus};
 use crate::proxy::server::{ProxyConfig, ProxyServer, ProxyServerStatus};
-use std::net::TcpListener;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
@@ -68,15 +67,29 @@ impl ProxyService {
         }
     }
 
-    /// Check if port is available
+    /// Update system tray status
     ///
     /// # Arguments
-    /// - `port`: Port number to check
-    ///
-    /// # Returns
-    /// - true if port is available, false otherwise
-    fn is_port_available(port: u16) -> bool {
-        TcpListener::bind(("127.0.0.1", port)).is_ok()
+    /// - `status`: Current proxy service status
+    async fn update_tray_status(&self, status: &ProxyServiceModel) {
+        let app_handle = self.app_handle.read().await;
+        if let Some(handle) = app_handle.as_ref() {
+            let status_text = match status.status {
+                ProxyStatus::Running => "运行中",
+                ProxyStatus::Stopped => "已停止",
+                ProxyStatus::Starting => "启动中",
+                ProxyStatus::Stopping => "停止中",
+                ProxyStatus::Error => "错误",
+            };
+
+            if let Err(e) = crate::tray::update_tray_status(
+                handle,
+                status.active_config_name.clone(),
+                status_text,
+            ) {
+                log::error!("Failed to update tray status: {}", e);
+            }
+        }
     }
 
     /// Start proxy service
@@ -93,10 +106,9 @@ impl ProxyService {
         // Get current configuration
         let config = self.server.config().await;
 
-        // Check if port is available (FR-025)
-        if !Self::is_port_available(config.port) {
-            return Err(AppError::PortInUse { port: config.port });
-        }
+        // Note: Port availability check is removed here.
+        // The server.start() method has built-in port fallback mechanism
+        // that will automatically try ports 25341-25350 if needed.
 
         // Check if current group has available configurations
         if let Some(group_id) = config.active_group_id {
@@ -130,6 +142,7 @@ impl ProxyService {
         // Get current status and emit event
         let status = self.get_status().await?;
         self.emit_status_changed(&status).await;
+        self.update_tray_status(&status).await;
 
         Ok(status)
     }
@@ -156,6 +169,7 @@ impl ProxyService {
         // Get current status and emit event
         let status = self.get_status().await?;
         self.emit_status_changed(&status).await;
+        self.update_tray_status(&status).await;
 
         Ok(status)
     }
@@ -262,6 +276,7 @@ impl ProxyService {
         // Get updated status and emit event
         let status = self.get_status().await?;
         self.emit_status_changed(&status).await;
+        self.update_tray_status(&status).await;
 
         Ok(status)
     }
@@ -308,6 +323,7 @@ impl ProxyService {
         // Get updated status and emit event
         let status = self.get_status().await?;
         self.emit_status_changed(&status).await;
+        self.update_tray_status(&status).await;
 
         Ok(status)
     }

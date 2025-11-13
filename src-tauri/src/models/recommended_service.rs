@@ -185,6 +185,8 @@ mod tests {
             promotion_url: "https://example.com".to_string(),
             is_recommended: true,
             hotness_score: 85,
+            region: "domestic".to_string(),
+            description: "Test service".to_string(),
             source: ServiceSource::Remote,
             loaded_at: "2025-11-09".to_string(),
         };

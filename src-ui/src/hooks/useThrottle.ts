@@ -58,7 +58,7 @@ export function useThrottledCallback<T extends (...args: any[]) => any>(
   interval: number = 500
 ): (...args: Parameters<T>) => void {
   const lastExecuted = useRef<number>(Date.now());
-  const timeoutId = useRef<NodeJS.Timeout | null>(null);
+  const timeoutId = useRef<number | null>(null);
 
   const throttledCallback = useCallback(
     (...args: Parameters<T>) => {
@@ -85,7 +85,7 @@ export function useThrottledCallback<T extends (...args: any[]) => any>(
           callback(...args);
           lastExecuted.current = Date.now();
           timeoutId.current = null;
-        }, interval - timeSinceLastExecution);
+        }, interval - timeSinceLastExecution) as unknown as number;
       }
     },
     [callback, interval]

@@ -2,6 +2,7 @@
 pub mod api_config;
 pub mod api_test;
 pub mod auto_switch;
+pub mod balance;
 pub mod claude_code;
 pub mod config_group;
 pub mod env_var;
@@ -12,12 +13,14 @@ pub mod recommendation;
 // 重新导出常用命令
 pub use api_config::{
     create_api_config, delete_api_config, get_api_config, get_api_key, list_api_configs,
-    reorder_api_config, test_api_endpoints, update_api_config,
+    quick_test_config_url, reorder_api_config, test_api_endpoints, update_api_config,
 };
 
 pub use api_test::{get_test_results, test_api_config, test_group_configs};
 
-pub use auto_switch::{get_switch_logs, toggle_auto_switch};
+pub use auto_switch::{clear_switch_logs, get_switch_logs, toggle_auto_switch};
+
+pub use balance::{get_all_balance_info, query_all_balances, query_balance};
 
 pub use claude_code::{
     clear_all_claude_code_backups, create_claude_code_backup, delete_claude_code_backup,

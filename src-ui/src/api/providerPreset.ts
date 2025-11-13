@@ -20,6 +20,7 @@ export interface ProviderPreset {
   websiteUrl: string;
   apiKeyUrl?: string;
   serverUrl: string;
+  balanceQueryUrl?: string;
   description?: string;
   isRecommended: boolean;
   isPartner: boolean;

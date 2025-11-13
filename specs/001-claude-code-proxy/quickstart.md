@@ -115,8 +115,8 @@ sudo apt install -y libwebkit2gtk-4.0-dev \
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/claude-code-router.git
-cd claude-code-router
+git clone https://github.com/your-org/claude-code-proxy.git
+cd claude-code-proxy
 
 # 切换到特性分支
 git checkout 001-claude-code-proxy
@@ -134,7 +134,7 @@ cd ..
 ## 3. 项目结构概览
 
 ```
-claude-code-router/
+claude-code-proxy/
 ├── src-tauri/              # Rust 后端(Tauri)
 │   ├── src/
 │   │   ├── main.rs         # 应用入口
@@ -209,9 +209,9 @@ cargo tauri dev
 应用首次启动时会自动初始化 SQLite 数据库:
 
 **数据库路径**:
-- **macOS**: `~/Library/Application Support/com.claude-code-router/app.db`
-- **Linux**: `~/.local/share/claude-code-router/app.db`
-- **Windows**: `C:\Users\<用户名>\AppData\Roaming\claude-code-router\app.db`
+- **macOS**: `~/Library/Application Support/com.claude-code-proxy/app.db`
+- **Linux**: `~/.local/share/claude-code-proxy/app.db`
+- **Windows**: `C:\Users\<用户名>\AppData\Roaming\claude-code-proxy\app.db`
 
 **初始化脚本** (`src-tauri/src/db/init.rs`):
 ```rust
@@ -239,9 +239,9 @@ pub fn initialize_database() -> Result<Connection, rusqlite::Error> {
 **重置数据库**:
 ```bash
 # 删除数据库文件,应用将在下次启动时重新创建
-rm ~/Library/Application\ Support/com.claude-code-router/app.db  # macOS
-rm ~/.local/share/claude-code-router/app.db                      # Linux
-del %APPDATA%\claude-code-router\app.db                          # Windows
+rm ~/Library/Application\ Support/com.claude-code-proxy/app.db  # macOS
+rm ~/.local/share/claude-code-proxy/app.db                      # Linux
+del %APPDATA%\claude-code-proxy\app.db                          # Windows
 ```
 
 ---
@@ -400,7 +400,7 @@ fn get_proxy_status() -> Result<ProxyStatus, String> {
 brew install --cask db-browser-for-sqlite
 
 # 打开数据库
-open -a "DB Browser for SQLite" ~/Library/Application\ Support/com.claude-code-router/app.db
+open -a "DB Browser for SQLite" ~/Library/Application\ Support/com.claude-code-proxy/app.db
 ```
 
 **常用 SQL 查询**:
@@ -433,9 +433,9 @@ cargo tauri build  # 构建 Tauri 应用
 ```
 
 **构建输出**:
-- **macOS**: `src-tauri/target/release/bundle/dmg/Claude Code Router_1.0.0_x64.dmg`
-- **Windows**: `src-tauri/target/release/bundle/msi/Claude Code Router_1.0.0_x64_en-US.msi`
-- **Linux**: `src-tauri/target/release/bundle/deb/claude-code-router_1.0.0_amd64.deb`
+- **macOS**: `src-tauri/target/release/bundle/dmg/Claude Code Proxy_1.0.0_x64.dmg`
+- **Windows**: `src-tauri/target/release/bundle/msi/Claude Code Proxy_1.0.0_x64_en-US.msi`
+- **Linux**: `src-tauri/target/release/bundle/deb/claude-code-proxy_1.0.0_amd64.deb`
 
 ---
 
@@ -444,13 +444,13 @@ cargo tauri build  # 构建 Tauri 应用
 **macOS**:
 ```bash
 # 需要 Apple Developer 账户
-codesign --deep --force --verify --verbose --sign "Developer ID Application: YOUR_NAME" "Claude Code Router.app"
+codesign --deep --force --verify --verbose --sign "Developer ID Application: YOUR_NAME" "Claude Code Proxy.app"
 ```
 
 **Windows**:
 ```powershell
 # 需要代码签名证书
-signtool sign /f certificate.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 "Claude Code Router.exe"
+signtool sign /f certificate.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 "Claude Code Proxy.exe"
 ```
 
 ---

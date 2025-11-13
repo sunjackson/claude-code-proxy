@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code Router 开发环境一键启动脚本
+# Claude Code Proxy 开发环境一键启动脚本
 # 支持自动检测和安装开发环境
 
 set -e  # 遇到错误时退出
@@ -348,7 +348,7 @@ check_linux_deps() {
 # 打印标题
 echo ""
 echo -e "${YELLOW}╔════════════════════════════════════════╗${NC}"
-echo -e "${YELLOW}║   Claude Code Router 开发环境启动    ║${NC}"
+echo -e "${YELLOW}║   Claude Code Proxy 开发环境启动    ║${NC}"
 echo -e "${YELLOW}╚════════════════════════════════════════╝${NC}"
 echo ""
 

@@ -140,14 +140,6 @@ impl ConfigManager {
         // 验证分组数据
         group.validate()?;
 
-        // 禁止修改"未分组" (id=0)
-        if group.id == 0 {
-            return Err(AppError::ValidationError {
-                field: "id".to_string(),
-                message: "禁止修改默认的'未分组'".to_string(),
-            });
-        }
-
         // 检查分组是否存在
         let exists: bool = conn
             .query_row(
@@ -245,23 +237,51 @@ impl ConfigManager {
             });
         }
 
-        // 统计总分组数量
-        let total_groups: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ConfigGroup", [], |row| row.get(0))
+        // 检查分组内的配置数量
+        let config_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM ApiConfig WHERE group_id = ?1",
+                [group_id],
+                |row| row.get(0),
+            )
             .map_err(|e| AppError::DatabaseError {
-                message: format!("统计分组数量失败: {}", e),
+                message: format!("统计分组内配置数量失败: {}", e),
             })?;
 
-        // 如果只剩下一个分组，禁止删除
-        if total_groups <= 1 {
-            return Err(AppError::ValidationError {
-                field: "id".to_string(),
-                message: "至少需要保留一个配置分组".to_string(),
-            });
+        // 如果分组包含配置，需要进一步检查
+        if config_count > 0 {
+            if !move_to_default {
+                // 不允许移动配置，禁止删除
+                return Err(AppError::ValidationError {
+                    field: "id".to_string(),
+                    message: format!("该分组包含 {} 个配置，请先删除或移动这些配置", config_count),
+                });
+            } else {
+                // 允许移动配置，检查是否有其他分组可用
+                let other_group_exists: bool = conn
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM ConfigGroup WHERE id != ?1)",
+                        [group_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("检查其他分组是否存在失败: {}", e),
+                    })?;
+
+                if !other_group_exists {
+                    return Err(AppError::ValidationError {
+                        field: "id".to_string(),
+                        message: format!(
+                            "该分组包含 {} 个配置且没有其他分组可以移动配置，请先删除这些配置",
+                            config_count
+                        ),
+                    });
+                }
+            }
         }
 
         // 如果需要移动配置，获取一个目标分组
-        let target_group_id: Option<i64> = if move_to_default {
+        let target_group_id: Option<i64> = if move_to_default && config_count > 0 {
             // 查找第一个不是当前分组的分组ID
             let target_id: i64 = conn
                 .query_row(
@@ -297,6 +317,16 @@ impl ConfigManager {
                 })?;
 
             log::info!("已删除分组 {} 下的所有配置", group_id);
+        }
+
+        // 删除分组相关的切换日志（SwitchLog 有 RESTRICT 外键约束）
+        let deleted_logs = conn.execute("DELETE FROM SwitchLog WHERE group_id = ?1", [group_id])
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("删除切换日志失败: {}", e),
+            })?;
+
+        if deleted_logs > 0 {
+            log::info!("已删除分组 {} 的 {} 条切换日志", group_id, deleted_logs);
         }
 
         // 删除分组
@@ -335,7 +365,7 @@ mod tests {
                 name TEXT NOT NULL UNIQUE,
                 description TEXT,
                 auto_switch_enabled BOOLEAN NOT NULL DEFAULT 0,
-                latency_threshold_ms INTEGER NOT NULL DEFAULT 3000,
+                latency_threshold_ms INTEGER NOT NULL DEFAULT 30000,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )",
@@ -372,7 +402,7 @@ mod tests {
             name: "测试分组".to_string(),
             description: Some("测试描述".to_string()),
             auto_switch_enabled: false,
-            latency_threshold_ms: 3000,
+            latency_threshold_ms: 30000,
             created_at: chrono::Local::now().naive_local().to_string(),
             updated_at: chrono::Local::now().naive_local().to_string(),
         };
@@ -423,7 +453,7 @@ mod tests {
             name: "测试分组2".to_string(),
             description: Some("第二个分组".to_string()),
             auto_switch_enabled: false,
-            latency_threshold_ms: 3000,
+            latency_threshold_ms: 30000,
             created_at: chrono::Local::now().naive_local().to_string(),
             updated_at: chrono::Local::now().naive_local().to_string(),
         };

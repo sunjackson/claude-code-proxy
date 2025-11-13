@@ -35,6 +35,113 @@ impl BackupService {
             message: format!("读取配置文件失败: {}", e),
         })?;
 
+        // 解析 JSON 并提取 ANTHROPIC_AUTH_TOKEN
+        let current_token = Self::extract_auth_token(&content).ok();
+
+        // 检查是否存在相同 token 的备份（以 ANTHROPIC_AUTH_TOKEN 为主键去重）
+        let existing_backups = Self::list_backups().unwrap_or_default();
+        if !existing_backups.is_empty() {
+            // 遍历现有备份，查找是否有相同的 token
+            for existing_backup in existing_backups.iter() {
+                // 提取现有备份的 token
+                let existing_token = Self::extract_auth_token(&existing_backup.content).ok();
+
+                // 比较逻辑：
+                // 1. 如果两个 token 都存在且相同，则跳过创建新备份
+                // 2. 如果两个都没有 token，则比较整个配置内容
+                match (&current_token, &existing_token) {
+                    (Some(curr_token), Some(exist_token)) => {
+                        // 两个都有 token，比较 token
+                        if curr_token == exist_token {
+                            log::info!(
+                                "ANTHROPIC_AUTH_TOKEN 与现有备份相同，更新备份时间: {} (原因: {})",
+                                existing_backup.file_name,
+                                reason
+                            );
+
+                            // 更新现有备份文件的修改时间（通过重新写入）
+                            let backup_path = PathBuf::from(&existing_backup.file_path);
+                            fs::write(&backup_path, &content).map_err(|e| AppError::IoError {
+                                message: format!("更新备份文件失败: {}", e),
+                            })?;
+
+                            // 获取更新后的文件元数据
+                            let metadata = fs::metadata(&backup_path).map_err(|e| AppError::IoError {
+                                message: format!("获取文件元数据失败: {}", e),
+                            })?;
+
+                            // 获取新的修改时间
+                            let modified = metadata.modified().map_err(|e| AppError::IoError {
+                                message: format!("获取文件修改时间失败: {}", e),
+                            })?;
+                            let backup_time = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+
+                            log::info!(
+                                "备份时间已更新: {} -> {}",
+                                existing_backup.backup_at,
+                                backup_time
+                            );
+
+                            // 返回更新后的备份信息
+                            let mut updated_backup = existing_backup.clone();
+                            updated_backup.backup_at = backup_time.clone();
+                            updated_backup.backup_time = backup_time;
+                            updated_backup.reason = format!("{} (已更新时间)", reason);
+                            updated_backup.content = content.clone();
+
+                            return Ok(updated_backup);
+                        }
+                    }
+                    (None, None) => {
+                        // 两个都没有 token，比较整个配置内容
+                        if existing_backup.content == content {
+                            log::info!(
+                                "配置内容与现有备份相同（无Token），更新备份时间: {} (原因: {})",
+                                existing_backup.file_name,
+                                reason
+                            );
+
+                            // 更新现有备份文件的修改时间（通过重新写入）
+                            let backup_path = PathBuf::from(&existing_backup.file_path);
+                            fs::write(&backup_path, &content).map_err(|e| AppError::IoError {
+                                message: format!("更新备份文件失败: {}", e),
+                            })?;
+
+                            // 获取更新后的文件元数据
+                            let metadata = fs::metadata(&backup_path).map_err(|e| AppError::IoError {
+                                message: format!("获取文件元数据失败: {}", e),
+                            })?;
+
+                            // 获取新的修改时间
+                            let modified = metadata.modified().map_err(|e| AppError::IoError {
+                                message: format!("获取文件修改时间失败: {}", e),
+                            })?;
+                            let backup_time = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+
+                            log::info!(
+                                "备份时间已更新: {} -> {}",
+                                existing_backup.backup_at,
+                                backup_time
+                            );
+
+                            // 返回更新后的备份信息
+                            let mut updated_backup = existing_backup.clone();
+                            updated_backup.backup_at = backup_time.clone();
+                            updated_backup.backup_time = backup_time;
+                            updated_backup.reason = format!("{} (已更新时间)", reason);
+                            updated_backup.content = content.clone();
+
+                            return Ok(updated_backup);
+                        }
+                    }
+                    _ => {
+                        // 一个有 token 一个没有，认为是不同的配置，继续检查其他备份
+                        continue;
+                    }
+                }
+            }
+        }
+
         // 计算文件大小
         let metadata = fs::metadata(&settings_path).map_err(|e| AppError::IoError {
             message: format!("获取文件元数据失败: {}", e),
@@ -343,6 +450,39 @@ impl BackupService {
     fn generate_backup_filename() -> String {
         let now = chrono::Local::now();
         format!("settings_backup_{}.json", now.format("%Y%m%d_%H%M%S"))
+    }
+
+    /// 从配置内容中提取 ANTHROPIC_AUTH_TOKEN
+    ///
+    /// # 参数
+    /// - `content`: JSON 配置内容
+    ///
+    /// # 返回
+    /// - `Ok(String)`: 提取到的 token
+    /// - `Err(AppError)`: 提取失败（JSON 格式错误或 token 不存在）
+    fn extract_auth_token(content: &str) -> AppResult<String> {
+        // 解析 JSON
+        let json: serde_json::Value = serde_json::from_str(content).map_err(|e| {
+            AppError::InvalidData {
+                message: format!("解析配置文件 JSON 失败: {}", e),
+            }
+        })?;
+
+        // 提取 ANTHROPIC_AUTH_TOKEN
+        // Claude Code 配置结构: { "env": { "ANTHROPIC_AUTH_TOKEN": "sk-ant-xxx" } }
+        // 尝试多个可能的路径以兼容不同版本
+        let token = json
+            .get("env")
+            .and_then(|v| v.get("ANTHROPIC_AUTH_TOKEN"))
+            .or_else(|| json.get("ANTHROPIC_AUTH_TOKEN"))
+            .or_else(|| json.get("anthropic").and_then(|v| v.get("auth_token")))
+            .or_else(|| json.get("anthropic").and_then(|v| v.get("ANTHROPIC_AUTH_TOKEN")))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AppError::InvalidData {
+                message: "配置中未找到 ANTHROPIC_AUTH_TOKEN".to_string(),
+            })?;
+
+        Ok(token.to_string())
     }
 }
 

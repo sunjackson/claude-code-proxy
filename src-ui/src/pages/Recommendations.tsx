@@ -111,19 +111,21 @@ export const Recommendations: React.FC = () => {
       <div className="space-y-6">
         {/* 错误提示 */}
         {error && (
-          <div className="bg-black border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
-            <div className="flex-shrink-0 mt-0.5">
-              <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
+          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-red-500/50 rounded-xl p-5 flex items-start gap-4 shadow-lg shadow-red-500/10">
+            <div className="flex-shrink-0">
+              <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30">
+                <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
             </div>
             <div className="flex-1">
-              <h4 className="text-red-400 font-semibold mb-1">加载失败</h4>
-              <p className="text-red-400/80 text-sm">{error}</p>
+              <h4 className="text-red-400 font-bold mb-1 tracking-wide">加载失败</h4>
+              <p className="text-gray-300 text-sm leading-relaxed">{error}</p>
             </div>
             <button
               onClick={() => setError(null)}
-              className="flex-shrink-0 text-gray-500 hover:text-gray-400 transition-colors"
+              className="flex-shrink-0 text-gray-500 hover:text-gray-300 transition-colors p-1 hover:bg-gray-800 rounded-lg"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -144,17 +146,17 @@ export const Recommendations: React.FC = () => {
 
         {/* 服务列表 */}
         {filteredAndSortedServices.length === 0 ? (
-          <div className="bg-black border border-gray-800 rounded-xl py-16 text-center">
+          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-gray-800 rounded-xl py-20 text-center shadow-lg">
             <div className="flex flex-col items-center">
-              <div className="w-20 h-20 bg-gray-900 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-24 h-24 bg-gradient-to-br from-gray-900 to-black rounded-2xl flex items-center justify-center mb-6 border border-gray-800 shadow-inner">
+                <svg className="w-12 h-12 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-400 mb-2">
+              <h3 className="text-xl font-bold text-gray-400 mb-2">
                 {filter === 'recommended' ? '暂无推荐服务' : '暂无服务'}
               </h3>
-              <p className="text-sm text-gray-500 max-w-sm">
+              <p className="text-sm text-gray-500 max-w-md leading-relaxed">
                 {filter === 'recommended'
                   ? '当前没有标记为推荐的服务，请切换到"全部"查看所有服务'
                   : '服务列表为空，请点击刷新按钮或联系管理员'}
@@ -162,7 +164,7 @@ export const Recommendations: React.FC = () => {
               {filter === 'recommended' && (
                 <button
                   onClick={() => setFilter('all')}
-                  className="mt-6 px-6 py-2 bg-yellow-500 text-black rounded-lg font-semibold hover:bg-yellow-400 transition-colors"
+                  className="mt-8 px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black rounded-lg font-bold transition-all duration-200 shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105"
                 >
                   查看全部服务
                 </button>

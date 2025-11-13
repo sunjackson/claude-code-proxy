@@ -478,6 +478,32 @@ impl AutoSwitchService {
             Ok(logs)
         })
     }
+
+    /// 清空切换日志
+    ///
+    /// # Arguments
+    /// - `group_id`: 分组 ID(可选,用于筛选)。如果提供，只清空该分组的日志；否则清空所有日志
+    ///
+    /// # Returns
+    /// - i32: 删除的日志数量
+    pub fn clear_switch_logs(&self, group_id: Option<i64>) -> AppResult<i32> {
+        self.db_pool.with_connection(|conn| {
+            let deleted = if let Some(gid) = group_id {
+                conn.execute("DELETE FROM SwitchLog WHERE group_id = ?1", [gid])
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("清空分组切换日志失败: {}", e),
+                    })?
+            } else {
+                conn.execute("DELETE FROM SwitchLog", [])
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("清空所有切换日志失败: {}", e),
+                    })?
+            };
+
+            log::info!("已清空 {} 条切换日志", deleted);
+            Ok(deleted as i32)
+        })
+    }
 }
 
 #[cfg(test)]

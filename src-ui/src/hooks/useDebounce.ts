@@ -49,7 +49,7 @@ export function useDebouncedCallback<T extends (...args: any[]) => any>(
   callback: T,
   delay: number = 500
 ): (...args: Parameters<T>) => void {
-  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [timeoutId, setTimeoutId] = useState<number | null>(null);
 
   return (...args: Parameters<T>) => {
     // 清除之前的定时器
@@ -60,7 +60,7 @@ export function useDebouncedCallback<T extends (...args: any[]) => any>(
     // 设置新的定时器
     const newTimeoutId = setTimeout(() => {
       callback(...args);
-    }, delay);
+    }, delay) as unknown as number;
 
     setTimeoutId(newTimeoutId);
   };

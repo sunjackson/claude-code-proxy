@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
  * 测试所有关键的 Tauri 命令
  */
 export async function runDiagnostics() {
-  console.group('🔍 Claude Code Router 诊断测试');
+  console.group('🔍 Claude Code Proxy 诊断测试');
 
   const results = {
     invoke_available: false,

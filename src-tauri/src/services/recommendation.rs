@@ -179,62 +179,72 @@ impl RecommendationService {
         Ok(services)
     }
 
-    /// 从本地文件加载推荐服务
+    /// 从本地文件或内嵌配置加载推荐服务
     fn load_local(&self) -> AppResult<Vec<RecommendedService>> {
-        let path = self.local_path.as_ref().ok_or_else(|| AppError::ServiceError {
-            message: "未配置本地推荐服务文件路径".to_string(),
-        })?;
-
-        if !path.exists() {
-            return Err(AppError::ServiceError {
-                message: format!("本地推荐服务文件不存在: {:?}", path),
-            });
-        }
-
-        let content = std::fs::read_to_string(path).map_err(|e| AppError::ServiceError {
-            message: format!("读取本地文件失败: {}", e),
-        })?;
-
         let loaded_at = chrono::Utc::now().to_rfc3339();
 
-        // 尝试解析为 ProviderConfig (新格式)
-        if let Ok(provider_config) = serde_json::from_str::<ProviderConfig>(&content) {
-            let services: Vec<RecommendedService> = provider_config
-                .providers
-                .iter()
-                .filter(|provider| provider.show_in_recommendations)
-                .map(|provider| provider_to_recommended(provider, loaded_at.clone(), ServiceSource::Local))
-                .collect();
+        // 如果配置了本地路径，优先从本地文件加载
+        if let Some(path) = self.local_path.as_ref() {
+            if path.exists() {
+                let content = std::fs::read_to_string(path).map_err(|e| AppError::ServiceError {
+                    message: format!("读取本地文件失败: {}", e),
+                })?;
 
-            log::info!("成功从本地加载 {} 个推荐服务 (providers.json 格式)", services.len());
-            self.update_cache(services.clone());
-            return Ok(services);
+                // 尝试解析为 ProviderConfig (新格式)
+                if let Ok(provider_config) = serde_json::from_str::<ProviderConfig>(&content) {
+                    let services: Vec<RecommendedService> = provider_config
+                        .providers
+                        .iter()
+                        .filter(|provider| provider.show_in_recommendations)
+                        .map(|provider| provider_to_recommended(provider, loaded_at.clone(), ServiceSource::Local))
+                        .collect();
+
+                    log::info!("成功从本地文件加载 {} 个推荐服务", services.len());
+                    self.update_cache(services.clone());
+                    return Ok(services);
+                }
+
+                // 回退到旧格式 (recommendations.json)
+                let list: RecommendedServiceList =
+                    serde_json::from_str(&content).map_err(|e| AppError::ServiceError {
+                        message: format!("解析本地 JSON 失败: {}", e),
+                    })?;
+
+                let services: Vec<RecommendedService> = list
+                    .services
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, item)| RecommendedService {
+                        id: (i + 1) as i64,
+                        site_name: item.site_name,
+                        promotion_url: item.promotion_url,
+                        is_recommended: item.is_recommended,
+                        hotness_score: item.hotness_score.clamp(0, 100),
+                        region: item.region,
+                        description: item.description,
+                        source: ServiceSource::Local,
+                        loaded_at: loaded_at.clone(),
+                    })
+                    .collect();
+
+                log::info!("成功从本地文件加载 {} 个推荐服务（旧格式）", services.len());
+                self.update_cache(services.clone());
+                return Ok(services);
+            }
         }
 
-        // 回退到旧格式 (recommendations.json)
-        let list: RecommendedServiceList =
-            serde_json::from_str(&content).map_err(|e| AppError::ServiceError {
-                message: format!("解析本地 JSON 失败: {}", e),
-            })?;
+        // 如果没有配置本地路径或文件不存在，使用内嵌的 ProviderPresetService
+        log::info!("本地文件不可用，使用内嵌的供应商配置");
+        use crate::services::provider_preset::ProviderPresetService;
 
-        let services: Vec<RecommendedService> = list
-            .services
-            .into_iter()
-            .enumerate()
-            .map(|(i, item)| RecommendedService {
-                id: (i + 1) as i64,
-                site_name: item.site_name,
-                promotion_url: item.promotion_url,
-                is_recommended: item.is_recommended,
-                hotness_score: item.hotness_score.clamp(0, 100),
-                region: item.region,
-                description: item.description,
-                source: ServiceSource::Local,
-                loaded_at: loaded_at.clone(),
-            })
+        let providers = ProviderPresetService::load_providers()?;
+        let services: Vec<RecommendedService> = providers
+            .iter()
+            .filter(|provider| provider.show_in_recommendations)
+            .map(|provider| provider_to_recommended(provider, loaded_at.clone(), ServiceSource::Local))
             .collect();
 
-        log::info!("成功从本地加载 {} 个推荐服务 (旧格式)", services.len());
+        log::info!("成功从内嵌配置加载 {} 个推荐服务", services.len());
         self.update_cache(services.clone());
         Ok(services)
     }

@@ -17,7 +17,8 @@ use crate::services::auto_switch::AutoSwitchService;
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, combinators::BoxBody};
+use hyper::body::Bytes;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
@@ -27,7 +28,8 @@ use rustls::pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Request timeout in seconds (FR-012)
-const REQUEST_TIMEOUT_SECS: u64 = 30;
+/// Increased to 120s for streaming responses
+const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 /// High latency threshold in milliseconds
 const HIGH_LATENCY_THRESHOLD_MS: u128 = 3000;
@@ -91,15 +93,32 @@ pub struct RequestRouter {
     db_pool: Arc<DbPool>,
     /// Auto-switch service
     auto_switch: Arc<AutoSwitchService>,
+    /// Proxy server configuration (shared with ProxyServer)
+    proxy_config: Option<Arc<tokio::sync::RwLock<crate::proxy::server::ProxyConfig>>>,
 }
 
 impl RequestRouter {
     /// Create a new request router
+    #[allow(dead_code)]
     pub fn new(db_pool: Arc<DbPool>) -> Self {
         let auto_switch = Arc::new(AutoSwitchService::new(db_pool.clone()));
         Self {
             db_pool,
             auto_switch,
+            proxy_config: None,
+        }
+    }
+
+    /// Create a new request router with proxy config reference
+    pub fn new_with_config(
+        db_pool: Arc<DbPool>,
+        proxy_config: Arc<tokio::sync::RwLock<crate::proxy::server::ProxyConfig>>,
+    ) -> Self {
+        let auto_switch = Arc::new(AutoSwitchService::new(db_pool.clone()));
+        Self {
+            db_pool,
+            auto_switch,
+            proxy_config: Some(proxy_config),
         }
     }
 
@@ -123,7 +142,7 @@ impl RequestRouter {
         req: Request<Incoming>,
         config_id: i64,
         group_id: i64,
-    ) -> AppResult<Response<String>> {
+    ) -> AppResult<Response<BoxBody<Bytes, hyper::Error>>> {
         let start_time = Instant::now();
 
         // Try forwarding with current config
@@ -131,12 +150,19 @@ impl RequestRouter {
             Ok(response) => {
                 let latency = start_time.elapsed().as_millis();
 
+                // Get group's latency threshold from database
+                let latency_threshold = self.db_pool.with_connection(|conn| {
+                    use crate::services::config_manager::ConfigManager;
+                    ConfigManager::get_group_by_id(conn, group_id)
+                        .map(|g| g.latency_threshold_ms as u128)
+                }).unwrap_or(HIGH_LATENCY_THRESHOLD_MS);
+
                 // Check for high latency trigger (FR-016)
-                if latency > HIGH_LATENCY_THRESHOLD_MS {
+                if latency > latency_threshold {
                     log::warn!(
                         "High latency detected: {}ms (threshold: {}ms)",
                         latency,
-                        HIGH_LATENCY_THRESHOLD_MS
+                        latency_threshold
                     );
 
                     // Trigger auto-switch for high latency
@@ -171,7 +197,22 @@ impl RequestRouter {
                     .await
                 {
                     Ok(Some(new_config_id)) => {
-                        log::info!("Auto-switched to config {} (retry not possible - request already consumed)", new_config_id);
+                        log::info!("Auto-switched to config {}", new_config_id);
+
+                        // Update proxy config if we have reference
+                        if let Some(proxy_cfg) = &self.proxy_config {
+                            let mut cfg = proxy_cfg.write().await;
+                            cfg.active_config_id = Some(new_config_id);
+                            log::info!("Updated proxy active_config_id to {}", new_config_id);
+                        }
+
+                        // Update database ProxyService record
+                        if let Err(update_err) = self.update_proxy_service_config(new_config_id).await {
+                            log::error!("Failed to update ProxyService config: {}", update_err);
+                        } else {
+                            log::info!("Updated ProxyService current_config_id to {}", new_config_id);
+                        }
+
                         // Cannot retry because Request<Incoming> cannot be cloned
                         // The next request will use the new config
                         Err(e)
@@ -195,7 +236,7 @@ impl RequestRouter {
         mut req: Request<Incoming>,
         config_id: i64,
         _group_id: i64,
-    ) -> AppResult<Response<String>> {
+    ) -> AppResult<Response<BoxBody<Bytes, hyper::Error>>> {
         // 1. Get configuration and API key
         let (config, api_key) = self.db_pool.with_connection(|conn| {
             let config = ApiConfigService::get_config_by_id(conn, config_id)?;
@@ -216,15 +257,9 @@ impl RequestRouter {
             .unwrap_or("/");
 
         log::debug!("Client request path: {}", client_path_and_query);
+        log::info!("原始请求头 Original request headers: {:?}", req.headers());
 
-        // 3. Inject API key into request headers
-        req.headers_mut()
-            .insert("x-api-key", api_key.parse().map_err(|_| {
-                AppError::ServiceError {
-                    message: "Failed to parse API key".to_string(),
-                }
-            })?);
-
+        // 3. Parse target address first (needed for Host header)
         // 4. Parse target address and path from server_url
         // Extract host, port, and path prefix from the full URL
         let url_without_protocol = config
@@ -265,6 +300,29 @@ impl RequestRouter {
 
         log::debug!("Target address: {}, Target path: {}", target_addr, target_path);
 
+        // 修改请求头：设置正确的Host头和API密钥
+        let headers = req.headers_mut();
+
+        // 1. 设置Host头为后端主机名（88Code等服务会检查Host头来验证请求来源）
+        // 提取主机名（不含端口）
+        let backend_host = host_and_port.split(':').next().unwrap_or(host_and_port);
+        headers.insert("host", backend_host.parse().map_err(|_| {
+            AppError::ServiceError {
+                message: "Failed to parse backend host".to_string(),
+            }
+        })?);
+
+        // 2. 替换 Authorization 头为后端服务的 API 密钥（使用 Bearer 格式）
+        // 注意：不删除，而是替换，因为后端服务需要 Authorization 头来认证
+        let auth_value = format!("Bearer {}", api_key);
+        headers.insert("authorization", auth_value.parse().map_err(|_| {
+            AppError::ServiceError {
+                message: "Failed to parse authorization header".to_string(),
+            }
+        })?);
+
+        log::info!("已修改请求头 - Host: {}, Authorization: Bearer xxx...", backend_host);
+
         // 5. Check if HTTPS is required
         let is_https = config.server_url.starts_with("https://");
 
@@ -300,11 +358,16 @@ impl RequestRouter {
 
             log::debug!("Performing TLS handshake for HTTPS connection to {}", hostname);
 
-            // Create TLS connector with default config
+            // Create TLS connector with explicit crypto provider
             let mut root_store = rustls::RootCertStore::empty();
             root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-            let tls_config = rustls::ClientConfig::builder()
+            // Explicitly use ring crypto provider to avoid runtime panic
+            let tls_config = rustls::ClientConfig::builder_with_provider(
+                    rustls::crypto::ring::default_provider().into()
+                )
+                .with_safe_default_protocol_versions()
+                .expect("Failed to configure TLS protocol versions")
                 .with_root_certificates(root_store)
                 .with_no_client_auth();
 
@@ -365,15 +428,20 @@ impl RequestRouter {
         let req = Request::from_parts(parts, body);
 
         log::debug!("Modified request URI to: {}", req.uri());
+        log::info!("发送给后端的请求头 Final request headers: {:?}", req.headers());
 
         // 11. Send request with timeout
+        log::info!("Sending HTTP request to backend...");
+        let send_start = std::time::Instant::now();
+
         let response = timeout(
             Duration::from_secs(REQUEST_TIMEOUT_SECS),
             sender.send_request(req),
         )
         .await
         .map_err(|_| {
-            log::error!("Request timeout");
+            log::error!("Request timeout after {}ms (timeout: {}s)",
+                send_start.elapsed().as_millis(), REQUEST_TIMEOUT_SECS);
             AppError::ServiceError {
                 message: "Request timeout".to_string(),
             }
@@ -385,11 +453,22 @@ impl RequestRouter {
             }
         })?;
 
+        // 立即计算并记录延迟（首字节响应时间）
+        let latency_ms = send_start.elapsed().as_millis() as i32;
         log::info!(
-            "Received response: status={}, headers={:?}",
+            "Received response: status={}, headers={:?}, latency={}ms",
             response.status(),
-            response.headers()
+            response.headers(),
+            latency_ms
         );
+
+        // 更新配置的延迟信息
+        if let Err(e) = self.db_pool.with_connection(|conn| {
+            ApiConfigService::update_latency(conn, config_id, latency_ms)
+        }) {
+            log::warn!("Failed to update latency for config {}: {}", config_id, e);
+            // 不影响请求继续处理
+        }
 
         // 9. Check for quota exceeded (status 429)
         if response.status() == StatusCode::TOO_MANY_REQUESTS {
@@ -398,30 +477,37 @@ impl RequestRouter {
             });
         }
 
-        // 10. Read response body
+        // 10. Get response status and headers
         let status = response.status();
         let headers = response.headers().clone();
 
-        let body_bytes = response
-            .into_body()
-            .collect()
-            .await
-            .map_err(|e| {
-                log::error!("Failed to read response body: {}", e);
-                AppError::ServiceError {
-                    message: format!("Failed to read response body: {}", e),
-                }
-            })?
-            .to_bytes();
+        // 11. Stream response body directly (DO NOT collect)
+        // This is critical for SSE (Server-Sent Events) responses from Claude API
+        // which stream data over a long period of time
+        let body = response.into_body();
+        let boxed_body = body.boxed();
 
-        let body_str = String::from_utf8_lossy(&body_bytes).to_string();
-
-        // 11. Construct response
-        let mut resp = Response::new(body_str);
+        // 12. Construct streaming response
+        let mut resp = Response::new(boxed_body);
         *resp.status_mut() = status;
         *resp.headers_mut() = headers;
 
+        log::info!("Streaming response back to client (status: {})", status);
+
         Ok(resp)
+    }
+
+    /// Update ProxyService current_config_id in database
+    async fn update_proxy_service_config(&self, new_config_id: i64) -> AppResult<()> {
+        self.db_pool.with_connection(|conn| {
+            conn.execute(
+                "UPDATE ProxyService SET current_config_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
+                rusqlite::params![new_config_id],
+            ).map_err(|e| AppError::DatabaseError {
+                message: format!("Failed to update ProxyService: {}", e),
+            })?;
+            Ok(())
+        })
     }
 
     /// Classify error type for auto-switch trigger
@@ -444,11 +530,17 @@ impl RequestRouter {
     pub fn default_response(
         status: StatusCode,
         message: &str,
-    ) -> Response<String> {
+    ) -> Response<BoxBody<Bytes, hyper::Error>> {
+        use http_body_util::Full;
+
+        let body = Full::new(Bytes::from(message.to_string()))
+            .map_err(|never| match never {})
+            .boxed();
+
         Response::builder()
             .status(status)
             .header("Content-Type", "text/plain; charset=utf-8")
-            .body(message.to_string())
+            .body(body)
             .unwrap()
     }
 }

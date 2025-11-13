@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 3;
+const CURRENT_DB_VERSION: i32 = 4;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -73,6 +73,10 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
                 // 预留: v2 -> v3 的迁移脚本
                 migrate_v2_to_v3(conn)?;
             }
+            4 => {
+                // v3 -> v4: 添加余额查询功能
+                migrate_v3_to_v4(conn)?;
+            }
             _ => {
                 return Err(AppError::DatabaseError {
                     message: format!("未知的迁移版本: v{}", version),
@@ -91,6 +95,26 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
 /// 添加供应商分类、视觉主题、元数据等字段
 fn migrate_v1_to_v2(conn: &Connection) -> AppResult<()> {
     log::info!("执行 v1 -> v2 迁移: 供应商配置系统");
+
+    // 检查 category 列是否已存在（如果 schema.sql 已经包含了这些字段）
+    let column_exists: bool = conn
+        .prepare("PRAGMA table_info(ApiConfig)")
+        .and_then(|mut stmt| {
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            Ok(columns.contains(&"category".to_string()))
+        })
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查列是否存在失败: {}", e),
+        })?;
+
+    if column_exists {
+        log::info!("v1 -> v2 迁移: category 列已存在，schema.sql 已包含 v2 变更，跳过迁移");
+        return Ok(());
+    }
 
     // 加载迁移 SQL 文件
     let migration_sql = include_str!("migrations/migration_v2_vendor_config.sql");
@@ -187,35 +211,28 @@ fn migrate_v2_to_v3(conn: &Connection) -> AppResult<()> {
 
         log::info!("v2 -> v3 迁移完成: 未分组 ID 已从 {} 更新为 0", old_id);
     } else {
-        log::info!("未找到未分组,将在种子数据中创建");
+        log::info!("未找到未分组,将在初始化数据中创建");
     }
 
-    // 创建"默认分组"（ID=1）如果不存在
-    let default_group_exists: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM ConfigGroup WHERE id = 1)",
-            [],
-            |row| row.get(0),
-        )
+    log::info!("v2 -> v3 迁移完成");
+    Ok(())
+}
+
+/// 迁移: v3 -> v4 - 余额查询功能
+/// 添加余额查询URL、余额记录、查询状态等字段
+fn migrate_v3_to_v4(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v3 -> v4 迁移: 余额查询功能");
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v4_balance_query.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
         .map_err(|e| AppError::DatabaseError {
-            message: format!("检查默认分组失败: {}", e),
+            message: format!("v3->v4 迁移失败: {}", e),
         })?;
 
-    if !default_group_exists {
-        conn.execute(
-            r#"
-            INSERT INTO ConfigGroup (id, name, description, auto_switch_enabled, latency_threshold_ms)
-            VALUES (1, '默认分组', '系统默认分组，新建配置的初始分组', 1, 3000)
-            "#,
-            [],
-        )
-        .map_err(|e| AppError::DatabaseError {
-            message: format!("插入默认分组失败: {}", e),
-        })?;
-
-        log::info!("已创建默认分组 (ID=1)");
-    }
-
+    log::info!("v3 -> v4 迁移完成: 已添加余额查询相关字段");
     Ok(())
 }
 

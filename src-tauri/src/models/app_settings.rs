@@ -157,7 +157,7 @@ impl Default for AppSettings {
         AppSettings {
             id: Self::SINGLETON_ID,
             language: Language::ZhCn,
-            default_latency_threshold_ms: 3000,
+            default_latency_threshold_ms: 30000,
             default_proxy_port: 25341,
             remote_recommendation_url: None,
             local_recommendation_path: None,
@@ -211,6 +211,6 @@ mod tests {
         assert_eq!(settings.id, AppSettings::SINGLETON_ID);
         assert_eq!(settings.language, Language::ZhCn);
         assert_eq!(settings.default_proxy_port, 25341);
-        assert_eq!(settings.default_latency_threshold_ms, 3000);
+        assert_eq!(settings.default_latency_threshold_ms, 30000);
     }
 }

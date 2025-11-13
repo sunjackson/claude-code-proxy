@@ -11,6 +11,8 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Request, Response};
 use hyper_util::rt::TokioIo;
+use http_body_util::combinators::BoxBody;
+use hyper::body::Bytes;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -108,25 +110,65 @@ impl ProxyServer {
         drop(status);
 
         let config = self.config.read().await.clone();
-        let addr = format!("{}:{}", config.host, config.port);
+        let mut port = config.port;
+        let max_attempts = 10; // 最多尝试10个端口
 
-        log::info!("Starting proxy server on {}", addr);
+        log::info!("Starting proxy server on {}:{}", config.host, port);
 
-        // Bind TCP listener
-        let listener = match TcpListener::bind(&addr).await {
-            Ok(listener) => {
-                log::info!("Proxy server bound to {}", addr);
-                listener
-            }
-            Err(e) => {
-                log::error!("Failed to bind to {}: {}", addr, e);
-                let mut status = self.status.write().await;
-                *status = ProxyServerStatus::Error;
-                return Err(AppError::IoError {
-                    message: format!("Failed to bind address: {}", e),
-                });
+        // 尝试绑定端口，如果失败则自动递增端口号重试
+        let (listener, final_port) = {
+            let mut attempt = 0;
+
+            loop {
+                let addr = format!("{}:{}", config.host, port);
+
+                match TcpListener::bind(&addr).await {
+                    Ok(listener) => {
+                        if port != config.port {
+                            log::info!("Port {} was occupied, automatically using port {}", config.port, port);
+                        }
+                        log::info!("Proxy server bound to {}", addr);
+                        break (listener, port);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to bind to {} (attempt {}): {}", addr, attempt + 1, e);
+                        attempt += 1;
+
+                        if attempt >= max_attempts {
+                            log::error!("Failed to bind after {} attempts, last port tried: {}", max_attempts, port);
+                            let mut status = self.status.write().await;
+                            *status = ProxyServerStatus::Error;
+                            return Err(AppError::IoError {
+                                message: format!(
+                                    "Failed to bind address after {} attempts. Last error: {}",
+                                    max_attempts,
+                                    e
+                                ),
+                            });
+                        }
+
+                        // 端口号+1，确保不超过65535
+                        port = if port >= 65535 {
+                            log::error!("Port number reached maximum (65535), cannot continue");
+                            let mut status = self.status.write().await;
+                            *status = ProxyServerStatus::Error;
+                            return Err(AppError::IoError {
+                                message: "Port number reached maximum value".to_string(),
+                            });
+                        } else {
+                            port + 1
+                        };
+                    }
+                }
             }
         };
+
+        // 如果使用了不同的端口，更新配置
+        if final_port != config.port {
+            log::info!("Updating configuration with new port: {}", final_port);
+            let mut cfg = self.config.write().await;
+            cfg.port = final_port;
+        }
 
         // Create shutdown signal channel
         let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
@@ -149,58 +191,69 @@ impl ProxyServer {
         tokio::spawn(async move {
             log::info!("Proxy server accepting connections");
 
+            let mut shutdown_rx = shutdown_tx.subscribe();
+
             loop {
-                // Accept new connection
-                let (stream, remote_addr) = match listener.accept().await {
-                    Ok(conn) => conn,
-                    Err(e) => {
-                        log::error!("Failed to accept connection: {}", e);
-                        continue;
-                    }
-                };
+                // Use tokio::select! to listen for both accept and shutdown signal
+                tokio::select! {
+                    // Accept new connection
+                    accept_result = listener.accept() => {
+                        match accept_result {
+                            Ok((stream, remote_addr)) => {
+                                log::debug!("New connection from {}", remote_addr);
 
-                log::debug!("New connection from {}", remote_addr);
+                                let config = config_arc.clone();
+                                let db_pool = db_pool_arc.clone();
+                                let mut conn_shutdown_rx = shutdown_tx.subscribe();
 
-                let config = config_arc.clone();
-                let db_pool = db_pool_arc.clone();
-                let mut shutdown_rx = shutdown_tx.subscribe();
+                                // Create async task for each connection
+                                tokio::spawn(async move {
+                                    let io = TokioIo::new(stream);
 
-                // Create async task for each connection
-                tokio::spawn(async move {
-                    let io = TokioIo::new(stream);
+                                    // Create service handler function
+                                    let service = service_fn(move |req: Request<Incoming>| {
+                                        let config = config.clone();
+                                        let db_pool = db_pool.clone();
+                                        async move {
+                                            Self::handle_request(req, remote_addr, config, db_pool).await
+                                        }
+                                    });
 
-                    // Create service handler function
-                    let service = service_fn(move |req: Request<Incoming>| {
-                        let config = config.clone();
-                        let db_pool = db_pool.clone();
-                        async move {
-                            Self::handle_request(req, remote_addr, config, db_pool).await
-                        }
-                    });
+                                    // Use HTTP/1.1 to handle connection
+                                    let conn = http1::Builder::new().serve_connection(io, service);
 
-                    // Use HTTP/1.1 to handle connection
-                    let conn = http1::Builder::new().serve_connection(io, service);
-
-                    // Add graceful shutdown support
-                    tokio::select! {
-                        result = conn => {
-                            if let Err(e) = result {
-                                log::error!("Connection error ({}): {}", remote_addr, e);
+                                    // Add graceful shutdown support
+                                    tokio::select! {
+                                        result = conn => {
+                                            if let Err(e) = result {
+                                                log::error!("Connection error ({}): {}", remote_addr, e);
+                                            }
+                                        }
+                                        _ = conn_shutdown_rx.recv() => {
+                                            log::debug!("Connection {} received shutdown signal", remote_addr);
+                                        }
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                log::error!("Failed to accept connection: {}", e);
+                                continue;
                             }
                         }
-                        _ = shutdown_rx.recv() => {
-                            log::debug!("Connection {} received shutdown signal", remote_addr);
-                        }
                     }
-                });
-
-                // Check for shutdown signal
-                if shutdown_tx.receiver_count() == 0 {
-                    break;
+                    // Listen for shutdown signal
+                    _ = shutdown_rx.recv() => {
+                        log::info!("Received shutdown signal, stopping server");
+                        break;
+                    }
                 }
             }
 
             log::info!("Proxy server stopped accepting connections");
+
+            // Drop listener to release port immediately
+            drop(listener);
+            log::debug!("TCP listener dropped, port released");
 
             // Update status
             let mut status = status_arc.write().await;
@@ -230,14 +283,24 @@ impl ProxyServer {
         if let Some(tx) = shutdown_tx.take() {
             let _ = tx.send(());
         }
+        drop(shutdown_tx);
 
-        // Wait a moment for graceful shutdown
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Wait for server to stop and release port
+        // The spawned task will update status to Stopped
+        let max_wait = 50; // 最多等待500ms (50 * 10ms)
+        for _ in 0..max_wait {
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            let status = self.status.read().await;
+            if *status == ProxyServerStatus::Stopped {
+                log::info!("Proxy server stopped, port released");
+                return Ok(());
+            }
+        }
 
+        // 如果超时，强制设置状态为停止
+        log::warn!("Proxy server stop timeout, forcing status to stopped");
         let mut status = self.status.write().await;
         *status = ProxyServerStatus::Stopped;
-
-        log::info!("Proxy server stopped");
 
         Ok(())
     }
@@ -248,7 +311,7 @@ impl ProxyServer {
         remote_addr: SocketAddr,
         config: Arc<RwLock<ProxyConfig>>,
         db_pool: Arc<DbPool>,
-    ) -> Result<Response<String>, hyper::Error> {
+    ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
         let method = req.method().clone();
         let uri = req.uri().clone();
 
@@ -286,8 +349,8 @@ impl ProxyServer {
             }
         };
 
-        // Create router and forward request
-        let router = RequestRouter::new(db_pool.clone());
+        // Create router and forward request (with config reference for auto-switch updates)
+        let router = RequestRouter::new_with_config(db_pool.clone(), config.clone());
 
         // Get config name for logging
         let config_name = db_pool

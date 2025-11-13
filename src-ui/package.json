@@ -1,7 +1,7 @@
 {
-  "name": "claude-code-router-ui",
+  "name": "claude-code-proxy-ui",
   "version": "1.0.0",
-  "description": "Claude Code 代理服务管理应用 - 前端界面",
+  "description": "Claude Code 代理服务 - 前端界面",
   "type": "module",
   "scripts": {
     "dev": "vite",

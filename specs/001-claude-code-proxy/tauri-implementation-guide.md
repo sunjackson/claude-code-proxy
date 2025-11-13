@@ -29,13 +29,13 @@ npm install -g @tauri-apps/cli
 ```bash
 # 使用 Tauri 官方模板
 npm create tauri-app@latest -- \
-  --project-name claude-code-router \
-  --package-name com.sunjackson.claude-code-router \
+  --project-name claude-code-proxy \
+  --package-name com.sunjackson.claude-code-proxy \
   --typescript \
   --react \
   --window-data
 
-cd claude-code-router
+cd claude-code-proxy
 
 # 安装依赖
 pnpm install
@@ -54,7 +54,7 @@ pnpm tauri build
 ### 完整项目树
 
 ```
-claude-code-router/
+claude-code-proxy/
 ├── src/                              # 前端 React 代码
 │   ├── components/
 │   │   ├── Dashboard.tsx            # 主控制面板
@@ -132,7 +132,7 @@ claude-code-router/
 
 ```json
 {
-  "name": "claude-code-router",
+  "name": "claude-code-proxy",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -717,7 +717,7 @@ export const api = {
 ```toml
 # src-tauri/Cargo.toml
 [package]
-name = "claude-code-router"
+name = "claude-code-proxy"
 version = "0.1.0"
 description = "Claude Code Proxy Manager"
 authors = ["Your Name"]
@@ -1097,12 +1097,12 @@ pub async fn test_connection(config: serde_json::Value) -> Result<serde_json::Va
 
 ```bash
 npm create tauri-app@latest -- \
-  --project-name claude-code-router \
-  --package-name com.sunjackson.claude-code-router \
+  --project-name claude-code-proxy \
+  --package-name com.sunjackson.claude-code-proxy \
   --typescript true \
   --react true
 
-cd claude-code-router
+cd claude-code-proxy
 ```
 
 ### 2. 安装前端依赖

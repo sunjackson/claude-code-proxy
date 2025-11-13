@@ -51,18 +51,20 @@ fn seed_app_settings(conn: &Connection) -> AppResult<()> {
 }
 
 /// 插入默认配置分组
-/// 包括特殊分组 "未分组" 和 "默认分组"
+/// 仅包括特殊分组 "未分组" (ID=0)
+/// 注意: 只在数据库中完全没有分组时才创建
 fn seed_config_groups(conn: &Connection) -> AppResult<()> {
-    // 插入 "未分组" 特殊分组
-    let ungrouped_exists: bool = conn
-        .query_row("SELECT EXISTS(SELECT 1 FROM ConfigGroup WHERE id = 0)", [], |row| {
+    // 检查是否有任何分组存在
+    let any_group_exists: bool = conn
+        .query_row("SELECT EXISTS(SELECT 1 FROM ConfigGroup)", [], |row| {
             row.get(0)
         })
         .map_err(|e| AppError::DatabaseError {
             message: format!("查询 ConfigGroup 失败: {}", e),
         })?;
 
-    if !ungrouped_exists {
+    if !any_group_exists {
+        // 只有在完全没有分组时才创建 "未分组"
         conn.execute(
             r#"
             INSERT INTO ConfigGroup (id, name, description, auto_switch_enabled)
@@ -75,30 +77,8 @@ fn seed_config_groups(conn: &Connection) -> AppResult<()> {
         })?;
 
         log::info!("已插入特殊分组: 未分组 (ID=0)");
-    }
-
-    // 插入 "默认分组"
-    let default_group_exists: bool = conn
-        .query_row("SELECT EXISTS(SELECT 1 FROM ConfigGroup WHERE id = 1)", [], |row| {
-            row.get(0)
-        })
-        .map_err(|e| AppError::DatabaseError {
-            message: format!("查询 ConfigGroup 失败: {}", e),
-        })?;
-
-    if !default_group_exists {
-        conn.execute(
-            r#"
-            INSERT INTO ConfigGroup (id, name, description, auto_switch_enabled, latency_threshold_ms)
-            VALUES (1, '默认分组', '系统默认分组，新建配置的初始分组', 1, 3000)
-            "#,
-            [],
-        )
-        .map_err(|e| AppError::DatabaseError {
-            message: format!("插入 '默认分组' 失败: {}", e),
-        })?;
-
-        log::info!("已插入默认分组 (ID=1)");
+    } else {
+        log::debug!("数据库中已有分组，跳过创建默认分组");
     }
 
     Ok(())
@@ -223,11 +203,17 @@ mod tests {
             .unwrap();
         assert_eq!(settings_count, 1);
 
-        // 验证 ConfigGroup
+        // 验证 ConfigGroup - 应该只有一个"未分组"
         let group_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ConfigGroup WHERE name = '未分组'", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM ConfigGroup", [], |row| row.get(0))
             .unwrap();
         assert_eq!(group_count, 1);
+
+        // 验证"未分组"的ID为0
+        let ungrouped_id: i64 = conn
+            .query_row("SELECT id FROM ConfigGroup WHERE name = '未分组'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(ungrouped_id, 0);
 
         // 验证 ProxyService
         let proxy_count: i64 = conn

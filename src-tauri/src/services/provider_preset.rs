@@ -1,59 +1,20 @@
 use crate::models::error::{AppError, AppResult};
 use crate::models::provider_preset::{ProviderCategory, ProviderConfig, ProviderPreset};
-use std::fs;
-use std::path::PathBuf;
+
+/// 内嵌的 providers.json 配置文件
+/// 在编译时将配置文件内容嵌入到二进制文件中，避免打包后找不到文件
+const EMBEDDED_PROVIDERS_JSON: &str = include_str!("../../../config/providers.json");
 
 /// 供应商预设配置服务
 pub struct ProviderPresetService;
 
 impl ProviderPresetService {
-    /// 获取配置文件路径
-    fn get_config_path() -> AppResult<PathBuf> {
-        // 获取应用根目录
-        let current_dir = std::env::current_dir().map_err(|e| {
-            AppError::IoError {
-                message: format!("获取当前目录失败: {}", e),
-            }
-        })?;
-
-        // 配置文件路径：项目根目录/config/providers.json
-        let config_path = current_dir.join("config").join("providers.json");
-
-        // 如果文件不存在，尝试从父目录查找（开发模式下）
-        if !config_path.exists() {
-            let parent_path = current_dir
-                .parent()
-                .ok_or_else(|| {
-                    AppError::IoError {
-                        message: "无法找到父目录".to_string(),
-                    }
-                })?
-                .join("config")
-                .join("providers.json");
-
-            if parent_path.exists() {
-                return Ok(parent_path);
-            }
-        }
-
-        Ok(config_path)
-    }
-
-    /// 从 JSON 文件读取供应商配置
+    /// 从内嵌的 JSON 读取供应商配置
     pub fn load_providers() -> AppResult<Vec<ProviderPreset>> {
-        let config_path = Self::get_config_path()?;
-
-        // 读取文件内容
-        let content = fs::read_to_string(&config_path).map_err(|e| {
-            AppError::IoError {
-                message: format!("读取配置文件失败 {:?}: {}", config_path, e),
-            }
-        })?;
-
-        // 解析 JSON
-        let config: ProviderConfig = serde_json::from_str(&content).map_err(|e| {
+        // 解析内嵌的 JSON
+        let config: ProviderConfig = serde_json::from_str(EMBEDDED_PROVIDERS_JSON).map_err(|e| {
             AppError::ParseError {
-                message: format!("解析配置文件失败: {}", e),
+                message: format!("解析内嵌配置文件失败: {}", e),
             }
         })?;
 

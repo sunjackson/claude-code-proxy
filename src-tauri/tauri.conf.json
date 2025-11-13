@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Claude Code Router",
+  "productName": "ClaudeCodeProxy",
   "version": "1.0.0",
-  "identifier": "com.claude-code-router.app",
+  "identifier": "com.claudecodeproxy.app",
   "build": {
     "beforeDevCommand": "cd /Users/sunjackson/Project/claude-code-router/src-ui && npm run dev",
     "devUrl": "http://localhost:5173",
@@ -23,7 +23,7 @@
   "app": {
     "windows": [
       {
-        "title": "Claude Code Router",
+        "title": "ClaudeCodeProxy",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,

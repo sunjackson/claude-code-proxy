@@ -45,6 +45,9 @@ pub fn initialize_database() -> AppResult<Connection> {
 
     log::info!("数据库表结构创建完成");
 
+    // 执行数据库迁移
+    crate::db::migrations::migrate_database(&conn)?;
+
     // 插入默认数据
     insert_default_data(&conn)?;
 
@@ -77,25 +80,105 @@ fn insert_default_data(conn: &Connection) -> AppResult<()> {
         log::info!("已插入默认应用设置");
     }
 
-    // 2. 插入特殊分组 "未分组" (id=0)
-    let ungrouped_exists: bool = conn
-        .query_row("SELECT EXISTS(SELECT 1 FROM ConfigGroup WHERE name = '未分组')", [], |row| {
+    // 2. 只在没有任何分组时才创建默认的"未分组" (id=0)
+    // 检查是否有任何分组存在
+    let any_group_exists: bool = conn
+        .query_row("SELECT EXISTS(SELECT 1 FROM ConfigGroup)", [], |row| {
             row.get(0)
         })
         .map_err(|e| AppError::DatabaseError {
             message: format!("查询 ConfigGroup 失败: {}", e),
         })?;
 
-    if !ungrouped_exists {
+    if !any_group_exists {
+        // 完全没有分组，创建默认的"未分组"
+        log::info!("数据库中没有分组，创建默认分组");
+
         conn.execute(
-            "INSERT INTO ConfigGroup (name, description) VALUES ('未分组', '默认分组,用于未分类的配置')",
+            "INSERT INTO ConfigGroup (id, name, description, auto_switch_enabled) VALUES (0, '未分组', '默认分组,用于未分类的配置', 0)",
             [],
         )
         .map_err(|e| AppError::DatabaseError {
             message: format!("插入未分组失败: {}", e),
         })?;
 
-        log::info!("已插入特殊分组: 未分组");
+        log::info!("已插入默认分组: 未分组 (ID=0)");
+    } else {
+        // 已有分组，检查是否存在 id=0 的特殊分组
+        let id_zero_exists: bool = conn
+            .query_row("SELECT EXISTS(SELECT 1 FROM ConfigGroup WHERE id = 0)", [], |row| {
+                row.get(0)
+            })
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("查询 ConfigGroup id=0 失败: {}", e),
+            })?;
+
+        if !id_zero_exists {
+            // 有其他分组但没有 id=0，检查是否有旧的"未分组"记录需要清理
+            let old_ungrouped_ids: Vec<i64> = {
+                let mut stmt = conn
+                    .prepare("SELECT id FROM ConfigGroup WHERE name = '未分组' AND id != 0")
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("准备查询旧的未分组记录失败: {}", e),
+                    })?;
+
+                let ids = stmt
+                    .query_map([], |row| row.get(0))
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("查询旧的未分组记录失败: {}", e),
+                    })?
+                    .collect::<Result<Vec<i64>, _>>()
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("读取旧的未分组记录ID失败: {}", e),
+                    })?;
+
+                ids
+            };
+
+            if !old_ungrouped_ids.is_empty() {
+                // 如果存在旧的"未分组"记录，需要清理
+                log::info!("发现 {} 个旧的未分组记录，正在清理", old_ungrouped_ids.len());
+
+                // 删除所有旧的"未分组"记录（外键约束会自动将相关配置的group_id设为NULL）
+                conn.execute(
+                    "DELETE FROM ConfigGroup WHERE name = '未分组' AND id != 0",
+                    [],
+                )
+                .map_err(|e| AppError::DatabaseError {
+                    message: format!("删除旧的未分组记录失败: {}", e),
+                })?;
+
+                log::info!("已删除旧的未分组记录");
+
+                // 插入新的 id=0 的"未分组"记录
+                conn.execute(
+                    "INSERT INTO ConfigGroup (id, name, description, auto_switch_enabled) VALUES (0, '未分组', '默认分组,用于未分类的配置', 0)",
+                    [],
+                )
+                .map_err(|e| AppError::DatabaseError {
+                    message: format!("插入未分组失败: {}", e),
+                })?;
+
+                log::info!("已插入特殊分组: 未分组 (ID=0)");
+
+                // 将原本关联到旧"未分组"的配置指向新的 id=0
+                let updated = conn.execute(
+                    "UPDATE ApiConfig SET group_id = 0 WHERE group_id IS NULL",
+                    [],
+                )
+                .map_err(|e| AppError::DatabaseError {
+                    message: format!("恢复配置分组引用失败: {}", e),
+                })?;
+
+                if updated > 0 {
+                    log::info!("已将 {} 个配置迁移到新的未分组 (ID=0)", updated);
+                }
+            } else {
+                log::info!("已有自定义分组，跳过创建默认分组");
+            }
+        } else {
+            log::debug!("特殊分组 '未分组' (ID=0) 已存在");
+        }
     }
 
     // 3. 插入代理服务实例 (id=1, 单例)
@@ -147,7 +230,7 @@ mod tests {
     #[test]
     fn test_initialize_database() {
         // 创建临时数据库进行测试
-        let temp_dir = std::env::temp_dir().join("claude_code_router_test");
+        let temp_dir = std::env::temp_dir().join("claude_code_proxy_test");
         fs::create_dir_all(&temp_dir).unwrap();
         let db_path = temp_dir.join("test_database.db");
 
@@ -172,7 +255,7 @@ mod tests {
         assert_eq!(settings_count, 1);
 
         let ungrouped_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ConfigGroup WHERE name = '未分组'", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM ConfigGroup WHERE id = 0", [], |row| row.get(0))
             .unwrap();
         assert_eq!(ungrouped_count, 1);
 

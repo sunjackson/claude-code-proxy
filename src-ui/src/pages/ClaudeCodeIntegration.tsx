@@ -1,12 +1,12 @@
 /**
  * Claude Code 集成页面
- * 管理 Claude Code 的本地代理配置
+ * 管理 Claude Code 配置备份
  */
 
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { ClaudeCodePathDetector } from '../components/ClaudeCodePathDetector';
-import { ProxyEnableToggle } from '../components/ProxyEnableToggle';
 import { BackupList } from '../components/BackupList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { AppLayout } from '../components/AppLayout';
@@ -14,6 +14,7 @@ import type { ClaudeCodePath, ConfigBackup } from '../types/tauri';
 
 export const ClaudeCodeIntegration: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [claudeCodePath, setClaudeCodePath] = useState<ClaudeCodePath | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -31,37 +32,6 @@ export const ClaudeCodeIntegration: React.FC = () => {
 
   const handlePathDetected = (path: ClaudeCodePath) => {
     setClaudeCodePath(path);
-  };
-
-  const handleShowProxyConfirm = (
-    action: 'enable' | 'disable',
-    callback: () => void
-  ) => {
-    if (action === 'enable') {
-      setConfirmDialog({
-        isOpen: true,
-        title: '启用本地代理',
-        message:
-          '此操作将修改 Claude Code 配置文件,将其代理设置为本地代理服务器 (127.0.0.1:25341)。修改前会自动创建配置备份,您可以随时恢复。',
-        variant: 'default',
-        onConfirm: () => {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-          callback();
-        },
-      });
-    } else {
-      setConfirmDialog({
-        isOpen: true,
-        title: '禁用本地代理',
-        message:
-          '此操作将从 Claude Code 配置中移除代理设置,Claude Code 将恢复直连模式。修改前会自动创建配置备份。',
-        variant: 'default',
-        onConfirm: () => {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-          callback();
-        },
-      });
-    }
   };
 
   const handleShowBackupConfirm = (
@@ -111,10 +81,6 @@ export const ClaudeCodeIntegration: React.FC = () => {
     setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
   };
 
-  const canEnableProxy =
-    claudeCodePath &&
-    (claudeCodePath.exists ? claudeCodePath.readable && claudeCodePath.writable : true);
-
   return (
     <AppLayout title={t('nav.claudeCode')} subtitle={t('claudeCode.subtitle')}>
       {/* 主要内容区域 */}
@@ -122,51 +88,56 @@ export const ClaudeCodeIntegration: React.FC = () => {
           {/* 路径检测器 */}
           <ClaudeCodePathDetector onPathDetected={handlePathDetected} />
 
-          {/* 代理开关 - 仅在路径有效时显示 */}
-          {canEnableProxy && (
-            <ProxyEnableToggle
-              onEnabled={() => {
-                // 刷新备份列表
-                window.location.reload();
-              }}
-              onDisabled={() => {
-                // 刷新备份列表
-                window.location.reload();
-              }}
-              onShowConfirm={handleShowProxyConfirm}
-            />
-          )}
+          {/* 代理配置提示 */}
+          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-14 h-14 bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-xl flex items-center justify-center border border-yellow-500/30 shadow-inner">
+                <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-yellow-400 mb-2 tracking-wide">配置 Claude Code 代理</h3>
+                <p className="text-sm text-gray-300 mb-4 leading-relaxed">
+                  要将 Claude Code 配置为使用本地代理，请前往仪表盘页面进行操作。
+                </p>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-bold rounded-lg transition-all duration-200 flex items-center gap-2 shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  前往仪表盘
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* 权限警告 */}
-          {claudeCodePath && !canEnableProxy && (
-            <div className="bg-black border border-red-900 rounded-lg p-6">
-              <div className="flex items-start space-x-3">
-                <svg
-                  className="w-6 h-6 text-red-500 mt-0.5"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
+          {claudeCodePath && !claudeCodePath.readable && (
+            <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-red-500/50 rounded-xl p-6 shadow-lg shadow-red-500/10">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center border border-red-500/30">
+                  <svg
+                    className="w-6 h-6 text-red-400"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-red-500 mb-2">
-                    无法启用代理
+                  <h3 className="text-lg font-bold text-red-400 mb-2">
+                    配置文件权限不足
                   </h3>
-                  <p className="text-gray-400 mb-3">
-                    Claude Code 配置文件权限不足,无法修改配置。请检查以下问题:
+                  <p className="text-gray-300 leading-relaxed">
+                    Claude Code 配置文件权限不足。请检查文件权限后重试。
                   </p>
-                  <ul className="space-y-1 text-sm text-gray-400 list-disc list-inside">
-                    {!claudeCodePath.readable && (
-                      <li>配置文件不可读,请检查文件权限</li>
-                    )}
-                    {!claudeCodePath.writable && (
-                      <li>配置文件不可写,请检查文件权限</li>
-                    )}
-                  </ul>
                 </div>
               </div>
             </div>
@@ -175,60 +146,49 @@ export const ClaudeCodeIntegration: React.FC = () => {
           {/* 备份列表 */}
           <BackupList
             onRestored={() => {
-              // 可以在这里添加成功提示
               console.log('配置已恢复');
             }}
             onDeleted={() => {
-              // 可以在这里添加成功提示
               console.log('备份已删除');
             }}
             onShowConfirm={handleShowBackupConfirm}
           />
 
           {/* 使用说明 */}
-          <div className="bg-black border border-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-yellow-500 mb-4">
+          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+            <h3 className="text-lg font-bold text-yellow-400 mb-5 tracking-wide flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               使用说明
             </h3>
-            <div className="space-y-3 text-sm text-gray-400">
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-xs font-bold">
+            <div className="space-y-4">
+              <div className="flex items-start gap-4 bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500/30 to-yellow-600/30 text-yellow-400 flex items-center justify-center text-sm font-bold border border-yellow-500/30">
                   1
                 </span>
-                <p>
-                  <strong className="text-white">检测路径:</strong> 自动检测
-                  Claude Code 配置文件路径和权限状态
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  <strong className="text-yellow-400 font-semibold">启用代理:</strong> 前往仪表盘页面，在"配置 Claude Code"卡片中点击"⚡ 启用代理"按钮
                 </p>
               </div>
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-xs font-bold">
+              <div className="flex items-start gap-4 bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500/30 to-yellow-600/30 text-yellow-400 flex items-center justify-center text-sm font-bold border border-yellow-500/30">
                   2
                 </span>
-                <p>
-                  <strong className="text-white">启用代理:</strong> 修改 Claude
-                  Code 配置,使其通过本地代理服务器 (127.0.0.1:25341) 连接 API
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  <strong className="text-yellow-400 font-semibold">自动备份:</strong> 每次修改配置前会自动创建备份,可随时恢复
                 </p>
               </div>
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-xs font-bold">
+              <div className="flex items-start gap-4 bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500/30 to-yellow-600/30 text-yellow-400 flex items-center justify-center text-sm font-bold border border-yellow-500/30">
                   3
                 </span>
-                <p>
-                  <strong className="text-white">自动备份:</strong>{' '}
-                  每次修改配置前会自动创建备份,可随时恢复
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  <strong className="text-yellow-400 font-semibold">管理备份:</strong> 查看历史备份,随时恢复或删除不需要的备份
                 </p>
               </div>
-              <div className="flex items-start space-x-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-xs font-bold">
-                  4
-                </span>
-                <p>
-                  <strong className="text-white">管理备份:</strong>{' '}
-                  查看历史备份,随时恢复或删除
-                </p>
-              </div>
+            </div>
           </div>
-        </div>
       </div>
 
       {/* 确认对话框 */}

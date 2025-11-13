@@ -494,7 +494,7 @@ export const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
         </div>
       </div>
 
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{__html: `
         @keyframes scale-in {
           from {
             opacity: 0;
@@ -509,7 +509,7 @@ export const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
         .animate-scale-in {
           animation: scale-in 0.2s ease-out;
         }
-      `}</style>
+      `}} />
     </div>
   );
 };

@@ -75,3 +75,14 @@ export async function getSwitchLogs(
 export async function toggleAutoSwitch(groupId: number, enabled: boolean): Promise<void> {
   return invoke<void>('toggle_auto_switch', { groupId, enabled });
 }
+
+/**
+ * 清空切换日志
+ * @param groupId 可选,按分组过滤。如果提供，只清空该分组的日志；否则清空所有日志
+ * @returns 删除的日志数量
+ */
+export async function clearSwitchLogs(groupId?: number): Promise<number> {
+  return invoke<number>('clear_switch_logs', {
+    groupId: groupId ?? null,
+  });
+}

@@ -3,7 +3,7 @@
  * 使用 react-hot-toast 提供统一的通知接口
  */
 
-import toast, { Toaster, ToastOptions } from 'react-hot-toast';
+import toast, { Toaster, ToastOptions, Renderable, ValueOrFunction, Toast } from 'react-hot-toast';
 
 // 默认配置
 const defaultOptions: ToastOptions = {
@@ -149,7 +149,7 @@ export const showPromise = <T,>(
  * 自定义 toast
  */
 export const showCustom = (
-  render: (t: any) => React.ReactNode,
+  render: ValueOrFunction<Renderable, Toast>,
   options?: ToastOptions
 ) => {
   return toast.custom(render, {

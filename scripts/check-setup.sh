@@ -4,7 +4,7 @@
 # 不要在错误时退出，继续检查所有项
 set +e
 
-echo "🔍 检查 Claude Code Router 项目设置..."
+echo "🔍 检查 Claude Code Proxy 项目设置..."
 echo ""
 
 # 颜色定义

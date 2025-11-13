@@ -137,53 +137,115 @@ impl ClaudeConfigService {
             return Ok(());
         }
 
-        // 读取当前配置
+        // 读取当前配置以检查是否为本地代理
         let content = fs::read_to_string(&settings_path).map_err(|e| AppError::IoError {
             message: format!("读取配置文件失败: {}", e),
         })?;
 
-        let mut settings = serde_json::from_str::<Value>(&content).map_err(|e| {
+        let settings = serde_json::from_str::<Value>(&content).map_err(|e| {
             AppError::InvalidData {
                 message: format!("解析配置文件失败: {}", e),
             }
         })?;
 
-        // 删除代理配置
-        if let Some(obj) = settings.as_object_mut() {
-            // 移除 http.proxy
-            obj.remove("http.proxy");
+        // 检查当前是否配置了本地代理
+        let is_local_proxy = settings
+            .get("env")
+            .and_then(|env| env.get("ANTHROPIC_BASE_URL"))
+            .and_then(|v| v.as_str())
+            .map(|url| {
+                url.starts_with("http://127.0.0.1:")
+                    || url.starts_with("http://localhost:")
+            })
+            .unwrap_or(false);
 
-            // 恢复原始的 ANTHROPIC_BASE_URL（如果存在的话）
-            if let Some(env) = obj.get_mut("env").and_then(|v| v.as_object_mut()) {
-                // 检查是否保存了原始的 ANTHROPIC_BASE_URL
-                if let Some(original_url) = env.remove("_ORIGINAL_ANTHROPIC_BASE_URL") {
-                    // 恢复原始值
-                    env.insert("ANTHROPIC_BASE_URL".to_string(), original_url);
-                    log::info!("已恢复原始的 ANTHROPIC_BASE_URL");
-                } else {
-                    // 如果没有保存原始值，则直接删除（恢复为默认行为）
-                    env.remove("ANTHROPIC_BASE_URL");
-                }
-
-                // 如果 env 对象为空，则移除整个 env 对象
-                if env.is_empty() {
-                    obj.remove("env");
-                }
-            }
+        // 如果不是本地代理，无需恢复
+        if !is_local_proxy {
+            log::info!("当前 ANTHROPIC_BASE_URL 不是本地代理，无需恢复");
+            return Ok(());
         }
 
-        // 写入配置文件
-        let content = serde_json::to_string_pretty(&settings).map_err(|e| {
-            AppError::InvalidData {
-                message: format!("序列化配置失败: {}", e),
+        // 尝试获取"启用代理前自动备份"
+        let backups = BackupService::list_backups().unwrap_or_default();
+
+        // 优先查找"启用代理前自动备份"，这是启用代理前的原始配置
+        let latest_backup = backups.iter()
+            .find(|b| b.reason.contains("启用代理前自动备份"));
+
+        if let Some(backup) = latest_backup {
+            // 找到备份，直接恢复（不通过 restore_backup 以避免创建额外的备份）
+            log::info!("找到启用代理前备份，准备恢复: {} ({})", backup.file_name, backup.reason);
+
+            // 验证备份内容的 JSON 格式
+            serde_json::from_str::<Value>(&backup.content).map_err(|e| {
+                AppError::InvalidData {
+                    message: format!("备份文件格式无效: {}", e),
+                }
+            })?;
+
+            // 直接写入配置文件（不创建额外的备份）
+            fs::write(&settings_path, &backup.content).map_err(|e| AppError::IoError {
+                message: format!("恢复配置文件失败: {}", e),
+            })?;
+
+            log::info!("Claude Code 代理已禁用，配置已恢复到启用代理前的状态");
+        } else {
+            // 没有可用的备份，使用原有的手动清理逻辑
+            log::warn!("未找到可用的备份，使用默认清理逻辑");
+
+            let mut settings = serde_json::from_str::<Value>(&content).map_err(|e| {
+                AppError::InvalidData {
+                    message: format!("解析配置文件失败: {}", e),
+                }
+            })?;
+
+            // 删除代理配置
+            if let Some(obj) = settings.as_object_mut() {
+                // 移除 http.proxy
+                obj.remove("http.proxy");
+
+                // 处理 ANTHROPIC_BASE_URL 恢复
+                if let Some(env) = obj.get_mut("env").and_then(|v| v.as_object_mut()) {
+                    // 检查是否保存了原始的 ANTHROPIC_BASE_URL
+                    if let Some(original_url) = env.remove("_ORIGINAL_ANTHROPIC_BASE_URL") {
+                        // 恢复原始值
+                        env.insert("ANTHROPIC_BASE_URL".to_string(), original_url);
+                        log::info!("已恢复原始的 ANTHROPIC_BASE_URL: {:?}", env.get("ANTHROPIC_BASE_URL"));
+                    } else {
+                        // 如果没有保存原始值，则直接删除（恢复为默认行为）
+                        let removed = env.remove("ANTHROPIC_BASE_URL");
+                        log::info!("已删除本地代理配置的 ANTHROPIC_BASE_URL: {:?}", removed);
+                    }
+
+                    // 清理备份字段
+                    env.remove("_ORIGINAL_ANTHROPIC_BASE_URL");
+
+                    // 如果 env 对象为空，则移除整个 env 对象
+                    if env.is_empty() {
+                        obj.remove("env");
+                        log::info!("env 对象已为空，已移除");
+                    }
+                }
+            } else {
+                return Err(AppError::InvalidData {
+                    message: "配置文件格式错误,根节点必须是对象".to_string(),
+                });
             }
-        })?;
 
-        fs::write(&settings_path, content).map_err(|e| AppError::IoError {
-            message: format!("写入配置文件失败: {}", e),
-        })?;
+            // 写入配置文件
+            let content = serde_json::to_string_pretty(&settings).map_err(|e| {
+                AppError::InvalidData {
+                    message: format!("序列化配置失败: {}", e),
+                }
+            })?;
 
-        log::info!("Claude Code 代理已禁用");
+            fs::write(&settings_path, content).map_err(|e| AppError::IoError {
+                message: format!("写入配置文件失败: {}", e),
+            })?;
+
+            log::info!("Claude Code 代理已禁用（使用默认清理逻辑）");
+        }
+
         Ok(())
     }
 

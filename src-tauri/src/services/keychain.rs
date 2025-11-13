@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use keyring::Entry;
 
 /// 密钥链服务标识符
-const SERVICE_NAME: &str = "claude-code-router";
+const SERVICE_NAME: &str = "claude-code-proxy";
 
 /// 密钥链管理器
 /// 提供跨平台的密钥存储和检索功能
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_get_service_name() {
-        assert_eq!(KeychainManager::get_service_name(), "claude-code-router");
+        assert_eq!(KeychainManager::get_service_name(), "claude-code-proxy");
     }
 
     #[test]

@@ -100,7 +100,7 @@
   - 跨平台密钥链库(支持 DPAPI/Keychain/Secret Service)
 - [X] [T-030] [Story2] 实现密钥链管理器 `src-tauri/src/services/keychain.rs`
   - 函数: set_api_key(), get_api_key(), delete_api_key()
-  - 服务标识: "claude-code-router"
+  - 服务标识: "claude-code-proxy"
 - [X] [T-031] [P] [Story2] 编写密钥链单元测试 `src-tauri/src/services/keychain.rs`
   - 测试: 存储、读取、删除API密钥
 

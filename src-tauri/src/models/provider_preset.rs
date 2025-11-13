@@ -52,6 +52,10 @@ pub struct ProviderPreset {
     /// 服务器地址
     pub server_url: String,
 
+    /// 余额查询 URL (可选)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub balance_query_url: Option<String>,
+
     /// 描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -146,6 +150,7 @@ mod tests {
             website_url: "https://example.com".to_string(),
             api_key_url: None,
             server_url: "https://api.example.com".to_string(),
+            balance_query_url: None,
             description: None,
             show_in_recommendations: true,
             is_recommended: true,

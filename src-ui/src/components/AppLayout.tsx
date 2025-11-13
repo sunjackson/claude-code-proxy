@@ -25,7 +25,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children, title, subtitle 
         <Header title={title} subtitle={subtitle} />
 
         {/* 内容区域 */}
-        <main className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-900 via-black to-gray-900">
+        <main className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-900 via-black to-gray-900 p-6">
           {children}
         </main>
       </div>

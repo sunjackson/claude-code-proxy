@@ -41,10 +41,15 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
         results.set(config.id, {
           id: 0,
           config_id: config.id,
-          test_time: new Date(config.last_test_at).getTime() / 1000,
-          is_success: config.is_available,
+          group_id: config.group_id,
+          test_at: config.last_test_at,
+          status: config.is_available ? 'success' : 'failed',
           latency_ms: config.last_latency_ms,
           error_message: null,
+          is_valid_key: null,
+          response_text: null,
+          test_model: null,
+          attempt: null,
         });
       }
     });
@@ -117,26 +122,47 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
   };
 
   return (
-    <div className="bg-gray-900 border border-amber-500/30 rounded-lg p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-amber-400">端点测速结果</h2>
+    <div className="space-y-4">
+      {/* 头部：标题 + 测速全部按钮 */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-yellow-400">端点测速结果</h3>
         {groupId && configs.length > 0 && (
           <button
             onClick={handleTestAll}
             disabled={testingAll}
-            className="px-4 py-2 bg-amber-500 text-black rounded hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 bg-yellow-500 text-black rounded-lg hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
           >
-            {testingAll ? '测速中...' : '测速全部'}
+            {testingAll ? (
+              <>
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                测速中...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                测速全部
+              </>
+            )}
           </button>
         )}
       </div>
 
+      {/* 配置列表 */}
       {configs.length === 0 ? (
-        <div className="text-gray-400 text-center py-8">
-          暂无配置
+        <div className="text-center py-12 bg-gray-900 border border-gray-800 rounded-lg">
+          <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p className="mt-4 text-gray-400">暂无配置</p>
+          <p className="mt-1 text-sm text-gray-500">请先添加API配置</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {configs.map(config => {
             const result = testResults.get(config.id);
             const isTesting = testing.has(config.id) || testingAll;
@@ -144,15 +170,16 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
             return (
               <div
                 key={config.id}
-                className="flex items-center justify-between p-4 bg-gray-800 rounded-lg hover:bg-gray-750 transition-colors"
+                className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-yellow-500/30 transition-all"
               >
-                <div className="flex items-center gap-4 flex-1">
-                  {/* 状态图标 */}
-                  <div className="flex-shrink-0">
+                {/* 使用grid布局确保列对齐 */}
+                <div className="grid grid-cols-12 gap-3 items-center">
+                  {/* 状态图标 - 1列 */}
+                  <div className="col-span-1 flex justify-center">
                     {isTesting ? (
-                      <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
                     ) : result ? (
-                      result.is_success ? (
+                      result.status === 'success' ? (
                         <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -170,18 +197,24 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
                     )}
                   </div>
 
-                  {/* 配置名称 */}
-                  <div className="flex-1">
-                    <div className="text-white font-medium">{config.name}</div>
-                    <div className="text-sm text-gray-400">
+                  {/* 配置信息 - 5列 */}
+                  <div className="col-span-5">
+                    <div className="text-white font-medium truncate">{config.name}</div>
+                    <div className="text-sm text-gray-400 truncate">
                       {formatDisplayUrl(config.server_url)}
                     </div>
                   </div>
 
-                  {/* 延迟显示 */}
-                  <div className="text-right min-w-20">
+                  {/* 延迟 - 2列 */}
+                  <div className="col-span-2 text-center">
                     {result && result.latency_ms !== null ? (
-                      <div className="text-amber-400 font-mono font-semibold">
+                      <div className={`font-mono font-semibold inline-block px-2.5 py-1 rounded-md ${
+                        result.latency_ms < 200
+                          ? 'bg-green-500/20 text-green-400'
+                          : result.latency_ms < 500
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-red-500/20 text-red-400'
+                      }`}>
                         {formatLatency(result.latency_ms)}
                       </div>
                     ) : (
@@ -189,41 +222,65 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
                     )}
                   </div>
 
-                  {/* API 有效性 */}
-                  <div className="min-w-16 text-center">
+                  {/* 可用性 - 2列 */}
+                  <div className="col-span-2 text-center">
                     {result ? (
-                      result.is_success ? (
-                        <span className="px-2 py-1 bg-green-500/20 text-green-400 text-sm rounded">
+                      result.status === 'success' ? (
+                        <span className="inline-block px-2.5 py-1 bg-green-500/20 text-green-400 text-sm rounded-md border border-green-500/50">
                           可用
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-red-500/20 text-red-400 text-sm rounded">
+                        <span className="inline-block px-2.5 py-1 bg-red-500/20 text-red-400 text-sm rounded-md border border-red-500/50">
                           不可用
                         </span>
                       )
                     ) : (
-                      <span className="px-2 py-1 bg-gray-600/20 text-gray-500 text-sm rounded">
+                      <span className="inline-block px-2.5 py-1 bg-gray-600/20 text-gray-500 text-sm rounded-md">
                         未测试
                       </span>
                     )}
                   </div>
 
-                  {/* 测试时间 */}
-                  {result && (
-                    <div className="text-sm text-gray-500 min-w-24">
-                      {formatTime(result.test_time)}
-                    </div>
-                  )}
+                  {/* 测试按钮 - 2列 */}
+                  <div className="col-span-2 text-right">
+                    <button
+                      onClick={() => handleTestConfig(config.id)}
+                      disabled={isTesting}
+                      className={`px-3 py-1.5 rounded-md transition-colors text-sm border inline-flex items-center gap-1.5 ${
+                        isTesting
+                          ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 cursor-wait'
+                          : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/20 hover:border-yellow-500/50'
+                      }`}
+                    >
+                      {isTesting ? (
+                        <>
+                          <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          测速中
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          测速
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                {/* 测试按钮 */}
-                <button
-                  onClick={() => handleTestConfig(config.id)}
-                  disabled={isTesting}
-                  className="ml-4 px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isTesting ? '测速中' : '测速'}
-                </button>
+                {/* 测试时间（如果有） */}
+                {result && (
+                  <div className="mt-2 pt-2 border-t border-gray-800 text-xs text-gray-500 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    最后测试: {formatTime(new Date(result.test_at).getTime() / 1000)}
+                  </div>
+                )}
               </div>
             );
           })}

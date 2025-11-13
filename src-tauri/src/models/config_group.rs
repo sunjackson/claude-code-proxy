@@ -150,7 +150,7 @@ mod tests {
             name: "未分组".to_string(),
             description: None,
             auto_switch_enabled: false,
-            latency_threshold_ms: 3000,
+            latency_threshold_ms: 30000,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };
@@ -166,7 +166,7 @@ mod tests {
             name: "工作".to_string(),
             description: None,
             auto_switch_enabled: false,
-            latency_threshold_ms: 3000,
+            latency_threshold_ms: 30000,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };

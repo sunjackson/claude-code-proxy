@@ -1,4 +1,52 @@
-# Rust
+# ===========================================
+# Claude Code Router - Git Ignore Configuration
+# ===========================================
+# 确保敏感信息、临时文件和构建产物不会被提交到 Git
+
+# ===========================================
+# 敏感信息和配置 (CRITICAL - 防止密钥泄露)
+# ===========================================
+# 环境变量和配置文件
+.env
+.env.*
+!.env.example
+*.local
+config.json
+secrets.json
+credentials.json
+api_keys.json
+
+# 应用配置目录（包含用户 API 密钥）
+.claude-code-router/
+.claude-code-proxy/
+
+# 数据库文件（包含敏感配置）
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+claude-code-router.db*
+
+# 备份文件（可能包含敏感数据）
+backups/
+backup/
+*.backup
+*.bak
+*.bak[0-9]*
+
+# 日志文件（可能包含敏感信息）
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===========================================
+# Rust / Cargo
+# ===========================================
 target/
 debug/
 release/
@@ -7,63 +55,63 @@ release/
 *.prof*
 Cargo.lock
 
+# ===========================================
 # Node.js / JavaScript / TypeScript
+# ===========================================
 node_modules/
 dist/
 build/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 .npm
 .eslintcache
 .yarn-integrity
 
-# Environment variables
-.env
-.env.*
-!.env.example
-*.local
+# ===========================================
+# Tauri 特定文件
+# ===========================================
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/WixTools
 
-# IDEs and editors
+# 构建输出
+src-ui/dist/
+src-ui/build/
+
+# ===========================================
+# IDE 和编辑器
+# ===========================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
-Thumbs.db
 *.iml
+.project
+.classpath
+.settings/
 
-# Database files
-*.db
-*.db-shm
-*.db-wal
-*.sqlite
-*.sqlite3
-
-# Tauri specific
-src-tauri/target/
-src-tauri/Cargo.lock
-src-tauri/WixTools
-
-# Build outputs
-src-ui/dist/
-src-ui/build/
-
-# Testing
+# ===========================================
+# 测试和覆盖率
+# ===========================================
 coverage/
 *.lcov
 .nyc_output
+test-results/
+playwright-report/
 
-# Temporary files
+# ===========================================
+# 临时文件
+# ===========================================
 *.tmp
 *.temp
 .cache/
+*.pid
+*.seed
+*.pid.lock
 
-# OS specific
+# ===========================================
+# 操作系统特定文件
+# ===========================================
+# macOS
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -71,17 +119,60 @@ Icon
 ._*
 .Spotlight-V100
 .Trashes
+.DocumentRevisions-V100
+.fseventsd
+.VolumeIcon.icns
+.TemporaryItems
+
+# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+$RECYCLE.BIN/
+*.lnk
 
-# Application specific
-.claude-code-proxy/
-backups/
-logs/
-*.log
+# Linux
+*~
+.directory
+.Trash-*
 
-# Package manager locks (optional - uncomment if you want to ignore them)
+# ===========================================
+# 开发和调试文件
+# ===========================================
+# 调试文件
+*.pdb
+*.dSYM/
+
+# 性能分析
+*.prof
+*.cpuprofile
+*.heapprofile
+
+# ===========================================
+# 文档和临时说明（开发过程产生的临时文档）
+# ===========================================
+*_BACKUP.md
+*_OLD.md
+*_TEMP.md
+TODO_LOCAL.md
+NOTES_LOCAL.md
+
+# ===========================================
+# 包管理器 Lock 文件（可选）
+# ===========================================
+# 取消注释以忽略包管理器锁文件
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# ===========================================
+# 特殊：保留的文件（明确不忽略）
+# ===========================================
+# 确保这些重要文件不会被忽略
+!.gitignore
+!.gitattributes
+!.github/
+!README.md
+!DEVELOP.md
+!CHANGELOG.md
+!LICENSE

@@ -13,12 +13,12 @@ NC='\033[0m'
 
 echo ""
 echo -e "${YELLOW}╔════════════════════════════════════════╗${NC}"
-echo -e "${YELLOW}║   Claude Code Router 数据库迁移      ║${NC}"
+echo -e "${YELLOW}║   Claude Code Proxy 数据库迁移      ║${NC}"
 echo -e "${YELLOW}╚════════════════════════════════════════╝${NC}"
 echo ""
 
 # 数据库路径
-DB_PATH=~/Library/Application\ Support/com.claude-code-router/database.db
+DB_PATH=~/Library/Application\ Support/com.claude-code-proxy/database.db
 
 # 检查数据库是否存在
 if [ ! -f "$DB_PATH" ]; then

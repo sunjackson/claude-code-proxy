@@ -32,7 +32,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
-  const [latencyThresholdMs, setLatencyThresholdMs] = useState(3000);
+  const [latencyThresholdMs, setLatencyThresholdMs] = useState(30000);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // 编辑模式时加载分组数据
@@ -47,7 +47,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
       setName('');
       setDescription('');
       setAutoSwitchEnabled(false);
-      setLatencyThresholdMs(3000);
+      setLatencyThresholdMs(30000);
     }
     setErrors({});
   }, [group, isOpen]);
@@ -62,8 +62,8 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
       newErrors.name = '分组名称不能超过 100 个字符';
     }
 
-    if (latencyThresholdMs < 100 || latencyThresholdMs > 30000) {
-      newErrors.latencyThresholdMs = '延迟阈值必须在 100-30000 毫秒范围内';
+    if (latencyThresholdMs < 100 || latencyThresholdMs > 60000) {
+      newErrors.latencyThresholdMs = '延迟阈值必须在 100-60000 毫秒范围内';
     }
 
     setErrors(newErrors);
@@ -91,13 +91,20 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-black border border-gray-800 rounded-lg shadow-2xl max-w-2xl w-full mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+      <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/40 rounded-xl shadow-2xl shadow-yellow-500/20 max-w-2xl w-full mx-4">
         {/* 标题 */}
-        <div className="border-b border-gray-800 px-6 py-4">
-          <h2 className="text-2xl font-bold text-yellow-500">
-            {group ? '编辑配置分组' : '新建配置分组'}
-          </h2>
+        <div className="border-b border-gray-800 px-6 py-5 bg-gradient-to-r from-yellow-500/5 to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg flex items-center justify-center border border-yellow-500/30">
+              <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-yellow-400 tracking-wide">
+              {group ? '编辑配置分组' : '新建配置分组'}
+            </h2>
+          </div>
         </div>
 
         {/* 表单 */}
@@ -144,38 +151,50 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
           </div>
 
           {/* 自动切换设置 */}
-          <div className="border border-gray-800 rounded-lg p-4 space-y-4">
-            <h3 className="text-sm font-semibold text-yellow-500">
-              自动切换设置
-            </h3>
+          <div className="bg-gradient-to-br from-gray-900 via-gray-900 to-black border border-yellow-500/30 rounded-lg p-5 space-y-4 shadow-lg">
+            <div className="flex items-center gap-2 pb-3 border-b border-gray-800">
+              <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              <h3 className="text-sm font-bold text-yellow-400 tracking-wide">
+                自动切换设置
+              </h3>
+            </div>
 
             {/* 启用自动切换 */}
-            <div className="flex items-start space-x-3">
-              <input
-                type="checkbox"
-                id="autoSwitchEnabled"
-                checked={autoSwitchEnabled}
-                onChange={(e) => setAutoSwitchEnabled(e.target.checked)}
-                className="mt-1 w-4 h-4 bg-gray-900 border-gray-700 rounded text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
-              />
+            <div className="flex items-start justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-800">
               <div className="flex-1">
                 <label
                   htmlFor="autoSwitchEnabled"
-                  className="text-sm font-medium text-gray-300 cursor-pointer"
+                  className="text-sm font-semibold text-gray-200 cursor-pointer block mb-1"
                 >
                   启用自动切换
                 </label>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 leading-relaxed">
                   当配置不可用或延迟过高时,自动切换到下一个可用配置
                 </p>
               </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  id="autoSwitchEnabled"
+                  checked={autoSwitchEnabled}
+                  onChange={(e) => setAutoSwitchEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-yellow-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+              </label>
             </div>
 
             {/* 延迟阈值 */}
-            <div>
+            <div className={`p-4 rounded-lg border transition-all ${
+              autoSwitchEnabled
+                ? 'bg-gray-900/50 border-gray-800'
+                : 'bg-gray-900/30 border-gray-800/50 opacity-60'
+            }`}>
               <label
                 htmlFor="latencyThresholdMs"
-                className="block text-sm font-medium text-gray-300 mb-2"
+                className="block text-sm font-semibold text-gray-200 mb-2"
               >
                 延迟阈值 (毫秒) <span className="text-red-500">*</span>
               </label>
@@ -184,65 +203,84 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 id="latencyThresholdMs"
                 value={latencyThresholdMs}
                 onChange={(e) =>
-                  setLatencyThresholdMs(parseInt(e.target.value) || 3000)
+                  setLatencyThresholdMs(parseInt(e.target.value) || 30000)
                 }
                 min="100"
-                max="30000"
+                max="60000"
                 step="100"
-                className={`w-full px-4 py-2 bg-gray-900 border ${
+                className={`w-full px-4 py-2.5 bg-black border ${
                   errors.latencyThresholdMs
                     ? 'border-red-500'
                     : 'border-gray-700'
-                } rounded text-white focus:outline-none focus:border-yellow-500 transition-colors`}
+                } rounded-lg text-white focus:outline-none focus:border-yellow-500 transition-colors font-mono disabled:opacity-50 disabled:cursor-not-allowed`}
                 disabled={!autoSwitchEnabled}
               />
               {errors.latencyThresholdMs && (
-                <p className="mt-1 text-sm text-red-500">
+                <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
                   {errors.latencyThresholdMs}
                 </p>
               )}
-              <p className="text-xs text-gray-500 mt-1">
-                当配置延迟超过此值时,将触发自动切换
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                当配置延迟超过此值时,将触发自动切换。推荐范围: 10000-60000ms
               </p>
             </div>
           </div>
 
           {/* 提示信息 */}
           {group?.id === 0 && (
-            <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-4">
-              <div className="flex items-start space-x-3">
-                <svg
-                  className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <p className="text-sm text-yellow-500">
-                  "未分组" 是系统默认分组,部分属性可能无法修改
+            <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/40 rounded-lg p-4 shadow-lg shadow-blue-500/5">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-500/30">
+                  <svg
+                    className="w-4 h-4 text-blue-400"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+                <p className="text-sm text-blue-300 leading-relaxed">
+                  这是系统默认分组，可以自定义名称和描述
                 </p>
               </div>
             </div>
           )}
 
           {/* 按钮 */}
-          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-800">
+          <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-800">
             <button
               type="button"
               onClick={onCancel}
-              className="px-6 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors font-medium"
+              className="px-6 py-2.5 bg-gray-900 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-all duration-200 font-semibold border border-gray-800 hover:border-gray-700"
             >
               取消
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-yellow-500 text-black rounded hover:bg-yellow-600 transition-colors font-medium"
+              className="px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black rounded-lg transition-all duration-200 font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105 flex items-center gap-2"
             >
-              {group ? '保存' : '创建'}
+              {group ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  保存
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  创建
+                </>
+              )}
             </button>
           </div>
         </form>

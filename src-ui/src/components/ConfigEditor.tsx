@@ -26,7 +26,7 @@ interface ConfigEditorProps {
   /** 保存回调 */
   onSave: (data: {
     name: string;
-    apiKey: string;
+    apiKey: string | undefined;
     serverUrl: string;
     serverPort: number;
     groupId: number | null;
@@ -38,6 +38,9 @@ interface ConfigEditorProps {
     smallFastModel?: string;
     apiTimeoutMs?: number;
     maxOutputTokens?: number;
+    balanceQueryUrl?: string;
+    autoBalanceCheck?: boolean;
+    balanceCheckIntervalSec?: number;
   }) => void;
   /** 取消回调 */
   onCancel: () => void;
@@ -70,12 +73,18 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
   const [apiTimeoutMs, setApiTimeoutMs] = useState<number>(600000);
   const [maxOutputTokens, setMaxOutputTokens] = useState<number>(65000);
 
+  // 余额查询配置
+  const [balanceQueryUrl, setBalanceQueryUrl] = useState('');
+  const [autoBalanceCheck, setAutoBalanceCheck] = useState(true);
+  const [balanceCheckIntervalSec, setBalanceCheckIntervalSec] = useState(3600);
+
   // 新增：UI 状态
-  const [showPresets, setShowPresets] = useState(false);
+  const [showPresets, setShowPresets] = useState(true); // 默认展开预设
   const [selectedCategory, setSelectedCategory] = useState<ProviderCategory>('official');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSpeedTest, setShowSpeedTest] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [useManualConfig, setUseManualConfig] = useState(false); // 是否使用手动配置
 
   // 新增：预设列表状态
   const [providerPresets, setProviderPresets] = useState<ProviderPreset[]>([]);
@@ -137,12 +146,16 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       setSmallFastModel(config.small_fast_model || '');
       setApiTimeoutMs(config.api_timeout_ms || 600000);
       setMaxOutputTokens(config.max_output_tokens || 65000);
+      setBalanceQueryUrl(config.balance_query_url || '');
+      setAutoBalanceCheck(config.auto_balance_check);
+      setBalanceCheckIntervalSec(config.balance_check_interval_sec || 3600);
     } else {
       // 新建模式重置表单
       setName('');
       setApiKey('');
       setServerUrl('https://');
-      setGroupId(1); // 默认选择"默认分组"
+      // 默认选择第一个可用分组（通常是ID=0的"未分组"）
+      setGroupId(groups.length > 0 ? groups[0].id : null);
       setDefaultModel('');
       setHaikuModel('');
       setSonnetModel('');
@@ -150,11 +163,16 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       setSmallFastModel('');
       setApiTimeoutMs(600000);
       setMaxOutputTokens(65000);
+      setBalanceQueryUrl('');
+      setAutoBalanceCheck(true);
+      setBalanceCheckIntervalSec(3600);
     }
     setErrors({});
     setShowApiKey(false);
-    setShowPresets(false);
+    setShowPresets(!config); // 新建模式默认展开预设
     setShowAdvanced(false);
+    setUseManualConfig(false);
+    setSelectedPresetId(null);
   }, [config, isOpen]);
 
   // 应用预设配置
@@ -171,6 +189,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
     if (preset.smallFastModel) setSmallFastModel(preset.smallFastModel);
     if (preset.apiTimeoutMs) setApiTimeoutMs(preset.apiTimeoutMs);
     if (preset.maxOutputTokens) setMaxOutputTokens(preset.maxOutputTokens);
+    if (preset.balanceQueryUrl) setBalanceQueryUrl(preset.balanceQueryUrl);
 
     setSelectedPresetId(presetId);
     setShowPresets(false);
@@ -252,6 +271,9 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       smallFastModel: smallFastModel.trim() || undefined,
       apiTimeoutMs,
       maxOutputTokens,
+      balanceQueryUrl: balanceQueryUrl.trim() || undefined,
+      autoBalanceCheck,
+      balanceCheckIntervalSec,
     });
   };
 
@@ -260,23 +282,237 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-black border border-gray-800 rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+      <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/40 rounded-xl shadow-2xl shadow-yellow-500/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* 标题 */}
-        <div className="border-b border-gray-800 px-6 py-4">
-          <h2 className="text-2xl font-bold text-yellow-500">
-            {config ? '编辑 API 配置' : '新建 API 配置'}
-          </h2>
+        <div className="border-b border-gray-800 px-6 py-5 bg-gradient-to-r from-yellow-500/5 to-transparent sticky top-0 z-10 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg flex items-center justify-center border border-yellow-500/30">
+              <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-yellow-400 tracking-wide">
+              {config ? '编辑 API 配置' : '新建 API 配置'}
+            </h2>
+          </div>
         </div>
 
         {/* 表单 */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* 配置名称 */}
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-gray-300 mb-2"
-            >
+          {/* 新建模式：快速配置区域 */}
+          {!config && (
+            <>
+              {/* 快速配置引导 */}
+              <div className="bg-gradient-to-r from-yellow-500/10 via-yellow-500/5 to-transparent border border-yellow-500/30 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-yellow-500 mb-1">快速开始</h3>
+                    <p className="text-sm text-gray-400">选择下方预设模板快速创建配置,或者手动填写自定义配置</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 预设模板选择区域 */}
+              {showPresets && !useManualConfig && (
+                <div className="bg-gradient-to-br from-gray-900/50 via-gray-900/30 to-black/50 border border-yellow-500/30 rounded-xl p-5 shadow-lg">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg flex items-center justify-center border border-yellow-500/30">
+                        <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-base font-bold text-yellow-400">选择预设模板</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUseManualConfig(true)}
+                      className="text-sm text-gray-400 hover:text-yellow-500 transition-colors flex items-center gap-2 font-medium"
+                    >
+                      <span>手动配置</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* 加载状态 */}
+                  {loadingPresets ? (
+                    <div className="flex items-center justify-center py-12 bg-black/30 rounded-lg border border-gray-800">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-500"></div>
+                      <span className="ml-3 text-gray-400">加载预设列表...</span>
+                    </div>
+                  ) : providerPresets.length === 0 ? (
+                    <div className="text-center py-12 bg-black/30 rounded-lg border border-gray-800">
+                      <p className="text-gray-500 mb-4">未找到预设配置</p>
+                      <button
+                        type="button"
+                        onClick={() => setUseManualConfig(true)}
+                        className="text-sm text-yellow-500 hover:text-yellow-400 transition-colors"
+                      >
+                        使用手动配置
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* 分类选择器 */}
+                      <div className="flex gap-3 overflow-x-auto pb-2 px-0.5">
+                        {(['official', 'cn_official', 'third_party', 'aggregator'] as ProviderCategory[]).map((cat) => {
+                          const presets = getPresetsByCategory(cat);
+                          if (presets.length === 0) return null;
+
+                          const colors = categoryColors[cat];
+                          const isSelected = selectedCategory === cat;
+
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setSelectedCategory(cat)}
+                              className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                                isSelected
+                                  ? `${colors.bg} ${colors.text} ${colors.border} border-2 shadow-lg scale-105`
+                                  : 'bg-black/40 text-gray-400 border-2 border-gray-800 hover:border-gray-700 hover:scale-105'
+                              }`}
+                            >
+                              {categoryLabels[cat]}
+                              <span className="ml-1.5 text-xs opacity-75">({presets.length})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* 预设列表 - 大卡片网格布局 */}
+                      <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto px-1 custom-scrollbar">
+                        {getPresetsByCategory(selectedCategory).map((preset) => {
+                          const isSelected = selectedPresetId === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => applyPreset(preset.id)}
+                              className={`text-left p-4 rounded-lg border-2 transition-all group ${
+                                isSelected
+                                  ? 'bg-gradient-to-br from-yellow-500/15 to-yellow-500/5 border-yellow-500 shadow-lg shadow-yellow-500/20'
+                                  : 'bg-gradient-to-br from-black/40 to-gray-900/40 border-gray-800 hover:border-yellow-500/50 hover:from-gray-900/60 hover:to-gray-900/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  {/* 标题行 */}
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className={`font-semibold text-base transition-colors ${
+                                      isSelected ? 'text-yellow-500' : 'text-white group-hover:text-yellow-500'
+                                    }`}>
+                                      {preset.name}
+                                    </span>
+                                    {preset.isRecommended && (
+                                      <span className="px-2 py-0.5 bg-yellow-500 text-black text-xs font-bold rounded-md">
+                                        推荐
+                                      </span>
+                                    )}
+                                    {preset.isPartner && (
+                                      <span className="px-2 py-0.5 bg-blue-500 text-white text-xs font-bold rounded-md">
+                                        合作
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* 描述 */}
+                                  {preset.description && (
+                                    <p className="text-sm text-gray-400 mb-2 line-clamp-2">
+                                      {preset.description}
+                                    </p>
+                                  )}
+
+                                  {/* 服务器地址 */}
+                                  <p className="text-xs text-gray-600 font-mono truncate">
+                                    {preset.serverUrl}
+                                  </p>
+                                </div>
+
+                                {/* 选中指示器 */}
+                                {isSelected && (
+                                  <div className="flex-shrink-0 w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* 手动配置切换提示 */}
+                      <div className="flex items-center justify-center pt-4 mt-2 border-t border-gray-800/50">
+                        <button
+                          type="button"
+                          onClick={() => setUseManualConfig(true)}
+                          className="text-sm text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-2 group"
+                        >
+                          <span className="group-hover:scale-110 transition-transform">找不到合适的预设?</span>
+                          <span className="font-semibold text-yellow-500 group-hover:text-yellow-400">手动填写配置</span>
+                          <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 手动配置模式切换提示 */}
+              {useManualConfig && (
+                <div className="flex items-center justify-between bg-gray-900/50 border border-gray-800 rounded-lg p-3">
+                  <span className="text-sm text-gray-400">当前模式: 手动配置</span>
+                  <button
+                    type="button"
+                    onClick={() => setUseManualConfig(false)}
+                    className="text-sm text-yellow-500 hover:text-yellow-400 transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    返回预设模板
+                  </button>
+                </div>
+              )}
+
+              {/* 分隔线 */}
+              {(useManualConfig || selectedPresetId) && (
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-800"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-black text-gray-500">
+                      {useManualConfig ? '手动填写配置信息' : '完善配置信息'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 基础配置表单 - 仅在手动配置或编辑模式或已选择预设时显示 */}
+          {(config || useManualConfig || selectedPresetId) && (
+            <>
+              {/* 配置名称 */}
+              <div>
+                <label
+                  htmlFor="name"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
               配置名称 <span className="text-red-500">*</span>
             </label>
             <input
@@ -426,131 +662,26 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               ))}
             </select>
           </div>
-
-          {/* 预设选择器 */}
-          {!config && (
-            <div className="border-t border-gray-800 pt-6">
-              <button
-                type="button"
-                onClick={() => setShowPresets(!showPresets)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-gray-900 border border-gray-700 rounded hover:border-yellow-500 transition-colors"
-              >
-                <span className="text-gray-300 font-medium">
-                  {showPresets ? '隐藏预设模板' : '使用预设模板快速配置'}
-                </span>
-                <svg
-                  className={`w-5 h-5 text-gray-400 transition-transform ${showPresets ? 'rotate-180' : ''}`}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </button>
-
-              {showPresets && (
-                <div className="mt-4 border border-gray-800 rounded-lg p-4">
-                  {/* 加载状态 */}
-                  {loadingPresets ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
-                      <span className="ml-3 text-gray-400">加载预设列表...</span>
-                    </div>
-                  ) : providerPresets.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      未找到预设配置，请检查配置文件
-                    </div>
-                  ) : (
-                    <>
-                      {/* 分类选择器 */}
-                      <div className="flex gap-2 mb-4 overflow-x-auto">
-                    {(['official', 'cn_official', 'third_party', 'aggregator'] as ProviderCategory[]).map((cat) => {
-                      const presets = getPresetsByCategory(cat);
-                      if (presets.length === 0) return null;
-
-                      const colors = categoryColors[cat];
-                      const isSelected = selectedCategory === cat;
-
-                      return (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setSelectedCategory(cat)}
-                          className={`px-3 py-1.5 rounded text-sm font-medium transition-colors whitespace-nowrap ${
-                            isSelected
-                              ? `${colors.bg} ${colors.text} ${colors.border} border`
-                              : 'bg-gray-900 text-gray-400 border border-gray-800 hover:border-gray-700'
-                          }`}
-                        >
-                          {categoryLabels[cat]} ({presets.length})
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* 预设列表 */}
-                  <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
-                    {getPresetsByCategory(selectedCategory).map((preset) => {
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => applyPreset(preset.id)}
-                          className="text-left px-4 py-3 bg-gray-900 border border-gray-800 rounded hover:border-yellow-500 transition-colors group"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium text-white group-hover:text-yellow-500 transition-colors">
-                                  {preset.name}
-                                </span>
-                                {preset.isRecommended && (
-                                  <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-500 text-xs font-medium rounded border border-yellow-500">
-                                    推荐
-                                  </span>
-                                )}
-                                {preset.isPartner && (
-                                  <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-500 text-xs font-medium rounded border border-blue-500">
-                                    合作
-                                  </span>
-                                )}
-                              </div>
-                              {preset.description && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {preset.description}
-                                </p>
-                              )}
-                              <p className="text-xs text-gray-600 mt-1">
-                                {preset.serverUrl}
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+              </>
+            )}
 
           {/* 高级配置 */}
           <div className="border-t border-gray-800 pt-6">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-gray-900 border border-gray-700 rounded hover:border-yellow-500 transition-colors"
+              className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-gray-900 via-gray-900 to-black border border-yellow-500/30 rounded-lg hover:border-yellow-500/50 transition-all duration-200 shadow-lg hover:shadow-yellow-500/10"
             >
-              <span className="text-gray-300 font-medium">
-                高级配置 (模型、超时等)
-              </span>
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                <span className="text-gray-200 font-semibold">
+                  高级配置 (模型、超时等)
+                </span>
+              </div>
               <svg
-                className={`w-5 h-5 text-gray-400 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+                className={`w-5 h-5 text-yellow-500 transition-transform duration-200 ${showAdvanced ? 'rotate-180' : ''}`}
                 fill="none"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -636,6 +767,67 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   </div>
                 </div>
 
+                {/* 余额查询配置 */}
+                <div className="space-y-3 pt-4 border-t border-gray-800">
+                  <h3 className="text-sm font-semibold text-yellow-500 border-b border-gray-800 pb-2">
+                    余额查询配置
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      余额查询 URL
+                    </label>
+                    <input
+                      type="text"
+                      value={balanceQueryUrl}
+                      onChange={(e) => setBalanceQueryUrl(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                      placeholder="https://api.example.com/v1/balance"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      用于查询账户余额的API接口地址（支持标准格式和自定义格式）
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-gray-900/50 rounded border border-gray-800">
+                    <div>
+                      <label className="text-sm font-medium text-gray-300 block">
+                        启用余额查询
+                      </label>
+                      <p className="text-xs text-gray-500 mt-1">
+                        开启后可以查询和显示账户余额，失败后会自动禁用
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoBalanceCheck}
+                        onChange={(e) => setAutoBalanceCheck(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-yellow-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      查询间隔（秒）
+                    </label>
+                    <input
+                      type="number"
+                      value={balanceCheckIntervalSec}
+                      onChange={(e) => setBalanceCheckIntervalSec(parseInt(e.target.value) || 3600)}
+                      min="60"
+                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                      placeholder="3600"
+                      disabled={!autoBalanceCheck}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      自动查询余额的时间间隔（最小60秒，默认3600秒即1小时）
+                    </p>
+                  </div>
+                </div>
+
                 {/* API 高级设置 */}
                 <div className="space-y-3 pt-4 border-t border-gray-800">
                   <h3 className="text-sm font-semibold text-yellow-500 border-b border-gray-800 pb-2">
@@ -681,19 +873,33 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
           </div>
 
           {/* 按钮 */}
-          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-800">
+          <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-800 sticky bottom-0 bg-gradient-to-t from-black via-black to-transparent pb-2">
             <button
               type="button"
               onClick={onCancel}
-              className="px-6 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors font-medium"
+              className="px-6 py-2.5 bg-gray-900 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-all duration-200 font-semibold border border-gray-800 hover:border-gray-700"
             >
               取消
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-yellow-500 text-black rounded hover:bg-yellow-600 transition-colors font-medium"
+              className="px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black rounded-lg transition-all duration-200 font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105 flex items-center gap-2"
             >
-              {config ? '保存' : '创建'}
+              {config ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  保存
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  创建
+                </>
+              )}
             </button>
           </div>
         </form>

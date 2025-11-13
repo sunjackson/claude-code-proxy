@@ -138,6 +138,24 @@ pub struct ApiConfig {
     /// 最大输出令牌数
     pub max_output_tokens: Option<i32>,
 
+    /// 余额查询相关字段
+    /// 余额查询接口URL
+    pub balance_query_url: Option<String>,
+    /// 最后查询到的余额
+    pub last_balance: Option<f64>,
+    /// 余额货币单位
+    pub balance_currency: Option<String>,
+    /// 最后余额查询时间
+    pub last_balance_check_at: Option<String>,
+    /// 余额查询状态
+    pub balance_query_status: Option<String>,
+    /// 余额查询错误信息
+    pub balance_query_error: Option<String>,
+    /// 是否启用自动余额查询
+    pub auto_balance_check: bool,
+    /// 余额查询间隔（秒）
+    pub balance_check_interval_sec: Option<i32>,
+
     /// 创建时间
     pub created_at: String,
 
@@ -181,6 +199,12 @@ pub struct CreateApiConfigInput {
     // API 高级设置
     pub api_timeout_ms: Option<i32>,
     pub max_output_tokens: Option<i32>,
+
+    // 余额查询设置
+    pub balance_query_url: Option<String>,
+    pub auto_balance_check: Option<bool>,
+    pub balance_check_interval_sec: Option<i32>,
+    pub balance_currency: Option<String>,
 }
 
 /// 更新 API 配置的输入参数
@@ -221,6 +245,12 @@ pub struct UpdateApiConfigInput {
     // API 高级设置
     pub api_timeout_ms: Option<i32>,
     pub max_output_tokens: Option<i32>,
+
+    // 余额查询设置
+    pub balance_query_url: Option<String>,
+    pub auto_balance_check: Option<bool>,
+    pub balance_check_interval_sec: Option<i32>,
+    pub balance_currency: Option<String>,
 }
 
 /// 重新排序配置的输入参数
@@ -298,7 +328,7 @@ impl ApiConfig {
 
     /// 获取密钥链服务标识符
     pub fn keychain_service() -> &'static str {
-        "claude-code-router"
+        "claude-code-proxy"
     }
 
     /// 获取密钥链账户标识符
@@ -424,6 +454,14 @@ mod tests {
             small_fast_model: None,
             api_timeout_ms: None,
             max_output_tokens: None,
+            balance_query_url: None,
+            last_balance: None,
+            balance_currency: None,
+            last_balance_check_at: None,
+            balance_query_status: None,
+            balance_query_error: None,
+            auto_balance_check: false,
+            balance_check_interval_sec: None,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };
@@ -457,6 +495,14 @@ mod tests {
             small_fast_model: None,
             api_timeout_ms: None,
             max_output_tokens: None,
+            balance_query_url: None,
+            last_balance: None,
+            balance_currency: None,
+            last_balance_check_at: None,
+            balance_query_status: None,
+            balance_query_error: None,
+            auto_balance_check: false,
+            balance_check_interval_sec: None,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };

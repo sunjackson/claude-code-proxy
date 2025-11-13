@@ -97,6 +97,24 @@ pub fn get_switch_logs(
     service.get_switch_logs(group_id, limit.unwrap_or(50), offset.unwrap_or(0))
 }
 
+/// 清空切换日志
+///
+/// # Arguments
+/// - `group_id`: 分组 ID(可选,用于筛选)。如果提供，只清空该分组的日志；否则清空所有日志
+///
+/// # Returns
+/// - i32: 删除的日志数量
+#[tauri::command]
+pub fn clear_switch_logs(
+    group_id: Option<i64>,
+    db_pool: State<'_, Arc<DbPool>>,
+) -> AppResult<i32> {
+    log::info!("Command: clear_switch_logs (group_id: {:?})", group_id);
+
+    let service = AutoSwitchService::new(db_pool.inner().clone());
+    service.clear_switch_logs(group_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

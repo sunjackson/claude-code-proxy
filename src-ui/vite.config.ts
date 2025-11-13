@@ -11,6 +11,9 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
 
+  // 静态资源目录
+  publicDir: 'public',
+
   // 解析配置
   resolve: {
     alias: {

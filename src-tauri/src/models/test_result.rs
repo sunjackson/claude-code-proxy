@@ -29,6 +29,15 @@ pub struct TestResult {
 
     /// API 密钥是否有效
     pub is_valid_key: Option<bool>,
+
+    /// API 响应内容（截断到100字符）
+    pub response_text: Option<String>,
+
+    /// 测试使用的模型
+    pub test_model: Option<String>,
+
+    /// 尝试次数（1=首次，2=重试）
+    pub attempt: Option<i32>,
 }
 
 /// 测试状态
@@ -85,6 +94,9 @@ pub struct CreateTestResultInput {
     pub latency_ms: Option<i32>,
     pub error_message: Option<String>,
     pub is_valid_key: Option<bool>,
+    pub response_text: Option<String>,
+    pub test_model: Option<String>,
+    pub attempt: Option<i32>,
 }
 
 /// 测试结果摘要 (用于批量测试)
@@ -110,6 +122,15 @@ pub struct TestResultSummary {
 
     /// 测试时间
     pub test_at: String,
+
+    /// API 响应内容
+    pub response_text: Option<String>,
+
+    /// 测试使用的模型
+    pub test_model: Option<String>,
+
+    /// 尝试次数
+    pub attempt: Option<i32>,
 }
 
 impl TestResult {
@@ -130,6 +151,49 @@ impl TestResult {
     /// 检查测试是否失败
     pub fn is_failed(&self) -> bool {
         self.status.is_failed()
+    }
+
+    /// 检查服务是否可用
+    ///
+    /// 服务可用的标准：能够连接并收到HTTP响应
+    /// - ✅ 可用：200-499 状态码（包括400、401、403、429等）
+    /// - ❌ 不可用：500-599状态码、超时、连接失败、DNS失败
+    ///
+    /// 注意：此方法与 is_success() 不同
+    /// - is_success()：API调用完全成功（200-299且有正确响应）
+    /// - is_available()：服务器可连接（即使认证失败或请求格式错误）
+    pub fn is_available(&self) -> bool {
+        match self.status {
+            // 成功的测试，服务肯定可用
+            TestStatus::Success => true,
+
+            // 超时，服务不可用
+            TestStatus::Timeout => false,
+
+            // 失败的测试，需要检查错误信息来判断
+            TestStatus::Failed => {
+                if let Some(ref error) = self.error_message {
+                    // 服务器错误（5xx）表示不可用
+                    if error.contains("HTTP 5") || error.contains("服务器错误") {
+                        return false;
+                    }
+
+                    // 连接失败表示不可用
+                    if error.contains("连接失败")
+                        || error.contains("DNS解析失败")
+                        || error.contains("连接被拒绝")
+                        || error.contains("连接重置") {
+                        return false;
+                    }
+
+                    // 其他错误（400、401、403、429等）说明服务可用，只是配置或权限问题
+                    true
+                } else {
+                    // 没有错误信息，默认认为不可用
+                    false
+                }
+            }
+        }
     }
 
     /// 获取延迟等级
@@ -216,6 +280,9 @@ mod tests {
             latency_ms: Some(300),
             error_message: None,
             is_valid_key: Some(true),
+            response_text: None,
+            test_model: None,
+            attempt: None,
         };
         assert_eq!(result.latency_grade(), Some("excellent"));
 
@@ -247,6 +314,9 @@ mod tests {
             latency_ms: Some(500),
             error_message: None,
             is_valid_key: Some(true),
+            response_text: None,
+            test_model: None,
+            attempt: None,
         };
         assert!(valid_input.validate().is_ok());
 
@@ -257,7 +327,112 @@ mod tests {
             latency_ms: None, // 成功的测试必须有延迟
             error_message: None,
             is_valid_key: Some(true),
+            response_text: None,
+            test_model: None,
+            attempt: None,
         };
         assert!(invalid_input.validate().is_err());
+    }
+
+    #[test]
+    fn test_is_available() {
+        // 成功的测试，服务可用
+        let success_result = TestResult {
+            id: 1,
+            config_id: 1,
+            group_id: None,
+            test_at: "2025-11-12".to_string(),
+            status: TestStatus::Success,
+            latency_ms: Some(300),
+            error_message: None,
+            is_valid_key: Some(true),
+            response_text: Some("Success".to_string()),
+            test_model: Some("claude-haiku-4-5-20251001".to_string()),
+            attempt: Some(1),
+        };
+        assert!(success_result.is_available());
+
+        // 超时，服务不可用
+        let timeout_result = TestResult {
+            status: TestStatus::Timeout,
+            error_message: Some("测试超时(>30秒)".to_string()),
+            latency_ms: None,
+            ..success_result.clone()
+        };
+        assert!(!timeout_result.is_available());
+
+        // 401 认证失败，服务可用（只是密钥问题）
+        let auth_failed_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("认证失败：API Key 无效".to_string()),
+            latency_ms: Some(500),
+            is_valid_key: Some(false),
+            response_text: None,
+            ..success_result.clone()
+        };
+        assert!(auth_failed_result.is_available());
+
+        // 403 访问被拒绝，服务可用（只是权限问题）
+        let forbidden_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("访问被拒绝：IP地址受限".to_string()),
+            latency_ms: Some(500),
+            ..success_result.clone()
+        };
+        assert!(forbidden_result.is_available());
+
+        // 429 配额耗尽，服务可用（只是限流问题）
+        let rate_limited_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("配额耗尽：请求过多或余额不足".to_string()),
+            latency_ms: Some(500),
+            ..success_result.clone()
+        };
+        assert!(rate_limited_result.is_available());
+
+        // 400 请求格式错误，服务可用（只是请求问题）
+        let bad_request_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("请求格式错误：模型参数无效".to_string()),
+            latency_ms: Some(500),
+            ..success_result.clone()
+        };
+        assert!(bad_request_result.is_available());
+
+        // 500 服务器错误，服务不可用
+        let server_error_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("服务器错误：HTTP 500 - Internal Server Error".to_string()),
+            latency_ms: Some(500),
+            ..success_result.clone()
+        };
+        assert!(!server_error_result.is_available());
+
+        // 502 网关错误，服务不可用
+        let gateway_error_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("服务器错误：HTTP 502 - Bad Gateway".to_string()),
+            latency_ms: Some(500),
+            ..success_result.clone()
+        };
+        assert!(!gateway_error_result.is_available());
+
+        // 连接失败，服务不可用
+        let connection_failed_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("连接失败：无法连接到服务器".to_string()),
+            latency_ms: Some(5000),
+            ..success_result.clone()
+        };
+        assert!(!connection_failed_result.is_available());
+
+        // DNS解析失败，服务不可用
+        let dns_failed_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("DNS解析失败：域名无法解析".to_string()),
+            latency_ms: Some(5000),
+            ..success_result.clone()
+        };
+        assert!(!dns_failed_result.is_available());
     }
 }

@@ -1,4 +1,4 @@
-# Claude Code Router 开发文档
+# Claude Code Proxy 开发文档
 
 本文档提供详细的开发指南，帮助开发者理解项目架构、配置开发环境、编写和测试代码。
 
@@ -126,8 +126,8 @@ sudo apt install -y \
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/claude-code-router.git
-cd claude-code-router
+git clone https://github.com/your-org/claude-code-proxy.git
+cd claude-code-proxy
 
 # 安装前端依赖
 cd src-ui
@@ -170,7 +170,7 @@ cd ..
 ### 目录结构
 
 ```
-claude-code-router/
+claude-code-proxy/
 ├── src-tauri/                 # Rust 后端
 │   ├── src/
 │   │   ├── main.rs            # 应用入口，初始化 Tauri
@@ -938,8 +938,8 @@ MIT License - 详见 [LICENSE](./LICENSE)
 
 ## 联系方式
 
-- **开发者讨论**: [GitHub Discussions](https://github.com/your-org/claude-code-router/discussions)
-- **Bug 报告**: [GitHub Issues](https://github.com/your-org/claude-code-router/issues)
+- **开发者讨论**: [GitHub Discussions](https://github.com/your-org/claude-code-proxy/discussions)
+- **Bug 报告**: [GitHub Issues](https://github.com/your-org/claude-code-proxy/issues)
 
 ---
 

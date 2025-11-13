@@ -1,5 +1,5 @@
 # ===========================================
-# Claude Code Router - Git Ignore Configuration
+# Claude Code Proxy - Git Ignore Configuration
 # ===========================================
 # 确保敏感信息、临时文件和构建产物不会被提交到 Git
 
@@ -17,7 +17,6 @@ credentials.json
 api_keys.json
 
 # 应用配置目录（包含用户 API 密钥）
-.claude-code-router/
 .claude-code-proxy/
 
 # 数据库文件（包含敏感配置）
@@ -26,7 +25,7 @@ api_keys.json
 *.db-wal
 *.sqlite
 *.sqlite3
-claude-code-router.db*
+claude-code-proxy.db*
 
 # 备份文件（可能包含敏感数据）
 backups/

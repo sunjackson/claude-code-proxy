@@ -1,8 +1,8 @@
-# Claude Code Router
+# Claude Code Proxy
 
 <div align="center">
 
-![Claude Code Router](./ccr.png)
+![Claude Code Proxy](./ccr.png)
 
 **一个功能强大的跨平台桌面应用，用于管理 Claude Code 的本地代理服务**
 
@@ -20,9 +20,9 @@
 
 ## 📖 简介
 
-Claude Code Router 是一个专为 Claude Code 设计的本地代理管理工具，帮助您轻松管理多个 API 中转服务，实现智能路由、自动故障切换和负载均衡。通过简洁优雅的黑金主题界面，您可以一键配置、测试和切换不同的 API 服务。
+Claude Code Proxy 是一个专为 Claude Code 设计的本地代理管理工具，帮助您轻松管理多个 API 中转服务，实现智能路由、自动故障切换和负载均衡。通过简洁优雅的黑金主题界面，您可以一键配置、测试和切换不同的 API 服务。
 
-### 为什么选择 Claude Code Router？
+### 为什么选择 Claude Code Proxy？
 
 - 🎯 **专为 Claude Code 优化** - 自动检测并配置 Claude Code，无需手动修改配置文件
 - 🚀 **智能路由** - 支持多配置分组管理，自动负载均衡和故障切换
@@ -88,7 +88,7 @@ Claude Code Router 是一个专为 Claude Code 设计的本地代理管理工具
 
 #### 方式 1: 下载预构建版本（推荐）
 
-1. 访问 [Releases 页面](https://github.com/your-org/claude-code-router/releases)
+1. 访问 [Releases 页面](https://github.com/your-org/claude-code-proxy/releases)
 2. 下载对应平台的安装包：
    - **Windows**: `ClaudeCodeProxy_x.x.x_x64.msi`
    - **macOS**: `ClaudeCodeProxy_x.x.x_macOS_Installer.dmg`
@@ -333,8 +333,8 @@ sudo apt install -y libwebkit2gtk-4.0-dev \
 1. **克隆仓库**
 
 ```bash
-git clone https://github.com/your-org/claude-code-router.git
-cd claude-code-router
+git clone https://github.com/your-org/claude-code-proxy.git
+cd claude-code-proxy
 ```
 
 2. **安装依赖**
@@ -378,7 +378,7 @@ cargo tauri build
 ### 项目结构
 
 ```
-claude-code-router/
+claude-code-proxy/
 ├── src-tauri/              # Rust 后端
 │   ├── src/
 │   │   ├── main.rs         # 应用入口
@@ -492,9 +492,9 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 3. 保存 JSON 文件
 
 数据库文件位置：
-- **Windows**: `%APPDATA%/com.claude-code-router/`
-- **macOS**: `~/Library/Application Support/com.claude-code-router/`
-- **Linux**: `~/.config/claude-code-router/`
+- **Windows**: `%APPDATA%/com.claude-code-proxy/`
+- **macOS**: `~/Library/Application Support/com.claude-code-proxy/`
+- **Linux**: `~/.config/claude-code-proxy/`
 </details>
 
 <details>
@@ -566,8 +566,8 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 
 ## 📞 联系方式
 
-- **问题反馈**: [GitHub Issues](https://github.com/your-org/claude-code-router/issues)
-- **讨论交流**: [GitHub Discussions](https://github.com/your-org/claude-code-router/discussions)
+- **问题反馈**: [GitHub Issues](https://github.com/your-org/claude-code-proxy/issues)
+- **讨论交流**: [GitHub Discussions](https://github.com/your-org/claude-code-proxy/discussions)
 - **安全问题**: security@your-domain.com
 
 ---
@@ -596,6 +596,6 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 
 **⭐ 如果这个项目对您有帮助，请给我们一个 Star！**
 
-Made with ❤️ by the Claude Code Router Team
+Made with ❤️ by the Claude Code Proxy Team
 
 </div>

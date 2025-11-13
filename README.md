@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Claude Code Proxy](./ccr.png)
+<img src="./ccr.png" alt="Claude Code Proxy" width="200"/>
 
 **一个功能强大的跨平台桌面应用，用于管理 Claude Code 的本地代理服务**
 

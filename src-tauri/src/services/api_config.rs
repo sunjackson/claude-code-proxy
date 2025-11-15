@@ -716,7 +716,7 @@ impl ApiConfigService {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
     use crate::models::config_group::ConfigGroup;

@@ -142,6 +142,12 @@ function getReasonText(reason: string): string {
       return '高延迟';
     case 'manual':
       return '手动切换';
+    case 'retry_failed':
+      return '重试失败';
+    case 'unrecoverable_error':
+      return '不可恢复错误';
+    case 'rate_limit_exceeded':
+      return '限流超限';
     default:
       return '未知原因';
   }

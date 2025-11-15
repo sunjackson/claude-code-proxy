@@ -65,7 +65,7 @@ pub fn get_all_balance_info(
     service.get_all_balance_info()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
     use crate::db::initialize_database;

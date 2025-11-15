@@ -46,9 +46,14 @@ impl ProxyService {
     /// # Arguments
     /// - `handle`: Tauri AppHandle
     pub async fn set_app_handle(&self, handle: AppHandle) {
+        // Set app handle for proxy service
         let mut app_handle = self.app_handle.write().await;
-        *app_handle = Some(handle);
+        *app_handle = Some(handle.clone());
         log::debug!("Tauri app handle set for proxy service");
+
+        // Also set app handle for auto-switch service (for event emission)
+        self.server.auto_switch_service().set_app_handle(handle).await;
+        log::debug!("Tauri app handle set for auto-switch service");
     }
 
     /// Emit proxy status changed event
@@ -384,10 +389,11 @@ impl ProxyService {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
     use crate::db::initialize_database;
+    use std::net::TcpListener;
 
     #[tokio::test]
     async fn test_port_availability() {

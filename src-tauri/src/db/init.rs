@@ -207,7 +207,8 @@ fn insert_default_data(conn: &Connection) -> AppResult<()> {
 
 /// 检查数据库连接是否有效
 pub fn verify_connection(conn: &Connection) -> AppResult<()> {
-    conn.execute("SELECT 1", [])
+    // 使用 query_row 执行简单查询验证连接
+    conn.query_row("SELECT 1", [], |_| Ok(()))
         .map_err(|e| AppError::DatabaseError {
             message: format!("数据库连接验证失败: {}", e),
         })?;
@@ -273,6 +274,9 @@ mod tests {
     fn test_verify_connection() {
         let conn = Connection::open_in_memory().unwrap();
         let result = verify_connection(&conn);
-        assert!(result.is_ok());
+        if let Err(e) = &result {
+            eprintln!("验证连接失败: {:?}", e);
+        }
+        assert!(result.is_ok(), "验证连接失败: {:?}", result.err());
     }
 }

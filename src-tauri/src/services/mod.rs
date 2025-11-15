@@ -7,11 +7,13 @@ pub mod balance_service;
 pub mod claude_config;
 pub mod config_manager;
 pub mod env_var;
+pub mod error_classifier;
 pub mod keychain;
 pub mod latency_test;
 pub mod provider_preset;
 pub mod proxy_service;
 pub mod recommendation;
+pub mod retry_manager;
 
 // 重新导出常用类型
 pub use api_config::ApiConfigService;

@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 4;
+const CURRENT_DB_VERSION: i32 = 6;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -76,6 +76,14 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             4 => {
                 // v3 -> v4: 添加余额查询功能
                 migrate_v3_to_v4(conn)?;
+            }
+            5 => {
+                // v4 -> v5: 添加重试策略支持
+                migrate_v4_to_v5(conn)?;
+            }
+            6 => {
+                // v5 -> v6: 添加 TestResult 缺失字段
+                migrate_v5_to_v6(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -236,6 +244,62 @@ fn migrate_v3_to_v4(conn: &Connection) -> AppResult<()> {
     Ok(())
 }
 
+/// 迁移: v4 -> v5 - 重试策略支持
+/// 添加重试参数、失败计数、错误类型等字段
+fn migrate_v4_to_v5(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v4 -> v5 迁移: 重试策略支持");
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v5_retry_strategy.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v4->v5 迁移失败: {}", e),
+        })?;
+
+    log::info!("v4 -> v5 迁移完成: 已添加重试策略相关字段");
+    Ok(())
+}
+
+/// 迁移: v5 -> v6 - TestResult 表字段补充
+/// 添加 response_text、test_model、attempt 字段
+fn migrate_v5_to_v6(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v5 -> v6 迁移: TestResult 表字段补充");
+
+    // 检查 response_text 列是否已存在
+    let column_exists: bool = conn
+        .prepare("PRAGMA table_info(TestResult)")
+        .and_then(|mut stmt| {
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            Ok(columns.contains(&"response_text".to_string()))
+        })
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查列是否存在失败: {}", e),
+        })?;
+
+    if column_exists {
+        log::info!("v5 -> v6 迁移: response_text 列已存在，schema.sql 已包含 v6 变更，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v6_test_result_fields.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v5->v6 迁移失败: {}", e),
+        })?;
+
+    log::info!("v5 -> v6 迁移完成: 已添加 TestResult 缺失字段");
+    Ok(())
+}
+
 /// 回滚迁移 (仅用于开发/测试)
 /// 警告: 回滚可能导致数据丢失
 #[allow(dead_code)]
@@ -295,6 +359,9 @@ mod tests {
 
         // 执行迁移
         let result = migrate_database(&conn);
+        if let Err(ref e) = result {
+            eprintln!("迁移失败: {:?}", e);
+        }
         assert!(result.is_ok());
 
         // 验证版本已更新

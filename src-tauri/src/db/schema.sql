@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS TestResult (
     latency_ms INTEGER CHECK(latency_ms >= 0),
     error_message TEXT,
     is_valid_key BOOLEAN,
+    response_text TEXT,
+    test_model TEXT,
+    attempt INTEGER DEFAULT 1,
 
     FOREIGN KEY (config_id) REFERENCES ApiConfig(id)
         ON DELETE CASCADE

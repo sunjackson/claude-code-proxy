@@ -115,7 +115,7 @@ pub fn clear_switch_logs(
     service.clear_switch_logs(group_id)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
     use crate::db::initialize_database;

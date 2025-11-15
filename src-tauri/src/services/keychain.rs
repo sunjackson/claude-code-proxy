@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_set_and_get_api_key() {
-        let config_id = 999_test;
+        let config_id = 999;
         let api_key = "sk-test-key-12345";
 
         // 清理可能存在的旧数据
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_has_api_key() {
-        let config_id = 998_test;
+        let config_id = 998;
 
         // 清理
         let _ = KeychainManager::delete_api_key(config_id);
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_update_api_key() {
-        let config_id = 997_test;
+        let config_id = 997;
         let old_key = "sk-old-key";
         let new_key = "sk-new-key";
 
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_delete_nonexistent_key() {
-        let config_id = 996_test;
+        let config_id = 996;
 
         // 确保密钥不存在
         let _ = KeychainManager::delete_api_key(config_id);
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_batch_delete() {
-        let config_ids = vec![991_test, 992_test, 993_test];
+        let config_ids = vec![991, 992, 993];
 
         // 清理并创建测试数据
         for &id in &config_ids {

@@ -29,6 +29,10 @@ pub fn create_config_group(
         description,
         auto_switch_enabled,
         latency_threshold_ms,
+        retry_count: 3,
+        retry_base_delay_ms: 2000,
+        retry_max_delay_ms: 8000,
+        rate_limit_delay_ms: 30000,
         created_at: chrono::Local::now().naive_local().to_string(),
         updated_at: chrono::Local::now().naive_local().to_string(),
     };
@@ -70,6 +74,10 @@ pub fn update_config_group(
         description,
         auto_switch_enabled,
         latency_threshold_ms,
+        retry_count: 3,
+        retry_base_delay_ms: 2000,
+        retry_max_delay_ms: 8000,
+        rate_limit_delay_ms: 30000,
         created_at: chrono::Local::now().naive_local().to_string(), // 实际值会从数据库获取
         updated_at: chrono::Local::now().naive_local().to_string(),
     };

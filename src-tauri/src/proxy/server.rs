@@ -7,6 +7,7 @@ use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::proxy::logger::ProxyLogger;
 use crate::proxy::router::RequestRouter;
+use crate::services::auto_switch::AutoSwitchService;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Request, Response};
@@ -67,6 +68,8 @@ pub struct ProxyServer {
     shutdown_tx: Arc<RwLock<Option<tokio::sync::broadcast::Sender<()>>>>,
     /// Database pool
     db_pool: Arc<DbPool>,
+    /// Auto-switch service (shared across all requests)
+    auto_switch_service: Arc<AutoSwitchService>,
 }
 
 impl ProxyServer {
@@ -76,8 +79,14 @@ impl ProxyServer {
             config: Arc::new(RwLock::new(config)),
             status: Arc::new(RwLock::new(ProxyServerStatus::Stopped)),
             shutdown_tx: Arc::new(RwLock::new(None)),
+            auto_switch_service: Arc::new(AutoSwitchService::new(db_pool.clone())),
             db_pool,
         }
+    }
+
+    /// Get auto-switch service reference (for setting app_handle)
+    pub fn auto_switch_service(&self) -> Arc<AutoSwitchService> {
+        self.auto_switch_service.clone()
     }
 
     /// Get current status
@@ -186,6 +195,7 @@ impl ProxyServer {
         let config_arc = self.config.clone();
         let status_arc = self.status.clone();
         let db_pool_arc = self.db_pool.clone();
+        let auto_switch_arc = self.auto_switch_service.clone();
 
         // Spawn async task to handle connections
         tokio::spawn(async move {
@@ -204,6 +214,7 @@ impl ProxyServer {
 
                                 let config = config_arc.clone();
                                 let db_pool = db_pool_arc.clone();
+                                let auto_switch = auto_switch_arc.clone();
                                 let mut conn_shutdown_rx = shutdown_tx.subscribe();
 
                                 // Create async task for each connection
@@ -214,8 +225,9 @@ impl ProxyServer {
                                     let service = service_fn(move |req: Request<Incoming>| {
                                         let config = config.clone();
                                         let db_pool = db_pool.clone();
+                                        let auto_switch = auto_switch.clone();
                                         async move {
-                                            Self::handle_request(req, remote_addr, config, db_pool).await
+                                            Self::handle_request(req, remote_addr, config, db_pool, auto_switch).await
                                         }
                                     });
 
@@ -311,6 +323,7 @@ impl ProxyServer {
         remote_addr: SocketAddr,
         config: Arc<RwLock<ProxyConfig>>,
         db_pool: Arc<DbPool>,
+        auto_switch_service: Arc<AutoSwitchService>,
     ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
         let method = req.method().clone();
         let uri = req.uri().clone();
@@ -349,8 +362,12 @@ impl ProxyServer {
             }
         };
 
-        // Create router and forward request (with config reference for auto-switch updates)
-        let router = RequestRouter::new_with_config(db_pool.clone(), config.clone());
+        // Create router and forward request (with config reference and shared auto-switch service)
+        let router = RequestRouter::new_with_config(
+            db_pool.clone(),
+            config.clone(),
+            auto_switch_service,
+        );
 
         // Get config name for logging
         let config_name = db_pool

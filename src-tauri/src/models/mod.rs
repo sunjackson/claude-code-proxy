@@ -5,9 +5,12 @@ pub mod config_backup;
 pub mod config_group;
 pub mod environment_variable;
 pub mod error;
+pub mod error_classifier;
+pub mod failure_counter;
 pub mod provider_preset;
 pub mod proxy_status;
 pub mod recommended_service;
+pub mod retry_strategy;
 pub mod switch_log;
 pub mod test_result;
 

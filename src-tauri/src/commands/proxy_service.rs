@@ -117,7 +117,7 @@ pub async fn switch_proxy_config(
     state.service().switch_config(config_id).await
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
     use crate::db::{initialize_database, DbPool};

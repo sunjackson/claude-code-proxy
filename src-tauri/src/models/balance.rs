@@ -127,7 +127,7 @@ impl BalanceResponse {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
 

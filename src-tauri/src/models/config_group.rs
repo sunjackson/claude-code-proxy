@@ -21,6 +21,18 @@ pub struct ConfigGroup {
     /// 延迟阈值(毫秒),超过此值触发自动切换
     pub latency_threshold_ms: i32,
 
+    /// 重试次数 (1-10)
+    pub retry_count: i32,
+
+    /// 重试基础延迟 (毫秒)
+    pub retry_base_delay_ms: i32,
+
+    /// 重试最大延迟 (毫秒)
+    pub retry_max_delay_ms: i32,
+
+    /// 限流错误延迟 (毫秒)
+    pub rate_limit_delay_ms: i32,
+
     /// 创建时间
     pub created_at: String,
 
@@ -47,6 +59,25 @@ pub struct UpdateConfigGroupInput {
     pub latency_threshold_ms: Option<i32>,
 }
 
+/// 更新分组重试策略的输入参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateGroupRetryStrategyInput {
+    /// 分组 ID
+    pub group_id: i64,
+
+    /// 重试次数 (1-10)
+    pub retry_count: Option<i32>,
+
+    /// 重试基础延迟 (毫秒, 100-10000)
+    pub retry_base_delay_ms: Option<i32>,
+
+    /// 重试最大延迟 (毫秒, 1000-60000)
+    pub retry_max_delay_ms: Option<i32>,
+
+    /// 限流错误延迟 (毫秒, 1000-300000)
+    pub rate_limit_delay_ms: Option<i32>,
+}
+
 impl ConfigGroup {
     /// 验证分组名称
     pub fn validate_name(name: &str) -> Result<(), String> {
@@ -71,6 +102,38 @@ impl ConfigGroup {
             return Err("延迟阈值不能超过 60000 毫秒 (1分钟)".to_string());
         }
 
+        Ok(())
+    }
+
+    /// 验证重试次数
+    pub fn validate_retry_count(count: i32) -> Result<(), String> {
+        if count < 1 || count > 10 {
+            return Err("重试次数必须在 1-10 之间".to_string());
+        }
+        Ok(())
+    }
+
+    /// 验证重试基础延迟
+    pub fn validate_retry_base_delay(delay_ms: i32) -> Result<(), String> {
+        if delay_ms < 100 || delay_ms > 10000 {
+            return Err("重试基础延迟必须在 100-10000 毫秒之间".to_string());
+        }
+        Ok(())
+    }
+
+    /// 验证重试最大延迟
+    pub fn validate_retry_max_delay(delay_ms: i32) -> Result<(), String> {
+        if delay_ms < 1000 || delay_ms > 60000 {
+            return Err("重试最大延迟必须在 1000-60000 毫秒之间".to_string());
+        }
+        Ok(())
+    }
+
+    /// 验证限流延迟
+    pub fn validate_rate_limit_delay(delay_ms: i32) -> Result<(), String> {
+        if delay_ms < 1000 || delay_ms > 300000 {
+            return Err("限流延迟必须在 1000-300000 毫秒之间".to_string());
+        }
         Ok(())
     }
 
@@ -121,6 +184,36 @@ impl UpdateConfigGroupInput {
     }
 }
 
+impl UpdateGroupRetryStrategyInput {
+    /// 验证重试策略输入
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(count) = self.retry_count {
+            ConfigGroup::validate_retry_count(count)?;
+        }
+
+        if let Some(base_delay) = self.retry_base_delay_ms {
+            ConfigGroup::validate_retry_base_delay(base_delay)?;
+        }
+
+        if let Some(max_delay) = self.retry_max_delay_ms {
+            ConfigGroup::validate_retry_max_delay(max_delay)?;
+        }
+
+        if let Some(rate_limit_delay) = self.rate_limit_delay_ms {
+            ConfigGroup::validate_rate_limit_delay(rate_limit_delay)?;
+        }
+
+        // 验证基础延迟必须小于最大延迟
+        if let (Some(base), Some(max)) = (self.retry_base_delay_ms, self.retry_max_delay_ms) {
+            if base >= max {
+                return Err("重试基础延迟必须小于最大延迟".to_string());
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +244,10 @@ mod tests {
             description: None,
             auto_switch_enabled: false,
             latency_threshold_ms: 30000,
+            retry_count: 3,
+            retry_base_delay_ms: 2000,
+            retry_max_delay_ms: 8000,
+            rate_limit_delay_ms: 30000,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };
@@ -167,6 +264,10 @@ mod tests {
             description: None,
             auto_switch_enabled: false,
             latency_threshold_ms: 30000,
+            retry_count: 3,
+            retry_base_delay_ms: 2000,
+            retry_max_delay_ms: 8000,
+            rate_limit_delay_ms: 30000,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };

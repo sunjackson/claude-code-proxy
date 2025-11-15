@@ -85,7 +85,8 @@ impl DbPool {
     /// 检查连接池健康状态
     pub fn health_check(&self) -> AppResult<()> {
         self.with_connection(|conn| {
-            conn.execute("SELECT 1", [])
+            // 使用 query_row 执行简单查询验证连接
+            conn.query_row("SELECT 1", [], |_| Ok(()))
                 .map_err(|e| AppError::DatabaseError {
                     message: format!("健康检查失败: {}", e),
                 })?;
@@ -244,7 +245,7 @@ mod tests {
         let pool = DbPool::new(conn);
 
         // 执行会失败的事务
-        let result = pool.transaction(|conn| {
+        let result: AppResult<()> = pool.transaction(|conn| {
             conn.execute("INSERT INTO test (name) VALUES (?)", ["Charlie"])
                 .map_err(|e| AppError::DatabaseError {
                     message: e.to_string(),

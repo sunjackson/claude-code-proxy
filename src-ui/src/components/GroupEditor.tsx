@@ -91,10 +91,10 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
-      <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/40 rounded-xl shadow-2xl shadow-yellow-500/20 max-w-2xl w-full mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+      <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/40 rounded-xl shadow-2xl shadow-yellow-500/20 max-w-2xl w-full max-h-[90vh] flex flex-col">
         {/* 标题 */}
-        <div className="border-b border-gray-800 px-6 py-5 bg-gradient-to-r from-yellow-500/5 to-transparent">
+        <div className="border-b border-gray-800 px-6 py-5 bg-gradient-to-r from-yellow-500/5 to-transparent flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg flex items-center justify-center border border-yellow-500/30">
               <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,9 +107,10 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
           </div>
         </div>
 
-        {/* 表单 */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* 分组名称 */}
+        {/* 表单 - 可滚动区域 */}
+        <div className="overflow-y-auto flex-1">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* 分组名称 */}
           <div>
             <label
               htmlFor="name"
@@ -253,37 +254,38 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
             </div>
           )}
 
-          {/* 按钮 */}
-          <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-800">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-6 py-2.5 bg-gray-900 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-all duration-200 font-semibold border border-gray-800 hover:border-gray-700"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black rounded-lg transition-all duration-200 font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105 flex items-center gap-2"
-            >
-              {group ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  保存
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  创建
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+            {/* 按钮 */}
+            <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-6 py-2.5 bg-gray-900 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-all duration-200 font-semibold border border-gray-800 hover:border-gray-700"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black rounded-lg transition-all duration-200 font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105 flex items-center gap-2"
+              >
+                {group ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    保存
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    创建
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

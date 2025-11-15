@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.claudecodeproxy.app",
   "build": {
-    "beforeDevCommand": "cd ../src-ui && npm run dev",
+    "beforeDevCommand": "cd src-ui && npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd ../src-ui && npm run build",
+    "beforeBuildCommand": "cd src-ui && npm run build",
     "frontendDist": "../src-ui/dist"
   },
   "bundle": {

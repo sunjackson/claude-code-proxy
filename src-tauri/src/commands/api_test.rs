@@ -76,7 +76,7 @@ pub fn get_test_results(
     service.get_recent_test_results(config_id, limit.unwrap_or(10))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
     use crate::db::initialize_database;

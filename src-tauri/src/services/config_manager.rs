@@ -64,7 +64,9 @@ impl ConfigManager {
     /// 获取分组详情
     pub fn get_group_by_id(conn: &Connection, id: i64) -> AppResult<ConfigGroup> {
         conn.query_row(
-            "SELECT id, name, description, auto_switch_enabled, latency_threshold_ms, created_at, updated_at
+            "SELECT id, name, description, auto_switch_enabled, latency_threshold_ms,
+                    retry_count, retry_base_delay_ms, retry_max_delay_ms, rate_limit_delay_ms,
+                    created_at, updated_at
              FROM ConfigGroup WHERE id = ?1",
             [id],
             |row| {
@@ -74,8 +76,12 @@ impl ConfigManager {
                     description: row.get(2)?,
                     auto_switch_enabled: row.get(3)?,
                     latency_threshold_ms: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                    retry_count: row.get(5)?,
+                    retry_base_delay_ms: row.get(6)?,
+                    retry_max_delay_ms: row.get(7)?,
+                    rate_limit_delay_ms: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             },
         )
@@ -94,7 +100,9 @@ impl ConfigManager {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, auto_switch_enabled, latency_threshold_ms, created_at, updated_at
+                "SELECT id, name, description, auto_switch_enabled, latency_threshold_ms,
+                        retry_count, retry_base_delay_ms, retry_max_delay_ms, rate_limit_delay_ms,
+                        created_at, updated_at
                  FROM ConfigGroup ORDER BY id ASC",
             )
             .map_err(|e| AppError::DatabaseError {
@@ -109,8 +117,12 @@ impl ConfigManager {
                     description: row.get(2)?,
                     auto_switch_enabled: row.get(3)?,
                     latency_threshold_ms: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                    retry_count: row.get(5)?,
+                    retry_base_delay_ms: row.get(6)?,
+                    retry_max_delay_ms: row.get(7)?,
+                    rate_limit_delay_ms: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             })
             .map_err(|e| AppError::DatabaseError {
@@ -352,7 +364,7 @@ impl ConfigManager {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
 

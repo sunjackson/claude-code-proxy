@@ -238,8 +238,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_classify_error() {
-        // 测试无效URL
-        let result = LatencyTestService::test_url("http://invalid.invalid", Some(2000), false).await;
+        // 测试连接失败的URL（使用不可路由的测试IP地址 192.0.2.1）
+        // 设置短超时确保测试快速完成
+        let result = LatencyTestService::test_url("http://192.0.2.1:1", Some(500), false).await;
         assert!(!result.success);
         assert!(result.error_message.is_some());
     }

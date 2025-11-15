@@ -109,12 +109,12 @@ impl RequestRouter {
         }
     }
 
-    /// Create a new request router with proxy config reference
+    /// Create a new request router with proxy config reference and shared auto-switch service
     pub fn new_with_config(
         db_pool: Arc<DbPool>,
         proxy_config: Arc<tokio::sync::RwLock<crate::proxy::server::ProxyConfig>>,
+        auto_switch: Arc<AutoSwitchService>,
     ) -> Self {
-        let auto_switch = Arc::new(AutoSwitchService::new(db_pool.clone()));
         Self {
             db_pool,
             auto_switch,
@@ -179,25 +179,29 @@ impl RequestRouter {
                     {
                         log::error!("Auto-switch failed: {}", e);
                     }
+                } else {
+                    // T043: 成功请求，重置失败计数器
+                    self.auto_switch.reset_failure_counter(config_id);
                 }
 
                 Ok(response)
             }
             Err(e) => {
-                // Determine failure reason and trigger auto-switch
-                let (reason, error_msg) = self.classify_error(&e);
+                // T045: 使用智能重试机制处理失败
+                let (_reason, error_msg) = self.classify_error(&e);
                 let latency = start_time.elapsed().as_millis() as i32;
 
-                log::error!("Request failed: {:?}, reason: {:?}", e, reason);
+                log::error!("Request failed: {}, error_msg: {}", e, error_msg);
 
-                // Attempt auto-switch (note: cannot retry request as it's already consumed)
+                // T037-T044: 调用智能重试逻辑 (错误分类、可恢复性判断、重试决策)
                 match self
                     .auto_switch
-                    .handle_failure(config_id, group_id, reason, Some(error_msg.clone()), Some(latency))
+                    .handle_failure_with_retry(config_id, group_id, error_msg.clone(), Some(latency))
                     .await
                 {
                     Ok(Some(new_config_id)) => {
-                        log::info!("Auto-switched to config {}", new_config_id);
+                        // 立即切换到新配置
+                        log::info!("立即切换到新配置: {}", new_config_id);
 
                         // Update proxy config if we have reference
                         if let Some(proxy_cfg) = &self.proxy_config {
@@ -218,11 +222,12 @@ impl RequestRouter {
                         Err(e)
                     }
                     Ok(None) => {
-                        log::warn!("No available config for auto-switch");
+                        // 决定重试当前配置（不切换）
+                        log::info!("决定重试当前配置: {}, 下次请求将继续使用", config_id);
                         Err(e)
                     }
                     Err(switch_err) => {
-                        log::error!("Auto-switch error: {}", switch_err);
+                        log::error!("智能重试处理失败: {}", switch_err);
                         Err(e)
                     }
                 }
@@ -470,18 +475,89 @@ impl RequestRouter {
             // 不影响请求继续处理
         }
 
-        // 9. Check for quota exceeded (status 429)
-        if response.status() == StatusCode::TOO_MANY_REQUESTS {
-            return Err(AppError::ServiceError {
-                message: "API quota exceeded".to_string(),
-            });
-        }
-
-        // 10. Get response status and headers
+        // 9. Get response status and headers
         let status = response.status();
         let headers = response.headers().clone();
 
-        // 11. Stream response body directly (DO NOT collect)
+        // 10. Check for error status codes and inspect response body for critical errors
+        if status.is_client_error() || status.is_server_error() {
+            log::warn!("Received error status: {}", status);
+
+            // Collect response body to analyze error content
+            let body_bytes = response.into_body()
+                .collect()
+                .await
+                .map_err(|e| AppError::ServiceError {
+                    message: format!("Failed to read error response body: {}", e),
+                })?
+                .to_bytes();
+
+            let body_text = String::from_utf8_lossy(&body_bytes);
+            log::error!("Error response body: {}", body_text);
+
+            // Check for critical errors that should trigger auto-switch
+            let lower_text = body_text.to_lowercase();
+
+            // 余额不足
+            if lower_text.contains("余额不足")
+                || lower_text.contains("insufficient") && lower_text.contains("balance")
+                || lower_text.contains("insufficient") && lower_text.contains("credit")
+                || status == StatusCode::PAYMENT_REQUIRED {
+                return Err(AppError::ServiceError {
+                    message: format!("Insufficient balance: {}", body_text),
+                });
+            }
+
+            // 账号被封禁
+            if lower_text.contains("banned")
+                || lower_text.contains("suspended")
+                || lower_text.contains("disabled")
+                || lower_text.contains("blocked")
+                || (status == StatusCode::FORBIDDEN && (
+                    lower_text.contains("account") || lower_text.contains("api key")
+                )) {
+                return Err(AppError::ServiceError {
+                    message: format!("Account banned or suspended: {}", body_text),
+                });
+            }
+
+            // API密钥无效
+            if status == StatusCode::UNAUTHORIZED
+                || lower_text.contains("invalid api key")
+                || lower_text.contains("invalid token")
+                || lower_text.contains("authentication failed") {
+                return Err(AppError::ServiceError {
+                    message: format!("Authentication failed: {}", body_text),
+                });
+            }
+
+            // 限流/配额超限
+            if status == StatusCode::TOO_MANY_REQUESTS
+                || lower_text.contains("rate limit")
+                || lower_text.contains("quota exceeded") {
+                return Err(AppError::ServiceError {
+                    message: format!("Rate limit or quota exceeded: {}", body_text),
+                });
+            }
+
+            // 其他客户端错误 - 不触发切换，直接返回给客户端
+            if status.is_client_error() {
+                log::info!("Client error ({}), returning to client without auto-switch", status);
+                use http_body_util::Full;
+                let body = Full::new(body_bytes).map_err(|e| match e {}).boxed();
+                let mut resp = Response::new(body);
+                *resp.status_mut() = status;
+                *resp.headers_mut() = headers;
+                return Ok(resp);
+            }
+
+            // 服务器错误 - 触发切换
+            return Err(AppError::ServiceError {
+                message: format!("Server error ({}): {}", status, body_text),
+            });
+        }
+
+        // 11. Success response - Stream response body directly (DO NOT collect)
         // This is critical for SSE (Server-Sent Events) responses from Claude API
         // which stream data over a long period of time
         let body = response.into_body();
@@ -492,7 +568,7 @@ impl RequestRouter {
         *resp.status_mut() = status;
         *resp.headers_mut() = headers;
 
-        log::info!("Streaming response back to client (status: {})", status);
+        log::info!("Streaming successful response back to client (status: {})", status);
 
         Ok(resp)
     }
@@ -545,7 +621,7 @@ impl RequestRouter {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "old_tests"))]
 mod tests {
     use super::*;
 

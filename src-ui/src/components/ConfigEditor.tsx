@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Zap } from 'lucide-react';
 import type { ApiConfig, ConfigGroup } from '../types/tauri';
 import {
   categoryLabels,
@@ -14,7 +13,6 @@ import {
 import type { ProviderPreset } from '../api/providerPreset';
 import * as providerPresetApi from '../api/providerPreset';
 import * as configApi from '../api/config';
-import { EndpointSpeedTest } from './EndpointSpeedTest';
 
 interface ConfigEditorProps {
   /** 是否显示对话框 */
@@ -82,7 +80,6 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
   const [showPresets, setShowPresets] = useState(true); // 默认展开预设
   const [selectedCategory, setSelectedCategory] = useState<ProviderCategory>('official');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showSpeedTest, setShowSpeedTest] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [useManualConfig, setUseManualConfig] = useState(false); // 是否使用手动配置
 
@@ -193,27 +190,6 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
     setSelectedPresetId(presetId);
     setShowPresets(false);
-  };
-
-  // 获取端点候选列表（用于测速）
-  const getEndpointCandidates = (): string[] => {
-    const candidates: string[] = [];
-
-    // 当前输入的 URL
-    if (serverUrl && serverUrl !== 'https://' && serverUrl !== 'http://') {
-      candidates.push(serverUrl);
-    }
-
-    // 从选中的预设获取候选端点
-    if (selectedPresetId) {
-      const preset = providerPresets.find((p) => p.id === selectedPresetId);
-      if (preset && preset.endpointCandidates) {
-        candidates.push(...preset.endpointCandidates);
-      }
-    }
-
-    // 去重
-    return Array.from(new Set(candidates));
   };
 
   // 验证表单
@@ -606,23 +582,12 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
           {/* 服务器地址 */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label
-                htmlFor="serverUrl"
-                className="block text-sm font-medium text-gray-300"
-              >
-                服务器地址 <span className="text-red-500">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowSpeedTest(true)}
-                disabled={!serverUrl || serverUrl === 'https://' || serverUrl === 'http://'}
-                className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              >
-                <Zap className="h-3 w-3" />
-                端点测速
-              </button>
-            </div>
+            <label
+              htmlFor="serverUrl"
+              className="block text-sm font-medium text-gray-300 mb-2"
+            >
+              服务器地址 <span className="text-red-500">*</span>
+            </label>
             <input
               type="text"
               id="serverUrl"
@@ -903,17 +868,6 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
             </button>
           </div>
         </form>
-
-        {/* 端点测速对话框 */}
-        {showSpeedTest && (
-          <EndpointSpeedTest
-            value={serverUrl}
-            onChange={setServerUrl}
-            initialEndpoints={getEndpointCandidates()}
-            visible={showSpeedTest}
-            onClose={() => setShowSpeedTest(false)}
-          />
-        )}
       </div>
     </div>
   );

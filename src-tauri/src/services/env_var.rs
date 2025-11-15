@@ -178,8 +178,8 @@ mod tests {
             id: 1,
             name: "Test Config".to_string(),
             api_key: "test-api-key".to_string(),
-            server_url: "api.example.com".to_string(),
-            server_port: 8080,
+            server_url: "http://api.example.com:8080".to_string(),
+            server_port: 8080, // deprecated, but kept for compatibility
             group_id: None,
             sort_order: 0,
             is_available: true,

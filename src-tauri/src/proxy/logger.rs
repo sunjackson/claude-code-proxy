@@ -76,7 +76,7 @@ impl RequestLogEntry {
         };
 
         format!(
-            "{} {} {} -> {} {} {}ms {}{}",
+            "{} {} {} -> {} {} {} {}ms{}",
             self.timestamp.format("%Y-%m-%dT%H:%M:%S%.3fZ"),
             self.method,
             self.uri,

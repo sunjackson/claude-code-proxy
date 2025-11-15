@@ -358,10 +358,16 @@ print_info "操作系统: $OS"
 print_info "包管理器: $PACKAGE_MANAGER"
 echo ""
 
-# 检查是否在项目根目录
-if [ ! -d "src-tauri" ] || [ ! -d "src-ui" ]; then
+# 检查是否在项目根目录或 src-tauri 目录
+if [ ! -d "src-tauri" ] && [ ! -d "src-ui" ]; then
     print_error "请在项目根目录运行此脚本"
     exit 1
+fi
+
+# 如果在 src-tauri 目录，切换到项目根目录
+if [ -d "../src-ui" ] && [ ! -d "src-ui" ]; then
+    cd ..
+    print_info "已切换到项目根目录: $(pwd)"
 fi
 
 # 1. 环境检测
@@ -492,7 +498,7 @@ echo ""
 # 等待 2 秒让用户看清信息
 sleep 2
 
-# 进入 src-tauri 目录并启动
+# 确保在 src-tauri 目录启动（Tauri 2.0 的 beforeDevCommand 从项目根目录执行）
 cd src-tauri
 
 # 使用 cargo tauri dev 启动（会自动启动前端 Vite 服务器）

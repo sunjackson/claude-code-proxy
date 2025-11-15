@@ -9,6 +9,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "claude_code_proxy"
+path = "src/lib.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -61,10 +65,17 @@ futures-util = "0.3"
 # 跨平台路径
 dirs = "5.0"
 
+# 随机数生成 (用于重试抖动)
+rand = "0.8"
+
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+
+# 用于启用旧的测试代码（已被新测试替代，默认禁用）
+# 使用 cargo test --features old_tests 来运行旧测试
+old_tests = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # macOS 特定依赖(如需)

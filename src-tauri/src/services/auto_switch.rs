@@ -12,7 +12,10 @@
 
 use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
-use crate::models::switch_log::{CreateSwitchLogInput, SwitchLogDetail, SwitchReason};
+use crate::models::retry_strategy::RetryStrategy;
+use crate::models::switch_log::{CreateSwitchLogInput, SwitchLogDetail, SwitchReason, ErrorType};
+use crate::services::error_classifier::ErrorClassifier;
+use crate::services::retry_manager::RetryManager;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
@@ -21,14 +24,26 @@ use tokio::sync::RwLock;
 pub struct AutoSwitchService {
     db_pool: Arc<DbPool>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
+    retry_manager: Arc<RetryManager>,
+    error_classifier: ErrorClassifier,
 }
 
 impl AutoSwitchService {
     /// 创建新的自动切换服务
     pub fn new(db_pool: Arc<DbPool>) -> Self {
+        // 创建默认重试策略（可后续从配置读取）
+        let default_strategy = RetryStrategy {
+            max_retries: 3,
+            base_delay_ms: 2000,
+            max_delay_ms: 8000,
+            rate_limit_delay_ms: 30000,
+        };
+
         Self {
             db_pool,
             app_handle: Arc::new(RwLock::new(None)),
+            retry_manager: Arc::new(RetryManager::new(default_strategy)),
+            error_classifier: ErrorClassifier,
         }
     }
 
@@ -102,6 +117,9 @@ impl AutoSwitchService {
                         latency_before_ms,
                         latency_after_ms,
                         error_message: error_message.clone(),
+                        retry_count: None,
+                        error_type: None,
+                        error_details: None,
                     })
                     .await?;
 
@@ -122,6 +140,211 @@ impl AutoSwitchService {
                 Ok(None)
             }
         }
+    }
+
+    /// 处理故障并根据错误类型智能决策（重试或切换）
+    ///
+    /// # Arguments
+    /// - `current_config_id`: 当前配置 ID
+    /// - `group_id`: 当前分组 ID
+    /// - `error_message`: 错误信息
+    /// - `latency_before_ms`: 切换前延迟(可选)
+    ///
+    /// # Returns
+    /// - AppResult<Option<i64>>:
+    ///   - Some(config_id): 切换到的新配置 ID (立即切换或重试失败后切换)
+    ///   - None: 无需切换(重试中或没有可用配置)
+    ///
+    /// # Logic Flow (T037-T044)
+    /// 1. T038: 使用 ErrorClassifier 分类错误类型和可恢复性
+    /// 2. T039: 如果是不可恢复错误 → 立即切换到下一个配置
+    /// 3. T040: 如果是可恢复错误 → 查询 RetryManager 是否应该重试
+    /// 4. T041: 如果是限流错误 → 使用特殊的 30 秒延迟
+    /// 5. T042: 使用 RetryManager 管理失败计数
+    /// 6. T044: 添加详细日志记录
+    pub async fn handle_failure_with_retry(
+        &self,
+        current_config_id: i64,
+        group_id: i64,
+        error_message: String,
+        latency_before_ms: Option<i32>,
+    ) -> AppResult<Option<i64>> {
+        // T038: 分类错误类型和可恢复性
+        let (error_type, recoverability) = self.error_classifier.classify(&error_message);
+
+        log::info!(
+            "错误分类: config_id={}, error_type={:?}, recoverability={:?}",
+            current_config_id,
+            error_type,
+            recoverability
+        );
+
+        // T039: 不可恢复错误 → 立即切换
+        if recoverability.should_switch_immediately() {
+            log::warn!(
+                "检测到不可恢复错误，立即切换: config_id={}, error_type={:?}",
+                current_config_id,
+                error_type
+            );
+
+            let reason = match error_type {
+                ErrorType::InsufficientBalance => SwitchReason::QuotaExceeded,
+                ErrorType::AccountBanned => SwitchReason::UnrecoverableError,
+                ErrorType::Authentication => SwitchReason::UnrecoverableError,
+                _ => SwitchReason::UnrecoverableError,
+            };
+
+            // 直接执行切换（不重试）
+            return self.switch_immediately(
+                current_config_id,
+                group_id,
+                reason,
+                error_message,
+                error_type,
+                0, // retry_count = 0（未重试）
+                latency_before_ms,
+            ).await;
+        }
+
+        // T040 + T042: 可恢复错误 → 检查是否应该重试
+        let (should_retry, current_retry_count) = self
+            .retry_manager
+            .should_retry(current_config_id, &recoverability);
+
+        if !should_retry {
+            // 达到最大重试次数 → 切换到下一个配置
+            log::warn!(
+                "达到最大重试次数，切换配置: config_id={}, retry_count={}",
+                current_config_id,
+                current_retry_count
+            );
+
+            return self.switch_immediately(
+                current_config_id,
+                group_id,
+                SwitchReason::RetryFailed,
+                error_message,
+                error_type,
+                current_retry_count,
+                latency_before_ms,
+            ).await;
+        }
+
+        // T041: 计算重试延迟（限流错误使用特殊延迟）
+        let retry_delay_ms = self
+            .retry_manager
+            .calculate_delay(current_config_id, &recoverability);
+
+        // 增加失败计数
+        let new_retry_count = self.retry_manager.increment_failure(current_config_id);
+
+        // T044: 详细日志记录
+        log::info!(
+            "准备重试: config_id={}, retry_count={}, delay_ms={}, error_type={:?}",
+            current_config_id,
+            new_retry_count,
+            retry_delay_ms,
+            error_type
+        );
+
+        if recoverability.needs_rate_limit_delay() {
+            log::warn!(
+                "限流错误，延迟 {} 毫秒后重试",
+                retry_delay_ms
+            );
+        }
+
+        // 记录重试事件（不切换配置）
+        let _log_id = self
+            .log_switch(CreateSwitchLogInput {
+                reason: SwitchReason::ConnectionFailed,
+                source_config_id: Some(current_config_id),
+                target_config_id: current_config_id, // 重试时 target = source
+                group_id,
+                latency_before_ms,
+                latency_after_ms: None,
+                error_message: Some(error_message.clone()),
+                retry_count: Some(new_retry_count as i32),
+                error_type: Some(error_type),
+                error_details: Some(format!(
+                    "Retry attempt {} after {} ms delay",
+                    new_retry_count,
+                    retry_delay_ms
+                )),
+            })
+            .await?;
+
+        // 返回 None 表示不切换配置（继续使用当前配置重试）
+        Ok(None)
+    }
+
+    /// 立即切换到下一个配置（内部辅助方法）
+    async fn switch_immediately(
+        &self,
+        current_config_id: i64,
+        group_id: i64,
+        reason: SwitchReason,
+        error_message: String,
+        error_type: ErrorType,
+        retry_count: u32,
+        latency_before_ms: Option<i32>,
+    ) -> AppResult<Option<i64>> {
+        // 查找下一个可用配置
+        match self.find_next_config(current_config_id, group_id).await? {
+            Some(next_config_id) => {
+                // 测试新配置延迟
+                let latency_after_ms = self.measure_latency(next_config_id).await?;
+
+                // 标记原配置为不可用
+                if let Err(e) = self.mark_config_unavailable(current_config_id, &error_message).await {
+                    log::error!("Failed to mark config {} as unavailable: {}", current_config_id, e);
+                    // 不影响切换流程，继续执行
+                }
+
+                // 记录切换日志
+                let log_id = self
+                    .log_switch(CreateSwitchLogInput {
+                        reason: reason.clone(),
+                        source_config_id: Some(current_config_id),
+                        target_config_id: next_config_id,
+                        group_id,
+                        latency_before_ms,
+                        latency_after_ms,
+                        error_message: Some(error_message.clone()),
+                        retry_count: Some(retry_count as i32),
+                        error_type: Some(error_type),
+                        error_details: Some(format!(
+                            "Switched after {} retries due to {:?}",
+                            retry_count,
+                            reason
+                        )),
+                    })
+                    .await?;
+
+                log::info!(
+                    "立即切换成功: {} → {}, retry_count={}, log_id={}",
+                    current_config_id,
+                    next_config_id,
+                    retry_count,
+                    log_id
+                );
+
+                // 推送切换事件
+                self.emit_switch_triggered(log_id).await;
+
+                Ok(Some(next_config_id))
+            }
+            None => {
+                log::warn!("分组 {} 中没有可用的配置", group_id);
+                Ok(None)
+            }
+        }
+    }
+
+    /// T043: 重置失败计数器（成功响应后调用）
+    pub fn reset_failure_counter(&self, config_id: i64) {
+        self.retry_manager.reset_counter(config_id);
+        log::debug!("重置失败计数器: config_id={}", config_id);
     }
 
     /// 查找下一个可用配置
@@ -303,6 +526,30 @@ impl AutoSwitchService {
         })
     }
 
+    /// 标记配置为不可用
+    ///
+    /// # Arguments
+    /// - `config_id`: 配置 ID
+    /// - `error_message`: 错误消息
+    async fn mark_config_unavailable(&self, config_id: i64, error_message: &str) -> AppResult<()> {
+        self.db_pool.with_connection(|conn| {
+            use rusqlite::params;
+
+            let now = chrono::Utc::now().to_rfc3339();
+
+            conn.execute(
+                "UPDATE ApiConfig SET is_available = 0, updated_at = ?1 WHERE id = ?2",
+                params![now, config_id],
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("标记配置不可用失败: {}", e),
+            })?;
+
+            log::info!("Marked config {} as unavailable: {}", config_id, error_message);
+            Ok(())
+        })
+    }
+
     /// 推送 auto-switch-triggered 事件
     async fn emit_switch_triggered(&self, log_id: i64) {
         use tauri::Emitter;
@@ -372,6 +619,9 @@ impl AutoSwitchService {
                         latency_after_ms: latency_after,
                         latency_improvement_ms: latency_improvement,
                         error_message: row.get(8)?,
+                        retry_count: 0,
+                        error_type: None,
+                        error_details: None,
                     })
                 },
             )
@@ -465,6 +715,9 @@ impl AutoSwitchService {
                         latency_after_ms: latency_after,
                         latency_improvement_ms: latency_improvement,
                         error_message: row.get(8)?,
+                        retry_count: 0,
+                        error_type: None,
+                        error_details: None,
                     })
                 })
                 .map_err(|e| AppError::DatabaseError {

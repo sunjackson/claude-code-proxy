@@ -498,10 +498,12 @@ mod tests {
         assert!(filename.ends_with(".json"));
         // 验证格式: settings_backup_YYYYMMDD_HHMMSS.json
         let parts: Vec<&str> = filename.split('_').collect();
-        assert_eq!(parts.len(), 3);
+        assert_eq!(parts.len(), 4); // settings, backup, YYYYMMDD, HHMMSS.json
         assert_eq!(parts[0], "settings");
         assert_eq!(parts[1], "backup");
-        assert!(parts[2].ends_with(".json"));
+        assert_eq!(parts[2].len(), 8); // YYYYMMDD
+        assert!(parts[3].ends_with(".json")); // HHMMSS.json
+        assert_eq!(parts[3].len(), 11); // HHMMSS.json (6 + 5)
     }
 
     #[test]

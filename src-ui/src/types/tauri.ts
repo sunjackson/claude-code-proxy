@@ -313,7 +313,15 @@ export interface TestResult {
 /**
  * 切换原因类型
  */
-export type SwitchReason = 'connection_failed' | 'timeout' | 'quota_exceeded' | 'high_latency' | 'manual';
+export type SwitchReason =
+  | 'connection_failed'
+  | 'timeout'
+  | 'quota_exceeded'
+  | 'high_latency'
+  | 'manual'
+  | 'retry_failed'
+  | 'unrecoverable_error'
+  | 'rate_limit_exceeded';
 
 /**
  * 切换日志
@@ -339,7 +347,26 @@ export interface SwitchLog {
   latency_improvement_ms: number | null;
   /** 错误信息 */
   error_message: string | null;
+  /** 重试次数 */
+  retry_count: number;
+  /** 错误类型 */
+  error_type: ErrorType | null;
+  /** 错误详情 */
+  error_details: string | null;
 }
+
+/**
+ * 错误类型
+ */
+export type ErrorType =
+  | 'network'
+  | 'timeout'
+  | 'authentication'
+  | 'insufficient_balance'
+  | 'account_banned'
+  | 'rate_limit'
+  | 'server_error'
+  | 'unknown';
 
 /**
  * 服务数据源

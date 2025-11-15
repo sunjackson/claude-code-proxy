@@ -430,6 +430,63 @@ impl RequestRouter {
             })?;
 
         parts.uri = new_uri;
+
+        // 10.1 Filter unsupported fields from request body (for POST/PUT requests)
+        let body = if parts.method == hyper::Method::POST || parts.method == hyper::Method::PUT {
+            // Collect request body
+            let body_bytes = body.collect().await
+                .map_err(|e| AppError::ServiceError {
+                    message: format!("Failed to read request body: {}", e),
+                })?
+                .to_bytes();
+
+            // Try to parse as JSON and filter unsupported fields
+            match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                Ok(mut json) => {
+                    // Remove unsupported fields
+                    if let Some(obj) = json.as_object_mut() {
+                        let removed_fields: Vec<String> = obj.keys()
+                            .filter(|k| k.as_str() == "context_management")
+                            .cloned()
+                            .collect();
+
+                        for field in &removed_fields {
+                            obj.remove(field);
+                            log::debug!("Filtered unsupported field from request: {}", field);
+                        }
+                    }
+
+                    // Serialize back to bytes
+                    let filtered_bytes = serde_json::to_vec(&json)
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to serialize filtered request: {}", e),
+                        })?;
+
+                    // Update Content-Length header
+                    parts.headers.insert(
+                        hyper::header::CONTENT_LENGTH,
+                        filtered_bytes.len().to_string().parse().unwrap()
+                    );
+
+                    use http_body_util::Full;
+                    Full::new(Bytes::from(filtered_bytes))
+                        .map_err(|e| match e {})
+                        .boxed()
+                }
+                Err(_) => {
+                    // Not JSON or parsing failed, use original body
+                    log::debug!("Request body is not JSON, forwarding as-is");
+                    use http_body_util::Full;
+                    Full::new(body_bytes)
+                        .map_err(|e| match e {})
+                        .boxed()
+                }
+            }
+        } else {
+            // For GET/DELETE, just forward the body as-is
+            body.boxed()
+        };
+
         let req = Request::from_parts(parts, body);
 
         log::debug!("Modified request URI to: {}", req.uri());

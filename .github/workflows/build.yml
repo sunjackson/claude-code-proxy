@@ -57,24 +57,24 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
 
-      - name: 缓存 Tauri CLI
-        id: cache-tauri-cli
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/cargo-tauri*
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-          key: ${{ runner.os }}-tauri-cli-2.0
-
-      - name: 安装 Tauri CLI
-        if: steps.cache-tauri-cli.outputs.cache-hit != 'true'
-        run: cargo install tauri-cli --version "^2.0.0" --locked
-
       - name: 安装 Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-directories: |
+            ~/.cargo/bin/
+
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+        env:
+          CARGO_INCREMENTAL: 0
+
+      - name: 验证 Tauri CLI
+        run: |
+          echo "Checking Tauri CLI installation..."
+          which cargo-tauri || echo "cargo-tauri not found in PATH"
+          cargo tauri --version || echo "Failed to run cargo tauri"
+          ls -la ~/.cargo/bin/ | grep tauri || echo "No tauri binaries found"
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4

@@ -6,6 +6,7 @@
 
 **一个功能强大的跨平台桌面应用，用于管理 Claude Code 的本地代理服务**
 
+[![Build](https://github.com/sunjackson/claude-code-proxy/actions/workflows/build.yml/badge.svg)](https://github.com/sunjackson/claude-code-proxy/actions/workflows/build.yml)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://tauri.app/)
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
@@ -88,11 +89,11 @@ Claude Code Proxy 是一个专为 Claude Code 设计的本地代理管理工具�
 
 #### 方式 1: 下载预构建版本（推荐）
 
-1. 访问 [Releases 页面](https://github.com/your-org/claude-code-proxy/releases)
+1. 访问 [Releases 页面](https://github.com/sunjackson/claude-code-proxy/releases)
 2. 下载对应平台的安装包：
-   - **Windows**: `ClaudeCodeProxy_x.x.x_x64.msi`
-   - **macOS**: `ClaudeCodeProxy_x.x.x_macOS_Installer.dmg`
-   - **Linux**: `ClaudeCodeProxy_x.x.x_amd64.deb`
+   - **Windows**: `ClaudeCodeProxy_x.x.x_x64.msi` 或 `.exe`
+   - **macOS**: `ClaudeCodeProxy_x.x.x_aarch64.dmg` (Apple Silicon) 或 `x86_64.dmg` (Intel)
+   - **Linux**: `ClaudeCodeProxy_x.x.x_amd64.deb` 或 `.AppImage`
 
 #### 方式 2: 从源码构建
 
@@ -333,7 +334,7 @@ sudo apt install -y libwebkit2gtk-4.0-dev \
 1. **克隆仓库**
 
 ```bash
-git clone https://github.com/your-org/claude-code-proxy.git
+git clone https://github.com/sunjackson/claude-code-proxy.git
 cd claude-code-proxy
 ```
 
@@ -374,6 +375,27 @@ cargo tauri build
 - **macOS**: `src-tauri/target/release/bundle/dmg/`
 - **Windows**: `src-tauri/target/release/bundle/msi/`
 - **Linux**: `src-tauri/target/release/bundle/deb/`
+
+### CI/CD 自动构建
+
+项目使用 GitHub Actions 自动构建多平台版本：
+
+- **触发条件**:
+  - 推送到 `master`/`main` 分支
+  - 创建 tag (格式: `v*`)
+  - 手动触发
+
+- **构建平台**:
+  - macOS (Apple Silicon + Intel)
+  - Windows (x64)
+  - Linux (x64)
+
+- **自动发布**:
+  - 创建 tag 时自动创建 GitHub Release
+  - 自动上传所有平台的安装包
+  - 生成 Release Notes
+
+**查看构建状态**: [GitHub Actions](https://github.com/sunjackson/claude-code-proxy/actions)
 
 ### 项目结构
 
@@ -566,9 +588,9 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 
 ## 📞 联系方式
 
-- **问题反馈**: [GitHub Issues](https://github.com/your-org/claude-code-proxy/issues)
-- **讨论交流**: [GitHub Discussions](https://github.com/your-org/claude-code-proxy/discussions)
-- **安全问题**: security@your-domain.com
+- **问题反馈**: [GitHub Issues](https://github.com/sunjackson/claude-code-proxy/issues)
+- **讨论交流**: [GitHub Discussions](https://github.com/sunjackson/claude-code-proxy/discussions)
+- **安全问题**: jacksonsunjj@gmail.com
 
 ---
 
@@ -588,7 +610,8 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 
 - **版本**: 1.0.0
 - **状态**: 生产就绪
-- **最后更新**: 2025-01-13
+- **最后更新**: 2025-01-18
+- **CI/CD**: GitHub Actions 自动化构建多平台版本
 
 ---
 

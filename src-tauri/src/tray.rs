@@ -54,8 +54,8 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::er
         .icon_as_template(true)
         .menu(&menu)
         .icon(app.default_window_icon().unwrap().clone())
-        .title("Claude Code Router")
-        .tooltip("Claude Code Router - 未连接")
+        .title("Claude Code Proxy")
+        .tooltip("Claude Code Proxy - 未连接")
         .on_menu_event(move |app, event| {
             let event_id = event.id.as_ref();
             match event_id {
@@ -174,12 +174,12 @@ pub fn update_tray_status<R: Runtime>(
         // 悬停提示（详细信息）
         let tooltip = if let Some(ref name) = config_name {
             format!(
-                "Claude Code Router\n\n配置: {}\n状态: {} {}",
+                "Claude Code Proxy\n\n配置: {}\n状态: {} {}",
                 name, status_symbol, status_text
             )
         } else {
             format!(
-                "Claude Code Router\n\n{} {}",
+                "Claude Code Proxy\n\n{} {}",
                 status_symbol, status_text
             )
         };

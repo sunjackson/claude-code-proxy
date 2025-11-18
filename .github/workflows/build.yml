@@ -70,11 +70,7 @@ jobs:
           CARGO_INCREMENTAL: 0
 
       - name: 验证 Tauri CLI
-        run: |
-          echo "Checking Tauri CLI installation..."
-          which cargo-tauri || echo "cargo-tauri not found in PATH"
-          cargo tauri --version || echo "Failed to run cargo tauri"
-          ls -la ~/.cargo/bin/ | grep tauri || echo "No tauri binaries found"
+        run: cargo tauri --version
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4

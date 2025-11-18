@@ -248,9 +248,9 @@ impl BalanceService {
         url: &str,
         api_key: &str,
     ) -> AppResult<BalanceResponse> {
-        // 88code 特殊处理：使用 /api/usage 端点
+        // 88code 特殊处理：使用 /api/subscription 端点
         let actual_url = if url.contains("88code.org") {
-            // 提取基础 URL（协议 + 域名）并追加 /api/usage
+            // 提取基础 URL（协议 + 域名）并追加 /api/subscription
             if let Ok(parsed_url) = reqwest::Url::parse(url) {
                 let base = format!(
                     "{}://{}{}",
@@ -262,8 +262,8 @@ impl BalanceService {
                         String::new()
                     }
                 );
-                let modified_url = format!("{}/api/usage", base);
-                log::info!("🔧 88code detected, using special endpoint: {}", modified_url);
+                let modified_url = format!("{}/api/subscription", base);
+                log::info!("🔧 88code detected, using subscription endpoint: {}", modified_url);
                 log::debug!("  Original URL: {}", url);
                 modified_url
             } else {

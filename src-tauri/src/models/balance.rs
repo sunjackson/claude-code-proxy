@@ -61,12 +61,14 @@ pub enum BalanceResponse {
     Nested {
         data: NestedBalanceData,
     },
-    /// 88code 专用格式：{ "used_tokens": 1000, "remaining_tokens": 9000, "credit_limit": 100.0 }
-    EightyEightCode {
+    /// 88code Usage 格式（已废弃）：{ "used_tokens": 1000, "remaining_tokens": 9000, "credit_limit": 100.0 }
+    EightyEightCodeUsage {
         used_tokens: i64,
         remaining_tokens: i64,
         credit_limit: f64,
     },
+    /// 88code Subscription 格式（当前使用）：数组，取第一个激活的订阅
+    EightyEightCodeSubscription(Vec<EightyEightCodeSub>),
     /// 自定义格式
     Custom(serde_json::Value),
 }
@@ -76,6 +78,20 @@ pub struct NestedBalanceData {
     pub balance: f64,
     #[serde(default = "default_currency")]
     pub currency: String,
+}
+
+/// 88code Subscription 数据结构（简化版，仅包含余额查询需要的字段）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EightyEightCodeSub {
+    pub id: i64,
+    pub current_credits: f64,
+    pub subscription_plan_name: String,
+    pub is_active: bool,
+    #[serde(default)]
+    pub remaining_days: i32,
+    #[serde(default)]
+    pub end_date: Option<String>,
 }
 
 fn default_currency() -> String {
@@ -88,11 +104,21 @@ impl BalanceResponse {
         match self {
             BalanceResponse::Standard { balance, .. } => Some(*balance),
             BalanceResponse::Nested { data } => Some(data.balance),
-            BalanceResponse::EightyEightCode {
+            BalanceResponse::EightyEightCodeUsage {
                 remaining_tokens, ..
             } => {
-                // 88code 格式：remaining_tokens 除以 100 得到美元
+                // 88code Usage 格式：remaining_tokens 除以 100 得到美元
                 Some((*remaining_tokens as f64) / 100.0)
+            }
+            BalanceResponse::EightyEightCodeSubscription(subs) => {
+                // 取第一个激活的订阅，返回 currentCredits
+                subs.iter()
+                    .find(|s| s.is_active)
+                    .map(|s| s.current_credits)
+                    .or_else(|| {
+                        // 如果没有激活的订阅，取第一个
+                        subs.first().map(|s| s.current_credits)
+                    })
             }
             BalanceResponse::Custom(value) => {
                 // 尝试从各种可能的字段中提取余额
@@ -101,7 +127,7 @@ impl BalanceResponse {
                     .or_else(|| value.get("amount"))
                     .and_then(|v| v.as_f64())
                     .or_else(|| {
-                        // 尝试 88code 格式
+                        // 尝试 88code Usage 格式
                         value.get("remaining_tokens")
                             .and_then(|v| v.as_i64())
                             .map(|t| (t as f64) / 100.0)
@@ -115,7 +141,8 @@ impl BalanceResponse {
         match self {
             BalanceResponse::Standard { currency, .. } => currency.clone(),
             BalanceResponse::Nested { data } => data.currency.clone(),
-            BalanceResponse::EightyEightCode { .. } => "USD".to_string(), // 88code 使用美元
+            BalanceResponse::EightyEightCodeUsage { .. } => "USD".to_string(), // 88code Usage 使用美元
+            BalanceResponse::EightyEightCodeSubscription { .. } => "Credits".to_string(), // 88code Subscription 使用 Credits
             BalanceResponse::Custom(value) => {
                 value.get("currency")
                     .or_else(|| value.get("data").and_then(|d| d.get("currency")))
@@ -159,13 +186,32 @@ mod tests {
     }
 
     #[test]
-    fn test_balance_response_88code() {
-        // 测试 88code 格式
+    fn test_balance_response_88code_usage() {
+        // 测试 88code Usage 格式（已废弃）
         let json = r#"{"used_tokens": 1000, "remaining_tokens": 9000, "credit_limit": 100.0}"#;
         let response: BalanceResponse = serde_json::from_str(json).unwrap();
 
         // remaining_tokens = 9000, 除以 100 = 90.00
         assert_eq!(response.extract_balance(), Some(90.00));
         assert_eq!(response.extract_currency(), "USD");
+    }
+
+    #[test]
+    fn test_balance_response_88code_subscription() {
+        // 测试 88code Subscription 格式（当前使用）
+        let json = r#"[
+            {
+                "id": 1,
+                "currentCredits": 85.5,
+                "subscriptionPlanName": "Pro Plan",
+                "isActive": true,
+                "remainingDays": 25,
+                "endDate": "2025-12-31"
+            }
+        ]"#;
+        let response: BalanceResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.extract_balance(), Some(85.5));
+        assert_eq!(response.extract_currency(), "Credits");
     }
 }

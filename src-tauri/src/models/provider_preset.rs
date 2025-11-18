@@ -56,6 +56,10 @@ pub struct ProviderPreset {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub balance_query_url: Option<String>,
 
+    /// 是否有内置余额查询功能 (如果为 true,则不允许用户修改 balance_query_url)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_built_in_balance_query: Option<bool>,
+
     /// 描述
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -151,6 +155,7 @@ mod tests {
             api_key_url: None,
             server_url: "https://api.example.com".to_string(),
             balance_query_url: None,
+            has_built_in_balance_query: None,
             description: None,
             show_in_recommendations: true,
             is_recommended: true,

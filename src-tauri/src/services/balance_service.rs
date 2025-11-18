@@ -32,6 +32,7 @@ impl BalanceService {
     pub fn new(db_pool: Arc<DbPool>) -> Self {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .user_agent("") // 禁用默认 User-Agent,避免干扰 88code
             .build()
             .expect("Failed to create HTTP client");
 
@@ -296,10 +297,15 @@ impl BalanceService {
         // 88code 使用 POST 请求，其他供应商使用 GET 请求
         let request_builder = if is_88code {
             log::debug!("  Using POST method for 88code");
+            log::debug!("  Request body: {{}}");
+            // 88code: 使用 POST 方法,发送空 JSON body
+            // 只需要两个 headers: Authorization 和 Content-Type
             self.http_client
                 .post(&actual_url)
                 .header("Authorization", format!("Bearer {}", api_key))
                 .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .json(&serde_json::json!({}))
         } else {
             // 完全模拟 Claude Code 客户端请求头，避免被 403 禁止
             self.http_client

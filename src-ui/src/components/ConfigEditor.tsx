@@ -192,6 +192,62 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
     setShowPresets(false);
   };
 
+  // 获取当前选择的预设
+  const getSelectedPreset = () => {
+    if (!selectedPresetId) return null;
+    return providerPresets.find((p) => p.id === selectedPresetId);
+  };
+
+  // 判断是否有内置余额查询
+  const hasBuiltInBalanceQuery = () => {
+    // 创建模式：根据选择的预设判断
+    if (!config && selectedPresetId) {
+      const preset = getSelectedPreset();
+      return preset?.hasBuiltInBalanceQuery === true;
+    }
+
+    // 编辑模式：根据serverUrl匹配预设
+    if (config) {
+      // 如果预设列表还在加载中，返回 false
+      if (loadingPresets || providerPresets.length === 0) {
+        return false;
+      }
+
+      // 标准化 URL（移除尾部斜杠，统一小写）
+      const normalizeUrl = (url: string) => {
+        return url.trim().toLowerCase().replace(/\/$/, '');
+      };
+
+      const configUrl = normalizeUrl(config.server_url);
+
+      // 尝试根据 serverUrl 或 endpointCandidates 匹配预设
+      const matchedPreset = providerPresets.find((p) => {
+        // 检查主 serverUrl
+        if (normalizeUrl(p.serverUrl) === configUrl) {
+          return true;
+        }
+        // 检查候选端点
+        if (p.endpointCandidates && p.endpointCandidates.length > 0) {
+          return p.endpointCandidates.some(
+            (endpoint) => normalizeUrl(endpoint) === configUrl
+          );
+        }
+        return false;
+      });
+
+      // 调试输出
+      if (matchedPreset) {
+        console.log('🔍 匹配到预设:', matchedPreset.name, '内置余额查询:', matchedPreset.hasBuiltInBalanceQuery);
+      } else {
+        console.log('🔍 未匹配到预设，配置URL:', config.server_url);
+      }
+
+      return matchedPreset?.hasBuiltInBalanceQuery === true;
+    }
+
+    return false;
+  };
+
   // 验证表单
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -738,20 +794,55 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                     余额查询配置
                   </h3>
 
+                  {/* 内置余额查询提示 */}
+                  {hasBuiltInBalanceQuery() && (
+                    <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-transparent border border-green-500/30 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-green-400">该服务商支持内置余额查询</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {config
+                              ? '该服务商已内置余额查询接口，余额查询URL不可修改'
+                              : '该服务商已内置余额查询接口，无需手动配置余额查询URL'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 余额查询 URL */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       余额查询 URL
+                      {hasBuiltInBalanceQuery() && config && (
+                        <span className="ml-2 text-xs text-gray-500">(内置配置，不可修改)</span>
+                      )}
                     </label>
                     <input
                       type="text"
                       value={balanceQueryUrl}
                       onChange={(e) => setBalanceQueryUrl(e.target.value)}
-                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors"
-                      placeholder="https://api.example.com/v1/balance"
+                      disabled={hasBuiltInBalanceQuery() && !!config}
+                      className={`w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors ${
+                        hasBuiltInBalanceQuery() && config
+                          ? 'opacity-60 cursor-not-allowed bg-gray-900/50'
+                          : ''
+                      }`}
+                      placeholder={
+                        hasBuiltInBalanceQuery()
+                          ? '使用内置余额查询接口'
+                          : 'https://api.example.com/v1/balance'
+                      }
                     />
-                    <p className="mt-1 text-xs text-gray-500">
-                      用于查询账户余额的API接口地址（支持标准格式和自定义格式）
-                    </p>
+                    {!hasBuiltInBalanceQuery() && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        用于查询账户余额的API接口地址（支持标准格式和自定义格式）
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-gray-900/50 rounded border border-gray-800">

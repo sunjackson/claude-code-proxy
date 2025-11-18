@@ -39,6 +39,10 @@ export interface ProviderPreset {
 
   // 备选端点
   endpointCandidates: string[];
+
+  // 余额查询配置
+  /** 是否有内置余额查询功能 (如果为 true,则不允许用户修改 balanceQueryUrl) */
+  hasBuiltInBalanceQuery?: boolean;
 }
 
 /**

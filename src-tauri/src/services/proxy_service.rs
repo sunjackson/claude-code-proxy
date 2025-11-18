@@ -87,12 +87,23 @@ impl ProxyService {
                 ProxyStatus::Error => "错误",
             };
 
+            // 更新托盘状态文本和图标
             if let Err(e) = crate::tray::update_tray_status(
                 handle,
                 status.active_config_name.clone(),
                 status_text,
             ) {
                 log::error!("Failed to update tray status: {}", e);
+            }
+
+            // 更新托盘菜单中的配置列表
+            if let Err(e) = crate::tray::update_tray_menu(
+                handle,
+                self.db_pool.clone(),
+                status.active_group_id,
+                status.active_config_id,
+            ) {
+                log::error!("Failed to update tray menu: {}", e);
             }
         }
     }

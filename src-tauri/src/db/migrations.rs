@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 6;
+const CURRENT_DB_VERSION: i32 = 7;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -84,6 +84,10 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             6 => {
                 // v5 -> v6: 添加 TestResult 缺失字段
                 migrate_v5_to_v6(conn)?;
+            }
+            7 => {
+                // v6 -> v7: 添加 provider_type 字段以支持不同的 API 提供商
+                migrate_v6_to_v7(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -297,6 +301,44 @@ fn migrate_v5_to_v6(conn: &Connection) -> AppResult<()> {
         })?;
 
     log::info!("v5 -> v6 迁移完成: 已添加 TestResult 缺失字段");
+    Ok(())
+}
+
+/// 迁移: v6 -> v7 - 添加 provider_type 字段
+/// 支持不同的 API 提供商 (Claude, Gemini)
+fn migrate_v6_to_v7(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v6 -> v7 迁移: 添加 provider_type 字段");
+
+    // 检查 provider_type 列是否已存在
+    let column_exists: bool = conn
+        .prepare("PRAGMA table_info(ApiConfig)")
+        .and_then(|mut stmt| {
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            Ok(columns.contains(&"provider_type".to_string()))
+        })
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查列是否存在失败: {}", e),
+        })?;
+
+    if column_exists {
+        log::info!("v6 -> v7 迁移: provider_type 列已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v7_add_provider_type.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v6->v7 迁移失败: {}", e),
+        })?;
+
+    log::info!("v6 -> v7 迁移完成: 已添加 provider_type 字段");
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-use crate::models::api_config::{ApiConfig, CreateApiConfigInput, UpdateApiConfigInput, VendorCategory};
+use crate::models::api_config::{ApiConfig, CreateApiConfigInput, UpdateApiConfigInput, VendorCategory, ProviderType};
 use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, Row};
 
@@ -9,14 +9,21 @@ pub struct ApiConfigService;
 ///
 /// 此函数期望行包含所有 ApiConfig 字段，按以下顺序：
 /// id, name, api_key, server_url, server_port, group_id, sort_order,
-/// is_available, last_test_at, last_latency_ms,
+/// is_available, last_test_at, last_latency_ms, provider_type,
 /// category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
 /// default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
 /// api_timeout_ms, max_output_tokens, created_at, updated_at
 #[allow(deprecated)]
 fn map_row_to_config(row: &Row) -> rusqlite::Result<ApiConfig> {
+    // 解析 provider_type 字段
+    let provider_type_str: String = row.get(10)?;
+    let provider_type = match provider_type_str.as_str() {
+        "gemini" => ProviderType::Gemini,
+        _ => ProviderType::Claude,
+    };
+
     // 解析 category 字段
-    let category_str: String = row.get(10)?;
+    let category_str: String = row.get(11)?;
     let category = match category_str.as_str() {
         "official" => VendorCategory::Official,
         "cn_official" => VendorCategory::CnOfficial,
@@ -36,29 +43,30 @@ fn map_row_to_config(row: &Row) -> rusqlite::Result<ApiConfig> {
         is_available: row.get(7)?,
         last_test_at: row.get(8)?,
         last_latency_ms: row.get(9)?,
+        provider_type,
         category,
-        is_partner: row.get::<_, i32>(11)? != 0,
-        theme_icon: row.get(12)?,
-        theme_bg_color: row.get(13)?,
-        theme_text_color: row.get(14)?,
-        meta: row.get(15)?,
-        default_model: row.get(16)?,
-        haiku_model: row.get(17)?,
-        sonnet_model: row.get(18)?,
-        opus_model: row.get(19)?,
-        small_fast_model: row.get(20)?,
-        api_timeout_ms: row.get(21)?,
-        max_output_tokens: row.get(22)?,
-        balance_query_url: row.get(23)?,
-        last_balance: row.get(24)?,
-        balance_currency: row.get(25)?,
-        last_balance_check_at: row.get(26)?,
-        balance_query_status: row.get(27)?,
-        balance_query_error: row.get(28)?,
-        auto_balance_check: row.get::<_, i32>(29)? != 0,
-        balance_check_interval_sec: row.get(30)?,
-        created_at: row.get(31)?,
-        updated_at: row.get(32)?,
+        is_partner: row.get::<_, i32>(12)? != 0,
+        theme_icon: row.get(13)?,
+        theme_bg_color: row.get(14)?,
+        theme_text_color: row.get(15)?,
+        meta: row.get(16)?,
+        default_model: row.get(17)?,
+        haiku_model: row.get(18)?,
+        sonnet_model: row.get(19)?,
+        opus_model: row.get(20)?,
+        small_fast_model: row.get(21)?,
+        api_timeout_ms: row.get(22)?,
+        max_output_tokens: row.get(23)?,
+        balance_query_url: row.get(24)?,
+        last_balance: row.get(25)?,
+        balance_currency: row.get(26)?,
+        last_balance_check_at: row.get(27)?,
+        balance_query_status: row.get(28)?,
+        balance_query_error: row.get(29)?,
+        auto_balance_check: row.get::<_, i32>(30)? != 0,
+        balance_check_interval_sec: row.get(31)?,
+        created_at: row.get(32)?,
+        updated_at: row.get(33)?,
     })
 }
 
@@ -141,6 +149,9 @@ impl ApiConfigService {
         let server_port = 443;
 
         // 处理供应商配置默认值
+        let provider_type = input.provider_type.as_ref()
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "claude".to_string());
         let category = input.category.as_ref()
             .map(|c| c.to_string())
             .unwrap_or_else(|| "custom".to_string());
@@ -155,13 +166,13 @@ impl ApiConfigService {
         // 使用命名参数以避免 Rusqlite 的 16 参数限制
         conn.execute(
             "INSERT INTO ApiConfig (name, api_key, server_url, server_port, group_id, sort_order,
-                                    category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
+                                    provider_type, category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                                     default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                                     api_timeout_ms, max_output_tokens,
                                     balance_query_url, auto_balance_check, balance_check_interval_sec, balance_currency,
                                     created_at, updated_at)
              VALUES (:name, :api_key, :server_url, :server_port, :group_id, :sort_order,
-                     :category, :is_partner, :theme_icon, :theme_bg_color, :theme_text_color, :meta,
+                     :provider_type, :category, :is_partner, :theme_icon, :theme_bg_color, :theme_text_color, :meta,
                      :default_model, :haiku_model, :sonnet_model, :opus_model, :small_fast_model,
                      :api_timeout_ms, :max_output_tokens,
                      :balance_query_url, :auto_balance_check, :balance_check_interval_sec, :balance_currency,
@@ -173,6 +184,7 @@ impl ApiConfigService {
                 ":server_port": server_port,
                 ":group_id": &input.group_id,
                 ":sort_order": sort_order,
+                ":provider_type": &provider_type,
                 ":category": &category,
                 ":is_partner": is_partner,
                 ":theme_icon": &input.theme_icon,
@@ -207,7 +219,7 @@ impl ApiConfigService {
     pub fn get_config_by_id(conn: &Connection, id: i64) -> AppResult<ApiConfig> {
         conn.query_row(
             "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
-                    is_available, last_test_at, last_latency_ms,
+                    is_available, last_test_at, last_latency_ms, provider_type,
                     category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                     default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                     api_timeout_ms, max_output_tokens,
@@ -241,7 +253,7 @@ impl ApiConfigService {
         let (sql, params): (String, Vec<Option<i64>>) = if let Some(gid) = group_id {
             (
                 "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
-                        is_available, last_test_at, last_latency_ms,
+                        is_available, last_test_at, last_latency_ms, provider_type,
                         category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                         default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                         api_timeout_ms, max_output_tokens,
@@ -254,7 +266,7 @@ impl ApiConfigService {
         } else {
             (
                 "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
-                        is_available, last_test_at, last_latency_ms,
+                        is_available, last_test_at, last_latency_ms, provider_type,
                         category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                         default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                         api_timeout_ms, max_output_tokens,
@@ -454,6 +466,11 @@ impl ApiConfigService {
         }
 
         // 供应商配置字段
+        if let Some(ref provider_type) = input.provider_type {
+            updates.push("provider_type = ?");
+            params.push(Box::new(provider_type.to_string()));
+        }
+
         if let Some(ref category) = input.category {
             updates.push("category = ?");
             params.push(Box::new(category.to_string()));

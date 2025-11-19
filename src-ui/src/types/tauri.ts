@@ -94,6 +94,11 @@ export type VendorCategory = 'official' | 'cn_official' | 'aggregator' | 'third_
 export type ProviderCategory = VendorCategory;
 
 /**
+ * API 提供商类型
+ */
+export type ProviderType = 'claude' | 'gemini';
+
+/**
  * API 配置
  */
 export interface ApiConfig {
@@ -118,6 +123,8 @@ export interface ApiConfig {
   /** 最后测试延迟(毫秒) */
   last_latency_ms: number | null;
 
+  /** API 提供商类型 */
+  provider_type: ProviderType;
   /** 供应商分类 */
   category: VendorCategory;
   /** 是否为合作伙伴 */
@@ -187,6 +194,8 @@ export interface CreateApiConfigInput {
   group_id?: number | null;
   sort_order?: number;
 
+  // API 提供商类型
+  provider_type?: ProviderType;
   // 供应商分类和主题
   category?: VendorCategory;
   is_partner?: boolean;
@@ -226,6 +235,8 @@ export interface UpdateApiConfigInput {
   sort_order?: number;
   is_available?: boolean;
 
+  // API 提供商类型
+  provider_type?: ProviderType;
   // 供应商分类和主题
   category?: VendorCategory;
   is_partner?: boolean;

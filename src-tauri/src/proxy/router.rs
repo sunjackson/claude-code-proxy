@@ -11,14 +11,19 @@
 use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::models::switch_log::SwitchReason;
+use crate::models::api_config::ProviderType;
 // use crate::proxy::error_handler::{ProxyErrorHandler, ProxyErrorType};
 use crate::services::api_config::ApiConfigService;
 use crate::services::auto_switch::AutoSwitchService;
+use crate::converters::claude_types::ClaudeRequest;
+use crate::converters::claude_to_gemini::convert_claude_request_to_gemini;
+use crate::converters::gemini_to_claude::{convert_gemini_response_to_claude, convert_gemini_stream_chunk_to_claude_events};
+use crate::converters::gemini_types::GeminiResponse;
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use http_body_util::{BodyExt, combinators::BoxBody};
-use hyper::body::Bytes;
+use http_body_util::{BodyExt, combinators::BoxBody, StreamBody};
+use hyper::body::{Bytes, Frame};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
@@ -26,6 +31,9 @@ use tokio::time::timeout;
 use tokio_rustls::TlsConnector;
 use rustls::pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncWrite};
+use futures_util::stream::Stream;
+use std::pin::Pin;
+use std::convert::Infallible;
 
 /// Request timeout in seconds (FR-012)
 /// Increased to 120s for streaming responses
@@ -431,7 +439,7 @@ impl RequestRouter {
 
         parts.uri = new_uri;
 
-        // 10.1 Filter unsupported fields from request body (for POST/PUT requests)
+        // 10.1 Handle API conversion based on provider type
         let body = if parts.method == hyper::Method::POST || parts.method == hyper::Method::PUT {
             // Collect request body
             let body_bytes = body.collect().await
@@ -440,48 +448,85 @@ impl RequestRouter {
                 })?
                 .to_bytes();
 
-            // Try to parse as JSON and filter unsupported fields
-            match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                Ok(mut json) => {
-                    // Remove unsupported fields
-                    if let Some(obj) = json.as_object_mut() {
-                        let removed_fields: Vec<String> = obj.keys()
-                            .filter(|k| k.as_str() == "context_management")
-                            .cloned()
-                            .collect();
+            // Check provider type and perform conversion if needed
+            let processed_bytes = match config.provider_type {
+                ProviderType::Gemini => {
+                    log::info!("Converting Claude request to Gemini format");
 
-                        for field in &removed_fields {
-                            obj.remove(field);
-                            log::debug!("Filtered unsupported field from request: {}", field);
-                        }
-                    }
-
-                    // Serialize back to bytes
-                    let filtered_bytes = serde_json::to_vec(&json)
-                        .map_err(|e| AppError::ServiceError {
-                            message: format!("Failed to serialize filtered request: {}", e),
+                    // Parse Claude request
+                    let claude_req: ClaudeRequest = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Claude request: {}", e),
                         })?;
 
-                    // Update Content-Length header
-                    parts.headers.insert(
-                        hyper::header::CONTENT_LENGTH,
-                        filtered_bytes.len().to_string().parse().unwrap()
-                    );
+                    // Convert to Gemini format
+                    // Extract model name from config or use default
+                    let gemini_model = config.default_model
+                        .as_ref()
+                        .filter(|m| !m.is_empty())
+                        .map(|m| m.as_str())
+                        .unwrap_or("gemini-pro");
 
-                    use http_body_util::Full;
-                    Full::new(Bytes::from(filtered_bytes))
-                        .map_err(|e| match e {})
-                        .boxed()
+                    let (gemini_req, gemini_path) = convert_claude_request_to_gemini(&claude_req, gemini_model)?;
+
+                    // Update target path to Gemini API endpoint
+                    // Gemini API expects path like /v1beta/models/{model}:generateContent
+                    let gemini_uri = gemini_path.parse::<hyper::Uri>()
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to parse Gemini URI: {}", e),
+                        })?;
+                    parts.uri = gemini_uri;
+
+                    log::info!("Updated request URI to Gemini endpoint: {}", gemini_path);
+
+                    // Serialize Gemini request
+                    serde_json::to_vec(&gemini_req)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Gemini request: {}", e),
+                        })?
+                },
+                ProviderType::Claude => {
+                    // For Claude API, filter unsupported fields
+                    match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                        Ok(mut json) => {
+                            // Remove unsupported fields
+                            if let Some(obj) = json.as_object_mut() {
+                                let removed_fields: Vec<String> = obj.keys()
+                                    .filter(|k| k.as_str() == "context_management")
+                                    .cloned()
+                                    .collect();
+
+                                for field in &removed_fields {
+                                    obj.remove(field);
+                                    log::debug!("Filtered unsupported field from request: {}", field);
+                                }
+                            }
+
+                            // Serialize back to bytes
+                            serde_json::to_vec(&json)
+                                .map_err(|e| AppError::ServiceError {
+                                    message: format!("Failed to serialize filtered request: {}", e),
+                                })?
+                        }
+                        Err(_) => {
+                            // Not JSON or parsing failed, use original body
+                            log::debug!("Request body is not JSON, forwarding as-is");
+                            body_bytes.to_vec()
+                        }
+                    }
                 }
-                Err(_) => {
-                    // Not JSON or parsing failed, use original body
-                    log::debug!("Request body is not JSON, forwarding as-is");
-                    use http_body_util::Full;
-                    Full::new(body_bytes)
-                        .map_err(|e| match e {})
-                        .boxed()
-                }
-            }
+            };
+
+            // Update Content-Length header
+            parts.headers.insert(
+                hyper::header::CONTENT_LENGTH,
+                processed_bytes.len().to_string().parse().unwrap()
+            );
+
+            use http_body_util::Full;
+            Full::new(Bytes::from(processed_bytes))
+                .map_err(|e| match e {})
+                .boxed()
         } else {
             // For GET/DELETE, just forward the body as-is
             body.boxed()
@@ -614,20 +659,120 @@ impl RequestRouter {
             });
         }
 
-        // 11. Success response - Stream response body directly (DO NOT collect)
-        // This is critical for SSE (Server-Sent Events) responses from Claude API
-        // which stream data over a long period of time
-        let body = response.into_body();
-        let boxed_body = body.boxed();
+        // 11. Success response - Handle conversion for Gemini responses
+        match config.provider_type {
+            ProviderType::Gemini => {
+                log::info!("Converting Gemini response to Claude format");
 
-        // 12. Construct streaming response
-        let mut resp = Response::new(boxed_body);
-        *resp.status_mut() = status;
-        *resp.headers_mut() = headers;
+                // Check if response is streaming based on content-type
+                let is_streaming = headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
+                    .unwrap_or(false);
 
-        log::info!("Streaming successful response back to client (status: {})", status);
+                if is_streaming {
+                    // Handle streaming Gemini responses
+                    log::info!("Converting Gemini streaming response to Claude SSE format");
 
-        Ok(resp)
+                    // Extract model name for conversion
+                    let claude_model = "claude-sonnet-4-5-20250929".to_string();
+
+                    // Get the response body as a stream
+                    let body = response.into_body();
+
+                    // Create a stream that converts Gemini JSON lines to Claude SSE events
+                    // The stream never fails - errors are converted to SSE error events
+                    let converted_stream = Self::convert_gemini_stream(body, claude_model);
+
+                    // Map Infallible to hyper::Error (this never actually produces an error)
+                    use futures_util::TryStreamExt;
+                    let mapped_stream = converted_stream.map_err(|e: Infallible| match e {});
+
+                    // Wrap the stream in a StreamBody and box it using BodyExt
+                    let stream_body = StreamBody::new(mapped_stream);
+                    let boxed_body = BodyExt::boxed(stream_body);
+
+                    // Build response with SSE headers
+                    let mut resp = Response::new(boxed_body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+
+                    // Ensure Content-Type is set to SSE
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_TYPE,
+                        "text/event-stream".parse().unwrap()
+                    );
+
+                    log::info!("Streaming Gemini response conversion started");
+                    Ok(resp)
+                } else {
+                    // Non-streaming response: collect, convert, and return
+                    let body_bytes = response.into_body()
+                        .collect()
+                        .await
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to read Gemini response body: {}", e),
+                        })?
+                        .to_bytes();
+
+                    // Parse Gemini response
+                    let gemini_resp: GeminiResponse = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Gemini response: {}", e),
+                        })?;
+
+                    // Convert to Claude format
+                    // Use the original Claude model name from the request
+                    let claude_model = "claude-sonnet-4-5-20250929"; // Default, could be extracted from original request
+                    let claude_resp = convert_gemini_response_to_claude(&gemini_resp, claude_model)?;
+
+                    // Serialize Claude response
+                    let claude_bytes = serde_json::to_vec(&claude_resp)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Claude response: {}", e),
+                        })?;
+
+                    log::info!("Successfully converted Gemini response to Claude format");
+
+                    // Save length before moving claude_bytes
+                    let content_length = claude_bytes.len();
+
+                    // Return converted response
+                    use http_body_util::Full;
+                    let body = Full::new(Bytes::from(claude_bytes))
+                        .map_err(|e| match e {})
+                        .boxed();
+
+                    let mut resp = Response::new(body);
+                    *resp.status_mut() = status;
+                    // Keep original headers but update Content-Length
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_LENGTH,
+                        content_length.to_string().parse().unwrap()
+                    );
+
+                    Ok(resp)
+                }
+            },
+            ProviderType::Claude => {
+                // Claude API response - Stream response body directly (DO NOT collect)
+                // This is critical for SSE (Server-Sent Events) responses from Claude API
+                // which stream data over a long period of time
+                let body = response.into_body();
+                let boxed_body = body.boxed();
+
+                // 12. Construct streaming response
+                let mut resp = Response::new(boxed_body);
+                *resp.status_mut() = status;
+                *resp.headers_mut() = headers;
+
+                log::info!("Streaming successful response back to client (status: {})", status);
+
+                Ok(resp)
+            }
+        }
     }
 
     /// Update ProxyService current_config_id in database
@@ -641,6 +786,90 @@ impl RequestRouter {
             })?;
             Ok(())
         })
+    }
+
+    /// Convert Gemini streaming response to Claude SSE format
+    ///
+    /// Gemini streams newline-delimited JSON objects, we convert them to Claude SSE events
+    /// This stream never fails - all errors are converted to SSE error events
+    fn convert_gemini_stream(
+        body: Incoming,
+        claude_model: String,
+    ) -> Pin<Box<dyn Stream<Item = Result<Frame<Bytes>, Infallible>> + Send + Sync>> {
+        Box::pin(futures_util::stream::unfold(
+            (body, claude_model, Vec::new(), true),
+            |(mut body, claude_model, mut buffer, mut is_first_chunk)| async move {
+                loop {
+                    // Try to get the next frame from the body
+                    match body.frame().await {
+                        Some(Ok(frame)) => {
+                            // Only process data frames
+                            if let Some(data) = frame.data_ref() {
+                                buffer.extend_from_slice(data);
+
+                                // Process complete lines (delimited by \n)
+                                if let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+                                    // Extract the line
+                                    let line_bytes = buffer.drain(..=newline_pos).collect::<Vec<_>>();
+                                    let line = String::from_utf8_lossy(&line_bytes).trim().to_string();
+
+                                    // Skip empty lines
+                                    if line.is_empty() {
+                                        continue;
+                                    }
+
+                                    // Convert Gemini JSON chunk to Claude SSE events
+                                    match convert_gemini_stream_chunk_to_claude_events(
+                                        &line,
+                                        &claude_model,
+                                        is_first_chunk,
+                                    ) {
+                                        Ok(events) => {
+                                            is_first_chunk = false;
+
+                                            // Combine all events into a single string
+                                            let combined_events = events.join("");
+
+                                            // Return the SSE events as a data frame
+                                            let frame = Frame::data(Bytes::from(combined_events));
+                                            return Some((
+                                                Ok(frame),
+                                                (body, claude_model, buffer, is_first_chunk),
+                                            ));
+                                        }
+                                        Err(e) => {
+                                            log::error!("Failed to convert Gemini stream chunk: {}", e);
+                                            // Return error as SSE event instead of failing the stream
+                                            let error_msg = format!("event: error\ndata: {{\"error\": \"{}\"}}\n\n", e);
+                                            let frame = Frame::data(Bytes::from(error_msg));
+                                            return Some((
+                                                Ok(frame),
+                                                (body, claude_model, buffer, is_first_chunk),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Some(Err(e)) => {
+                            log::error!("Error reading Gemini stream: {}", e);
+                            // Return error as SSE event and end stream
+                            let error_msg = format!("event: error\ndata: {{\"error\": \"Stream error: {}\"}}\n\n", e);
+                            let frame = Frame::data(Bytes::from(error_msg));
+                            return Some((
+                                Ok(frame),
+                                (body, claude_model, Vec::new(), false),
+                            ));
+                        }
+                        None => {
+                            // Stream ended
+                            log::info!("Gemini stream conversion completed");
+                            return None;
+                        }
+                    }
+                }
+            },
+        ))
     }
 
     /// Classify error type for auto-switch trigger

@@ -200,15 +200,6 @@ impl ProxyService {
         let server_status = self.server.status().await;
         let config = self.server.config().await;
 
-        // Map server status to ProxyStatus
-        let status = match server_status {
-            ProxyServerStatus::Stopped => ProxyStatus::Stopped,
-            ProxyServerStatus::Starting => ProxyStatus::Starting,
-            ProxyServerStatus::Running => ProxyStatus::Running,
-            ProxyServerStatus::Stopping => ProxyStatus::Stopping,
-            ProxyServerStatus::Error => ProxyStatus::Error,
-        };
-
         // Get active configuration details
         let active_config = if let Some(config_id) = config.active_config_id {
             self.db_pool
@@ -233,6 +224,35 @@ impl ProxyService {
             None
         };
 
+        // Check if current active config is unavailable
+        // If the service is running but the active config became unavailable,
+        // set status to Error to alert the user
+        let status = match server_status {
+            ProxyServerStatus::Stopped => ProxyStatus::Stopped,
+            ProxyServerStatus::Starting => ProxyStatus::Starting,
+            ProxyServerStatus::Stopping => ProxyStatus::Stopping,
+            ProxyServerStatus::Error => ProxyStatus::Error,
+            ProxyServerStatus::Running => {
+                // Check if active config is still available
+                if let Some(ref config) = active_config {
+                    if !config.is_available {
+                        log::warn!(
+                            "Proxy is running but active config '{}' (id: {}) is now unavailable",
+                            config.name,
+                            config.id
+                        );
+                        ProxyStatus::Error
+                    } else {
+                        ProxyStatus::Running
+                    }
+                } else {
+                    // No active config - this shouldn't happen if running
+                    log::warn!("Proxy is running but no active config found");
+                    ProxyStatus::Error
+                }
+            }
+        };
+
         Ok(ProxyServiceModel {
             status,
             listen_host: config.host,
@@ -242,6 +262,20 @@ impl ProxyService {
             active_config_id: config.active_config_id,
             active_config_name: active_config.map(|c| c.name),
         })
+    }
+
+    /// Refresh and broadcast proxy status
+    ///
+    /// Fetches current status and emits status change events to update UI.
+    /// This is useful when configuration changes externally and UI needs to be notified.
+    ///
+    /// # Returns
+    /// - ProxyServiceModel with current status
+    pub async fn refresh_status(&self) -> AppResult<ProxyServiceModel> {
+        let status = self.get_status().await?;
+        self.emit_status_changed(&status).await;
+        self.update_tray_status(&status).await;
+        Ok(status)
     }
 
     /// Switch to a different configuration group

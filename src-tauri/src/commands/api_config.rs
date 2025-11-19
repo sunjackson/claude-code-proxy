@@ -2,6 +2,7 @@ use crate::db::pool::DbPool;
 use crate::models::api_config::{ApiConfig, CreateApiConfigInput, UpdateApiConfigInput};
 use crate::models::error::AppResult;
 use crate::services::ApiConfigService;
+use crate::commands::proxy_service::ProxyServiceState;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -52,15 +53,44 @@ pub fn get_api_config(id: i64, pool: State<'_, Arc<DbPool>>) -> AppResult<ApiCon
 ///
 /// # 参数
 /// - `pool`: 数据库连接池
+/// - `proxy_state`: 代理服务状态
 /// - `input`: 更新输入参数
+///
+/// # 说明
+/// 如果更新的是当前激活的配置，并且将其标记为不可用，
+/// 会触发代理状态刷新以通知UI显示错误状态
 #[tauri::command]
-pub fn update_api_config(
+pub async fn update_api_config(
     input: UpdateApiConfigInput,
     pool: State<'_, Arc<DbPool>>,
+    proxy_state: State<'_, ProxyServiceState>,
 ) -> AppResult<ApiConfig> {
     log::info!("更新 API 配置: ID {}", input.id);
 
-    pool.with_connection(|conn| ApiConfigService::update_config(conn, &input))
+    // 执行更新
+    let updated_config = pool.with_connection(|conn| ApiConfigService::update_config(conn, &input))?;
+
+    // 检查是否需要触发代理状态刷新
+    // 如果更新的是 is_available 字段，并且这个配置是当前激活的配置
+    if input.is_available.is_some() {
+        let proxy_service = proxy_state.service();
+        let current_status = proxy_service.get_status().await?;
+
+        // 如果这个配置是当前激活的配置
+        if current_status.active_config_id == Some(input.id) {
+            log::info!(
+                "已更新当前激活配置的可用性: {} -> is_available={}",
+                updated_config.name,
+                updated_config.is_available
+            );
+
+            // 触发状态刷新以通知UI更新
+            let proxy_service = proxy_state.service();
+            let _ = proxy_service.refresh_status().await;
+        }
+    }
+
+    Ok(updated_config)
 }
 
 /// 删除 API 配置

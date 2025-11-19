@@ -20,5 +20,8 @@ pub mod commands;
 // Proxy module
 pub mod proxy;
 
+// Converters module (API格式转换)
+pub mod converters;
+
 // Tray module
 pub mod tray;

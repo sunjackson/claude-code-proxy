@@ -112,6 +112,10 @@ pub enum AppError {
     #[error("路径不存在: {path}")]
     PathNotFound { path: String },
 
+    /// API 格式转换失败
+    #[error("API 格式转换失败: {message}")]
+    ConversionError { message: String },
+
     /// 没有可用配置
     #[error("没有可用配置")]
     NoConfigAvailable,
@@ -166,6 +170,7 @@ impl AppError {
             AppError::FileWriteError { .. } => "FileWriteError".to_string(),
             AppError::BackupFailed { .. } => "BackupFailed".to_string(),
             AppError::PathNotFound { .. } => "PathNotFound".to_string(),
+            AppError::ConversionError { .. } => "ConversionError".to_string(),
             AppError::NoConfigAvailable => "NoConfigAvailable".to_string(),
         }
     }

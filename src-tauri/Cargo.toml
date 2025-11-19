@@ -68,6 +68,9 @@ dirs = "5.0"
 # 随机数生成 (用于重试抖动)
 rand = "0.8"
 
+# UUID 生成 (用于响应ID生成)
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!

@@ -51,6 +51,11 @@ export const categoryColors: Record<ProviderCategory, { bg: string; text: string
 };
 
 /**
+ * Provider Type (API 提供商类型)
+ */
+export type ProviderType = 'claude' | 'gemini';
+
+/**
  * Provider Preset 接口
  */
 export interface ProviderPreset {
@@ -60,6 +65,8 @@ export interface ProviderPreset {
   name: string;
   /** 供应商分类 */
   category: ProviderCategory;
+  /** API 提供商类型 (Claude 或 Gemini) */
+  providerType?: ProviderType;
   /** 供应商网站 */
   websiteUrl: string;
   /** API Key 获取地址 (可选,如果与 websiteUrl 不同) */
@@ -102,6 +109,7 @@ export const providerPresets: ProviderPreset[] = [
     id: 'claude-official',
     name: 'Claude Official',
     category: 'official',
+    providerType: 'claude',
     websiteUrl: 'https://www.anthropic.com/claude-code',
     description: 'Anthropic 官方 Claude API',
     isRecommended: true,
@@ -113,6 +121,24 @@ export const providerPresets: ProviderPreset[] = [
     smallFastModel: 'claude-haiku-4-5-20251001',
     apiTimeoutMs: 600000,
     maxOutputTokens: 65000,
+  },
+  {
+    id: 'gemini-official',
+    name: 'Google Gemini',
+    category: 'official',
+    providerType: 'gemini',
+    websiteUrl: 'https://ai.google.dev',
+    apiKeyUrl: 'https://aistudio.google.com/app/apikey',
+    description: 'Google 官方 Gemini API - 支持 Gemini Pro 等模型',
+    isRecommended: true,
+    serverUrl: 'https://generativelanguage.googleapis.com',
+    defaultModel: 'gemini-pro',
+    haikuModel: 'gemini-1.5-flash',
+    sonnetModel: 'gemini-1.5-pro',
+    opusModel: 'gemini-1.5-pro-exp-0827',
+    smallFastModel: 'gemini-1.5-flash-8b',
+    apiTimeoutMs: 600000,
+    maxOutputTokens: 8192,
   },
 
   // ==================== 国内官方 ====================

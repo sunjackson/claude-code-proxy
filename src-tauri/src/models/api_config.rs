@@ -3,6 +3,31 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// API 提供商类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderType {
+    /// Claude API
+    Claude,
+    /// Gemini API
+    Gemini,
+}
+
+impl Default for ProviderType {
+    fn default() -> Self {
+        ProviderType::Claude
+    }
+}
+
+impl std::fmt::Display for ProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProviderType::Claude => write!(f, "claude"),
+            ProviderType::Gemini => write!(f, "gemini"),
+        }
+    }
+}
+
 /// 供应商分类
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -103,6 +128,10 @@ pub struct ApiConfig {
     /// 最后测试延迟(毫秒)
     pub last_latency_ms: Option<i32>,
 
+    /// API 提供商类型
+    #[serde(default)]
+    pub provider_type: ProviderType,
+
     /// 供应商分类
     #[serde(default)]
     pub category: VendorCategory,
@@ -177,6 +206,9 @@ pub struct CreateApiConfigInput {
     pub group_id: Option<i64>,
     pub sort_order: Option<i32>,
 
+    // API 提供商类型
+    pub provider_type: Option<ProviderType>,
+
     // 供应商配置
     pub category: Option<VendorCategory>,
     pub is_partner: Option<bool>,
@@ -222,6 +254,9 @@ pub struct UpdateApiConfigInput {
     pub group_id: Option<i64>,
     pub sort_order: Option<i32>,
     pub is_available: Option<bool>,
+
+    // API 提供商类型
+    pub provider_type: Option<ProviderType>,
 
     // 供应商配置
     pub category: Option<VendorCategory>,
@@ -441,6 +476,7 @@ mod tests {
             is_available: true,
             last_test_at: None,
             last_latency_ms: None,
+            provider_type: ProviderType::Claude,
             category: VendorCategory::Custom,
             is_partner: false,
             theme_icon: None,
@@ -482,6 +518,7 @@ mod tests {
             is_available: true,
             last_test_at: None,
             last_latency_ms: None,
+            provider_type: ProviderType::Claude,
             category: VendorCategory::Custom,
             is_partner: false,
             theme_icon: None,

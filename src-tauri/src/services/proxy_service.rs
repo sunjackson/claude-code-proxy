@@ -102,6 +102,8 @@ impl ProxyService {
                 self.db_pool.clone(),
                 status.active_group_id,
                 status.active_config_id,
+                status.active_config_name.clone(),
+                status_text,
             ) {
                 log::error!("Failed to update tray menu: {}", e);
             }

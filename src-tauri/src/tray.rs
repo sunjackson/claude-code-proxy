@@ -186,22 +186,8 @@ pub fn update_tray_status<R: Runtime>(
 
         tray.set_title(Some(&title))?;
         tray.set_tooltip(Some(&tooltip))?;
-
-        // 同时更新菜单中的状态项
-        update_status_menu_item(app, config_name.as_deref(), status_symbol, status_text)?;
     }
     Ok(())
-}
-
-/// 更新菜单中的状态显示项
-fn update_status_menu_item<R: Runtime>(
-    app: &AppHandle<R>,
-    config_name: Option<&str>,
-    status_symbol: &str,
-    status_text: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // 使用统一的菜单构建函数，传入状态信息，但不更新配置列表
-    rebuild_tray_menu(app, Some((status_symbol, status_text, config_name)), None, None)
 }
 
 /// 统一的托盘菜单构建函数
@@ -322,6 +308,8 @@ pub fn update_tray_menu<R: Runtime>(
     db_pool: Arc<DbPool>,
     active_group_id: Option<i64>,
     active_config_id: Option<i64>,
+    active_config_name: Option<String>,
+    status: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 获取当前分组的所有可用配置
     let configs = db_pool.with_connection(|conn| {
@@ -339,10 +327,28 @@ pub fn update_tray_menu<R: Runtime>(
         .map(|c| (c.id, c.name, c.is_available))
         .collect();
 
-    // 使用统一的菜单构建函数，不传入状态信息（保持当前状态）
-    rebuild_tray_menu(app, None, Some(config_items.clone()), active_config_id)?;
+    // 将状态转换为符号和文本
+    let (status_symbol, status_text) = match status {
+        "运行中" => ("🟢", "运行中"),
+        "已停止" => ("⚪", "已停止"),
+        "启动中" => ("🟡", "启动中"),
+        "停止中" => ("🟡", "停止中"),
+        "错误" => ("🔴", "错误"),
+        _ => ("⚪", "未连接"),
+    };
 
-    log::debug!("托盘菜单已更新，共 {} 个可用配置", config_items.len());
+    // 使用统一的菜单构建函数，传入状态信息和配置列表
+    rebuild_tray_menu(
+        app,
+        Some((status_symbol, status_text, active_config_name.as_deref())),
+        Some(config_items.clone()),
+        active_config_id
+    )?;
+
+    log::debug!("托盘菜单已更新，共 {} 个可用配置，当前配置: {:?}",
+        config_items.len(),
+        active_config_name
+    );
 
     Ok(())
 }

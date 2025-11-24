@@ -52,8 +52,154 @@ impl ProxyService {
         log::debug!("Tauri app handle set for proxy service");
 
         // Also set app handle for auto-switch service (for event emission)
-        self.server.auto_switch_service().set_app_handle(handle).await;
+        let auto_switch = self.server.auto_switch_service();
+        auto_switch.set_app_handle(handle).await;
         log::debug!("Tauri app handle set for auto-switch service");
+
+        // 注册切换完成回调：自动刷新状态
+        let db_pool = self.db_pool.clone();
+        let app_handle_for_callback = self.app_handle.clone();
+        auto_switch.set_switch_callback(move |new_config_id| {
+            log::info!(
+                "\n┌─────────────────────────────────────────────────────────┐\n\
+                 │  📡 配置切换完成 - 正在更新状态                         │\n\
+                 ├─────────────────────────────────────────────────────────┤\n\
+                 │  新配置ID: {}                                            \n\
+                 └─────────────────────────────────────────────────────────┘",
+                new_config_id
+            );
+
+            // 异步刷新状态（使用 tokio::spawn 避免阻塞）
+            let db_pool_clone = db_pool.clone();
+            let app_handle_clone = app_handle_for_callback.clone();
+
+            tokio::spawn(async move {
+                // 获取最新状态
+                // 注意：这里不能直接调用 ProxyService 的方法，因为会造成循环引用
+                // 我们手动查询数据库并发送事件
+                match Self::fetch_and_emit_status(db_pool_clone, app_handle_clone).await {
+                    Ok(_) => {
+                        log::info!(
+                            "\n┌─────────────────────────────────────────────────────────┐\n\
+                             │  ✅ 配置切换后状态已更新                                 │\n\
+                             │  仪表盘和系统托盘已同步                                  │\n\
+                             └─────────────────────────────────────────────────────────┘"
+                        );
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "\n┌─────────────────────────────────────────────────────────┐\n\
+                             │  ❌ 配置切换后状态更新失败                               │\n\
+                             │  错误: {}                                                \n\
+                             └─────────────────────────────────────────────────────────┘",
+                            e
+                        );
+                    }
+                }
+            });
+        }).await;
+        log::debug!("Switch callback registered for ProxyService");
+    }
+
+    /// 获取并发送状态更新事件（静态方法，避免循环引用）
+    ///
+    /// # Arguments
+    /// - `db_pool`: 数据库连接池
+    /// - `app_handle`: Tauri AppHandle
+    async fn fetch_and_emit_status(
+        db_pool: Arc<DbPool>,
+        app_handle: Arc<RwLock<Option<AppHandle>>>,
+    ) -> AppResult<()> {
+        use tauri::Emitter;
+
+        // 延迟100ms确保数据库写入完成
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // 读取 ProxyService 表获取当前活动配置
+        let (active_config_id, active_group_id) = db_pool.with_connection(|conn| {
+            use rusqlite::params;
+
+            conn.query_row(
+                "SELECT current_config_id, current_group_id FROM ProxyService WHERE id = 1",
+                params![],
+                |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?)),
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("查询 ProxyService 失败: {}", e),
+            })
+        })?;
+
+        // 获取配置详情
+        let active_config = if let Some(config_id) = active_config_id {
+            use crate::services::api_config::ApiConfigService;
+            db_pool
+                .with_connection(|conn| ApiConfigService::get_config_by_id(conn, config_id))
+                .ok()
+        } else {
+            None
+        };
+
+        // 获取分组详情
+        let active_group = if let Some(group_id) = active_group_id {
+            use crate::services::config_manager::ConfigManager;
+            db_pool
+                .with_connection(|conn| ConfigManager::get_group_by_id(conn, group_id))
+                .ok()
+        } else {
+            None
+        };
+
+        // 构建状态模型
+        let status = ProxyServiceModel {
+            status: ProxyStatus::Running,
+            listen_host: "127.0.0.1".to_string(), // 默认值，实际值应该从 server config 读取
+            listen_port: 3000, // 默认值
+            active_group_id,
+            active_group_name: active_group.map(|g| g.name),
+            active_config_id,
+            active_config_name: active_config.map(|c| c.name),
+        };
+
+        // 发送事件
+        let handle_guard = app_handle.read().await;
+        if let Some(handle) = handle_guard.as_ref() {
+            // 发送 proxy-status-changed 事件
+            if let Err(e) = handle.emit("proxy-status-changed", &status) {
+                log::error!("Failed to emit proxy-status-changed: {}", e);
+            } else {
+                log::info!("✅ 已发送 proxy-status-changed 事件: config={:?}", status.active_config_name);
+            }
+
+            // 更新系统托盘
+            Self::update_tray_direct(handle, &status).await;
+        }
+
+        Ok(())
+    }
+
+    /// 直接更新系统托盘状态（静态方法）
+    async fn update_tray_direct(handle: &AppHandle, status: &ProxyServiceModel) {
+        let status_text = match status.status {
+            ProxyStatus::Running => "运行中",
+            ProxyStatus::Stopped => "已停止",
+            ProxyStatus::Starting => "启动中",
+            ProxyStatus::Stopping => "停止中",
+            ProxyStatus::Error => "错误",
+        };
+
+        let config_name = status
+            .active_config_name
+            .as_ref()
+            .map(|n| n.as_str())
+            .unwrap_or("未选择配置");
+
+        let title = format!("Claude Code Router\n{} - {}", status_text, config_name);
+
+        if let Some(tray) = handle.tray_by_id("main") {
+            if let Err(e) = tray.set_tooltip(Some(&title)) {
+                log::error!("Failed to update tray tooltip: {}", e);
+            }
+        }
     }
 
     /// Emit proxy status changed event

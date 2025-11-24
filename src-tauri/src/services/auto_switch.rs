@@ -20,12 +20,17 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
 
+/// 切换完成回调类型
+pub type SwitchCallback = Arc<dyn Fn(i64) -> () + Send + Sync>;
+
 /// 自动切换服务
 pub struct AutoSwitchService {
     db_pool: Arc<DbPool>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
     retry_manager: Arc<RetryManager>,
     error_classifier: ErrorClassifier,
+    /// 切换完成回调（用于通知 ProxyService 更新状态）
+    on_switch_callback: Arc<RwLock<Option<SwitchCallback>>>,
 }
 
 impl AutoSwitchService {
@@ -44,6 +49,7 @@ impl AutoSwitchService {
             app_handle: Arc::new(RwLock::new(None)),
             retry_manager: Arc::new(RetryManager::new(default_strategy)),
             error_classifier: ErrorClassifier,
+            on_switch_callback: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -53,6 +59,19 @@ impl AutoSwitchService {
         let mut app_handle = self.app_handle.write().await;
         *app_handle = Some(handle);
         log::debug!("Tauri app handle set for auto switch service");
+    }
+
+    /// 设置切换完成回调
+    ///
+    /// # Arguments
+    /// - `callback`: 切换完成时调用的回调函数，参数为新配置 ID
+    pub async fn set_switch_callback<F>(&self, callback: F)
+    where
+        F: Fn(i64) -> () + Send + Sync + 'static,
+    {
+        let mut cb = self.on_switch_callback.write().await;
+        *cb = Some(Arc::new(callback));
+        log::debug!("Switch callback registered");
     }
 
     /// 处理故障并执行自动切换
@@ -74,8 +93,14 @@ impl AutoSwitchService {
         error_message: Option<String>,
         latency_before_ms: Option<i32>,
     ) -> AppResult<Option<i64>> {
-        log::info!(
-            "处理故障切换: config_id={}, group_id={}, reason={:?}",
+        log::warn!(
+            "\n╔════════════════════════════════════════════════════════════╗\n\
+             ║  ⚠️  故障检测 - 准备切换配置                              ║\n\
+             ╠════════════════════════════════════════════════════════════╣\n\
+             ║  当前配置: {}                                               \n\
+             ║  分组ID: {}                                                 \n\
+             ║  切换原因: {:?}                                            \n\
+             ╚════════════════════════════════════════════════════════════╝",
             current_config_id,
             group_id,
             reason
@@ -124,7 +149,12 @@ impl AutoSwitchService {
                     .await?;
 
                 log::info!(
-                    "自动切换成功: {} → {}, log_id={}",
+                    "\n╔════════════════════════════════════════════════════════════╗\n\
+                     ║  ✅ 配置切换成功                                           ║\n\
+                     ╠════════════════════════════════════════════════════════════╣\n\
+                     ║  原配置ID: {} → 新配置ID: {}                               \n\
+                     ║  切换日志ID: {}                                            \n\
+                     ╚════════════════════════════════════════════════════════════╝",
                     current_config_id,
                     next_config_id,
                     log_id
@@ -173,7 +203,13 @@ impl AutoSwitchService {
         let (error_type, recoverability) = self.error_classifier.classify(&error_message);
 
         log::info!(
-            "错误分类: config_id={}, error_type={:?}, recoverability={:?}",
+            "\n┌─────────────────────────────────────────────────────────┐\n\
+             │  🔍 错误分析                                             │\n\
+             ├─────────────────────────────────────────────────────────┤\n\
+             │  配置ID: {}                                              \n\
+             │  错误类型: {:?}                                          \n\
+             │  可恢复性: {:?}                                          \n\
+             └─────────────────────────────────────────────────────────┘",
             current_config_id,
             error_type,
             recoverability
@@ -182,9 +218,16 @@ impl AutoSwitchService {
         // T039: 不可恢复错误 → 立即切换
         if recoverability.should_switch_immediately() {
             log::warn!(
-                "检测到不可恢复错误，立即切换: config_id={}, error_type={:?}",
+                "\n╔════════════════════════════════════════════════════════════╗\n\
+                 ║  🚨 不可恢复错误 - 立即切换配置                            ║\n\
+                 ╠════════════════════════════════════════════════════════════╣\n\
+                 ║  配置ID: {}                                                 \n\
+                 ║  错误类型: {:?}                                            \n\
+                 ║  错误信息: {}                                               \n\
+                 ╚════════════════════════════════════════════════════════════╝",
                 current_config_id,
-                error_type
+                error_type,
+                error_message
             );
 
             let reason = match error_type {
@@ -214,9 +257,16 @@ impl AutoSwitchService {
         if !should_retry {
             // 达到最大重试次数 → 切换到下一个配置
             log::warn!(
-                "达到最大重试次数，切换配置: config_id={}, retry_count={}",
+                "\n╔════════════════════════════════════════════════════════════╗\n\
+                 ║  ⏭️  达到最大重试次数 - 切换到下一个配置                   ║\n\
+                 ╠════════════════════════════════════════════════════════════╣\n\
+                 ║  配置ID: {}                                                 \n\
+                 ║  重试次数: {} / 3                                           \n\
+                 ║  错误类型: {:?}                                            \n\
+                 ╚════════════════════════════════════════════════════════════╝",
                 current_config_id,
-                current_retry_count
+                current_retry_count,
+                error_type
             );
 
             return self.switch_immediately(
@@ -239,18 +289,35 @@ impl AutoSwitchService {
         let new_retry_count = self.retry_manager.increment_failure(current_config_id);
 
         // T044: 详细日志记录
-        log::info!(
-            "准备重试: config_id={}, retry_count={}, delay_ms={}, error_type={:?}",
-            current_config_id,
-            new_retry_count,
-            retry_delay_ms,
-            error_type
-        );
-
         if recoverability.needs_rate_limit_delay() {
             log::warn!(
-                "限流错误，延迟 {} 毫秒后重试",
-                retry_delay_ms
+                "\n┌─────────────────────────────────────────────────────────┐\n\
+                 │  ⏸️  限流错误 - 等待后重试                              │\n\
+                 ├─────────────────────────────────────────────────────────┤\n\
+                 │  配置ID: {}                                              \n\
+                 │  重试次数: {} / 3                                        \n\
+                 │  等待时间: {} 毫秒                                       \n\
+                 │  错误类型: {:?}                                         \n\
+                 └─────────────────────────────────────────────────────────┘",
+                current_config_id,
+                new_retry_count,
+                retry_delay_ms,
+                error_type
+            );
+        } else {
+            log::info!(
+                "\n┌─────────────────────────────────────────────────────────┐\n\
+                 │  🔄 可恢复错误 - 准备重试                               │\n\
+                 ├─────────────────────────────────────────────────────────┤\n\
+                 │  配置ID: {}                                              \n\
+                 │  重试次数: {} / 3                                        \n\
+                 │  延迟时间: {} 毫秒                                       \n\
+                 │  错误类型: {:?}                                         \n\
+                 └─────────────────────────────────────────────────────────┘",
+                current_config_id,
+                new_retry_count,
+                retry_delay_ms,
+                error_type
             );
         }
 
@@ -322,7 +389,13 @@ impl AutoSwitchService {
                     .await?;
 
                 log::info!(
-                    "立即切换成功: {} → {}, retry_count={}, log_id={}",
+                    "\n╔════════════════════════════════════════════════════════════╗\n\
+                     ║  ✅ 立即切换成功                                           ║\n\
+                     ╠════════════════════════════════════════════════════════════╣\n\
+                     ║  原配置ID: {} → 新配置ID: {}                               \n\
+                     ║  重试次数: {}                                              \n\
+                     ║  切换日志ID: {}                                            \n\
+                     ╚════════════════════════════════════════════════════════════╝",
                     current_config_id,
                     next_config_id,
                     retry_count,
@@ -554,9 +627,12 @@ impl AutoSwitchService {
     async fn emit_switch_triggered(&self, log_id: i64) {
         use tauri::Emitter;
         let app_handle = self.app_handle.read().await;
+
+        // 获取完整的日志详情
+        let detail_result = self.get_switch_log_detail(log_id);
+
         if let Some(handle) = app_handle.as_ref() {
-            // 获取完整的日志详情
-            match self.get_switch_log_detail(log_id) {
+            match &detail_result {
                 Ok(detail) => {
                     if let Err(e) = handle.emit("auto-switch-triggered", detail) {
                         log::error!("Failed to emit auto-switch-triggered event: {}", e);
@@ -569,6 +645,35 @@ impl AutoSwitchService {
                 }
             }
         }
+
+        // 调用切换完成回调（通知 ProxyService 更新状态）
+        // 从日志中获取 target_config_id
+        if let Ok(_detail) = detail_result {
+            // 查询 target_config_id
+            if let Ok(target_id) = self.get_target_config_id_from_log(log_id) {
+                let callback = self.on_switch_callback.read().await;
+                if let Some(cb) = callback.as_ref() {
+                    cb(target_id);
+                    log::debug!("Switch callback invoked for config {}", target_id);
+                }
+            }
+        }
+    }
+
+    /// 从日志中获取目标配置 ID
+    fn get_target_config_id_from_log(&self, log_id: i64) -> AppResult<i64> {
+        self.db_pool.with_connection(|conn| {
+            use rusqlite::params;
+
+            conn.query_row(
+                "SELECT target_config_id FROM SwitchLog WHERE id = ?1",
+                params![log_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("查询切换日志目标配置失败: {}", e),
+            })
+        })
     }
 
     /// 获取切换日志详情

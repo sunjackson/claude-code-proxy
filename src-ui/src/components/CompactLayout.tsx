@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
+import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import * as proxyApi from '../api/proxy';
 import type { ProxyService } from '../types/tauri';
 
@@ -17,10 +18,16 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
   const { currentLanguage, toggleLanguage } = useLanguage();
   const [proxyStatus, setProxyStatus] = useState<ProxyService | null>(null);
 
+  // 监听自动切换事件，实时更新状态
+  useAutoSwitch(() => {
+    loadStatus();
+  });
+
   // 加载代理状态
   useEffect(() => {
     loadStatus();
-    const interval = setInterval(loadStatus, 10000);
+    // 减少轮询间隔到3秒，确保状态及时更新
+    const interval = setInterval(loadStatus, 3000);
     return () => clearInterval(interval);
   }, []);
 

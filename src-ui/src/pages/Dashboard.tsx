@@ -759,12 +759,18 @@ const Dashboard: React.FC = () => {
                 {sortedConfigs.map((config) => (
                   <div
                     key={config.id}
-                    className="bg-gradient-to-br from-gray-900 via-gray-900 to-black border border-gray-800 rounded-xl p-6 hover:border-yellow-500/60 transition-all duration-300 hover:shadow-xl hover:shadow-yellow-500/10 hover:scale-[1.01]"
+                    className={`bg-gradient-to-br from-gray-900 via-gray-900 to-black rounded-xl p-6 transition-all duration-300 ${
+                      proxyStatus?.active_config_id === config.id
+                        ? 'border-2 border-yellow-500 shadow-xl shadow-yellow-500/20 ring-2 ring-yellow-500/30'
+                        : 'border border-gray-800 hover:border-yellow-500/60 hover:shadow-xl hover:shadow-yellow-500/10 hover:scale-[1.01]'
+                    }`}
                   >
                     {/* 标题栏：配置名 + 标签 + 操作按钮 */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-lg font-semibold text-white">{config.name}</h3>
+                        <h3 className={`text-lg font-semibold ${
+                          proxyStatus?.active_config_id === config.id ? 'text-yellow-400' : 'text-white'
+                        }`}>{config.name}</h3>
 
                         {/* 分类标签 */}
                         {config.category && config.category !== 'custom' && (
@@ -786,6 +792,14 @@ const Dashboard: React.FC = () => {
                               <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                             </svg>
                             合作伙伴
+                          </span>
+                        )}
+
+                        {/* 活跃标签 - 当前正在使用的配置 */}
+                        {proxyStatus?.active_config_id === config.id && (
+                          <span className="px-2.5 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded-md border border-yellow-500/50 shadow-lg shadow-yellow-500/20">
+                            <span className="inline-block w-1.5 h-1.5 bg-yellow-400 rounded-full mr-1.5 animate-pulse"></span>
+                            活跃
                           </span>
                         )}
 

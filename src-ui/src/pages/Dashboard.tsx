@@ -296,22 +296,59 @@ const Dashboard: React.FC = () => {
   // 获取当前分组
   const currentGroup = groups.find(g => g.id === proxyStatus?.active_group_id);
 
-  // 计算延迟的健康度(0-100)
-  const getHealthScore = (latency?: number | null): number => {
-    if (!latency || latency <= 0) return 0;
-    if (latency < 100) return 100;
-    if (latency < 200) return 90;
-    if (latency < 300) return 70;
-    if (latency < 500) return 50;
-    return 30;
-  };
+  // 获取信号图标和颜色（基于延迟）
+  const getSignalIcon = (latency?: number | null): { icon: JSX.Element; color: string; label: string } => {
+    if (!latency || latency <= 0) {
+      // 离线
+      return {
+        icon: (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+          </svg>
+        ),
+        color: 'text-gray-500',
+        label: '离线'
+      };
+    }
 
-  // 获取健康度颜色
-  const getHealthColor = (score: number): string => {
-    if (score >= 90) return 'bg-green-500';
-    if (score >= 70) return 'bg-yellow-500';
-    if (score >= 50) return 'bg-orange-500';
-    return 'bg-red-500';
+    if (latency < 1000) {
+      // 蓝色 - 低延迟 (满信号)
+      return {
+        icon: (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+          </svg>
+        ),
+        color: 'text-blue-400',
+        label: '优秀'
+      };
+    }
+
+    if (latency < 3000) {
+      // 橙色 - 中等延迟 (中等信号)
+      return {
+        icon: (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" opacity="0.3"/>
+            <path d="M5 13l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13zm4 4l3 3 3-3c-1.65-1.66-4.34-1.66-6 0z"/>
+          </svg>
+        ),
+        color: 'text-orange-400',
+        label: '一般'
+      };
+    }
+
+    // 红色 - 高延迟 (弱信号)
+    return {
+      icon: (
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" opacity="0.15"/>
+          <path d="M9 17l3 3 3-3c-1.65-1.66-4.34-1.66-6 0z"/>
+        </svg>
+      ),
+      color: 'text-red-400',
+      label: '较差'
+    };
   };
 
   if (loading) {
@@ -342,75 +379,79 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* 服务状态卡片 */}
-        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+        {/* 服务状态卡片 - 简洁版 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-lg p-5 shadow-lg shadow-yellow-500/5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className={`w-4 h-4 rounded-full ${
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${
                 proxyStatus?.status === 'running'
-                  ? 'bg-green-500 animate-pulse'
+                  ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50'
                   : 'bg-gray-500'
               }`} />
               <div>
-                <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-                  {proxyStatus?.status === 'running' ? '运行中' : '已停止'}
-                </h2>
-                {proxyStatus?.active_config_name && (
-                  <p className="text-sm text-gray-400 mt-1">
-                    当前: <span className="text-yellow-400 font-medium">{proxyStatus.active_config_name}</span>
-                    {proxyStatus.status === 'running' && (
-                      <span className="text-gray-500 ml-3 font-mono text-xs">
-                        {proxyStatus.listen_host}:{proxyStatus.listen_port}
-                      </span>
-                    )}
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-yellow-400">
+                    {proxyStatus?.status === 'running' ? '运行中' : '已停止'}
+                  </span>
+                  {proxyStatus?.active_config_name && proxyStatus?.status === 'running' && (
+                    <>
+                      <span className="text-gray-600">·</span>
+                      <span className="text-sm text-gray-300">{proxyStatus.active_config_name}</span>
+                    </>
+                  )}
+                </div>
+                {proxyStatus?.status === 'running' && (
+                  <p className="text-xs text-gray-500 mt-0.5 font-mono">
+                    {proxyStatus.listen_host}:{proxyStatus.listen_port}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefreshStatus}
+                disabled={actionLoading}
+                className="w-9 h-9 flex items-center justify-center bg-gray-800 border border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-yellow-500/50 hover:text-yellow-400 disabled:opacity-50 rounded transition-all"
+                title="刷新"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+
               {proxyStatus?.status === 'running' ? (
                 <button
                   onClick={handleStopProxy}
                   disabled={actionLoading}
-                  className="px-6 py-3 bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600/30 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all font-medium"
+                  className="px-5 py-2 bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 hover:border-red-600/50 disabled:opacity-50 rounded transition-all font-medium text-sm"
                 >
-                  ⏸ 停止
+                  停止
                 </button>
               ) : (
                 <button
                   onClick={handleStartProxy}
                   disabled={actionLoading}
-                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-bold rounded-lg transition-all shadow-lg shadow-yellow-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-5 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-bold rounded transition-all shadow-lg shadow-yellow-500/30 disabled:opacity-50 text-sm"
                 >
-                  ▶️ 启动
+                  启动
                 </button>
               )}
-              <button
-                onClick={handleRefreshStatus}
-                disabled={actionLoading}
-                className="px-4 py-3 bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-yellow-500/50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all"
-                title="刷新"
-              >
-                🔄
-              </button>
             </div>
           </div>
         </div>
 
-        {/* 快速切换区域 */}
-        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
-          <h3 className="text-lg font-bold text-yellow-400 mb-4">快速切换</h3>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* 快速切换区域 - 紧凑版 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-lg p-4 shadow-lg shadow-yellow-500/5">
+          <div className="grid grid-cols-2 gap-3">
             {/* 分组选择 */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">分组</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">分组</label>
               <select
                 value={proxyStatus?.active_group_id ?? ''}
                 onChange={(e) => handleSwitchGroup(Number(e.target.value))}
                 disabled={actionLoading}
-                className="w-full px-4 py-2 bg-black border border-yellow-500/30 text-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 bg-black border border-gray-700 text-gray-200 rounded text-sm focus:outline-none focus:border-yellow-500 disabled:opacity-50"
               >
                 {groups.map(group => (
                   <option key={group.id} value={group.id}>
@@ -422,12 +463,12 @@ const Dashboard: React.FC = () => {
 
             {/* 配置选择 */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">配置</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">配置</label>
               <select
                 value={proxyStatus?.active_config_id ?? ''}
                 onChange={(e) => handleSwitchConfig(Number(e.target.value))}
                 disabled={actionLoading || currentGroupConfigs.length === 0}
-                className="w-full px-4 py-2 bg-black border border-yellow-500/30 text-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 bg-black border border-gray-700 text-gray-200 rounded text-sm focus:outline-none focus:border-yellow-500 disabled:opacity-50"
               >
                 {currentGroupConfigs.map(config => (
                   <option key={config.id} value={config.id}>
@@ -440,8 +481,8 @@ const Dashboard: React.FC = () => {
 
           {/* 自动切换开关 */}
           {currentGroup && (
-            <div className="flex items-center justify-between p-3 bg-black/30 border border-yellow-500/20 rounded-lg">
-              <span className="text-sm text-gray-300">自动切换</span>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800">
+              <span className="text-xs text-gray-400">自动切换</span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -450,148 +491,157 @@ const Dashboard: React.FC = () => {
                   disabled={actionLoading}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-yellow-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-yellow-500"></div>
               </label>
             </div>
           )}
         </div>
 
         {/* 配置列表 */}
-        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
-          <h3 className="text-lg font-bold text-yellow-400 mb-4">配置列表</h3>
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-lg p-5 shadow-lg shadow-yellow-500/5">
+          <h3 className="text-sm font-bold text-yellow-400 mb-3">配置列表</h3>
 
           {currentGroupConfigs.length === 0 ? (
             <div className="text-center text-gray-400 py-8">
               当前分组没有配置
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {currentGroupConfigs.map(config => {
-                const healthScore = getHealthScore(config.last_latency_ms);
+                const signal = getSignalIcon(config.last_latency_ms);
                 const isActive = config.id === proxyStatus?.active_config_id;
 
                 return (
                   <div
                     key={config.id}
-                    className={`p-4 rounded-lg border transition-all ${
+                    className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-yellow-500/10 border-yellow-500/50'
-                        : 'bg-black/30 border-gray-700 hover:border-yellow-500/30'
+                        ? 'bg-yellow-500/10 border-yellow-500/50 shadow-md'
+                        : 'bg-black/30 border-gray-700 hover:border-yellow-500/30 hover:bg-gray-800/30'
                     }`}
+                    onClick={() => !isActive && handleSwitchConfig(config.id)}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${
-                          config.is_available ? 'bg-green-500' : 'bg-gray-500'
-                        }`} />
-                        <span className={`font-medium ${
-                          isActive ? 'text-yellow-400' : 'text-gray-200'
-                        }`}>
-                          {config.name}
-                        </span>
-                        {isActive && (
-                          <span className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded text-xs text-yellow-400">
-                            活跃
-                          </span>
-                        )}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* 信号图标 */}
+                      <div className={signal.color}>
+                        {signal.icon}
                       </div>
-                      <span className="text-sm text-gray-400">
-                        {config.last_latency_ms ? `${config.last_latency_ms}ms` : '离线'}
-                      </span>
+
+                      {/* 配置名称 */}
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium truncate ${
+                            isActive ? 'text-yellow-400' : 'text-gray-200'
+                          }`}>
+                            {config.name}
+                          </span>
+                          {isActive && (
+                            <span className="px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded text-xs text-yellow-400 flex-shrink-0">
+                              活跃
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-xs ${signal.color}`}>
+                          {signal.label} {config.last_latency_ms ? `· ${config.last_latency_ms}ms` : ''}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* 健康度进度条 */}
-                    <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full ${getHealthColor(healthScore)} transition-all`}
-                        style={{ width: `${healthScore}%` }}
-                      />
-                    </div>
+                    {/* 可用状态指示 */}
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      config.is_available ? 'bg-green-500' : 'bg-gray-500'
+                    }`} />
                   </div>
                 );
               })}
             </div>
           )}
 
-          <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-sm text-gray-400">
+          <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
             <span>共 {currentGroupConfigs.length} 个配置</span>
-            <span>
-              {currentGroupConfigs.filter(c => c.is_available).length} 个可用 |
-              {currentGroupConfigs.filter(c => !c.is_available).length} 个离线
-            </span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span>{currentGroupConfigs.filter(c => c.is_available).length} 可用</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-gray-500" />
+                <span>{currentGroupConfigs.filter(c => !c.is_available).length} 离线</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Claude Code 集成状态 */}
-        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-4 shadow-lg shadow-yellow-500/5">
+        {/* Claude Code 集成状态 - 简洁版 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-lg p-4 shadow-lg shadow-yellow-500/5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-300">Claude Code 集成:</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Claude Code:</span>
               {claudeCodeProxyConfig ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                  <span className="text-sm text-green-400 font-medium">已连接</span>
-                  <span className="text-xs text-gray-500 font-mono">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+                  <span className="text-xs text-green-400 font-medium">已连接</span>
+                  <span className="text-xs text-gray-600 font-mono">
                     {claudeCodeProxyConfig.host}:{claudeCodeProxyConfig.port}
                   </span>
                 </div>
               ) : (
-                <span className="text-sm text-gray-400">未连接</span>
+                <span className="text-xs text-gray-500">未连接</span>
               )}
             </div>
             <button
               onClick={() => navigate('/claude-code')}
-              className="px-3 py-1 text-xs bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-yellow-500/50 rounded transition-all"
+              className="px-2.5 py-1 text-xs bg-gray-800/50 border border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-yellow-500/30 hover:text-gray-300 rounded transition-all"
             >
-              📋 管理备份
+              管理
             </button>
           </div>
         </div>
 
-        {/* 切换历史 */}
+        {/* 切换历史 - 简洁版 */}
         {recentLogs.length > 0 && (
-          <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-yellow-400">切换历史</h3>
+          <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-lg p-5 shadow-lg shadow-yellow-500/5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-yellow-400">最近切换</h3>
               <button
                 onClick={() => setShowClearLogsDialog(true)}
                 disabled={actionLoading}
-                className="px-3 py-1 text-xs bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600/30 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all"
+                className="px-2.5 py-1 text-xs bg-red-600/10 border border-red-600/30 text-red-400 hover:bg-red-600/20 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all"
               >
-                清空历史
+                清空
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {recentLogs.map(log => (
                 <div
                   key={log.id}
-                  className="p-3 bg-black/30 border border-gray-800 rounded-lg"
+                  className="p-2.5 bg-black/20 border border-gray-800/50 rounded hover:border-gray-700 transition-all"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500 font-mono">
-                        {new Date(log.switch_at).toLocaleTimeString()}
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-gray-600 font-mono shrink-0">
+                        {new Date(log.switch_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      <span className="text-sm text-gray-300">
+                      <span className="text-gray-400 truncate">
                         {log.source_config_name || '未知'} → {log.target_config_name}
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        log.reason === 'manual'
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : log.reason === 'high_latency'
-                          ? 'bg-yellow-500/20 text-yellow-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {log.reason === 'manual' ? '手动切换' :
-                         log.reason === 'high_latency' ? '延迟优化' :
-                         log.reason === 'connection_failed' ? '连接失败' :
-                         log.reason === 'timeout' ? '超时' :
-                         log.reason === 'quota_exceeded' ? '配额耗尽' :
-                         log.reason === 'retry_failed' ? '重试失败' :
-                         log.reason === 'unrecoverable_error' ? '不可恢复错误' : '限流'}
-                      </span>
                     </div>
+                    <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ml-2 ${
+                      log.reason === 'manual'
+                        ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        : log.reason === 'high_latency'
+                        ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}>
+                      {log.reason === 'manual' ? '手动' :
+                       log.reason === 'high_latency' ? '延迟' :
+                       log.reason === 'connection_failed' ? '失败' :
+                       log.reason === 'timeout' ? '超时' :
+                       log.reason === 'quota_exceeded' ? '配额' :
+                       log.reason === 'retry_failed' ? '重试' :
+                       log.reason === 'unrecoverable_error' ? '错误' : '限流'}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -49,112 +49,74 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'running':
-        return '运行中';
-      case 'stopped':
-        return '已停止';
-      case 'starting':
-        return '启动中';
-      case 'stopping':
-        return '停止中';
-      case 'error':
-        return '错误';
-      default:
-        return '离线';
-    }
-  };
-
   const navItems = [
-    { path: '/', label: '仪表盘', icon: '🏠' },
-    { path: '/configs', label: '配置', icon: '⚙️' },
-    { path: '/claude-code', label: '集成', icon: '🔗' },
-    { path: '/settings', label: '设置', icon: '🛠️' },
+    { path: '/', icon: '🏠', title: '仪表盘' },
+    { path: '/configs', icon: '⚙️', title: '配置' },
+    { path: '/claude-code', icon: '🔗', title: '集成' },
+    { path: '/settings', icon: '🛠️', title: '设置' },
   ];
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
-      {/* 顶部栏：品牌 + 导航 + 状态 */}
-      <header className="flex items-center justify-between px-6 py-3 bg-gradient-to-r from-black via-gray-950 to-black border-b border-yellow-500/30 shadow-lg shadow-yellow-500/5">
-        {/* 左侧：品牌 + 导航 */}
-        <div className="flex items-center gap-8">
-          {/* 品牌 Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-lg shadow-yellow-500/30">
-              <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-              Claude Router
-            </span>
+      {/* 顶部栏：紧凑设计 */}
+      <header className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-black via-gray-950 to-black border-b border-yellow-500/30">
+        {/* 左侧：品牌Logo（小尺寸） */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-7 h-7 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded flex items-center justify-center">
+            <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
           </div>
-
-          {/* 导航标签 */}
-          <nav className="flex items-center gap-2">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/40'
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-yellow-400'
-                  }`
-                }
-              >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
+          <span className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 whitespace-nowrap">
+            Claude Router
+          </span>
         </div>
 
-        {/* 右侧：状态 + 配置 + 语言 */}
-        <div className="flex items-center gap-4">
-          {/* 状态指示 */}
+        {/* 中间：导航标签（图标为主） */}
+        <nav className="flex items-center gap-1 flex-shrink-0">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              title={item.title}
+              className={({ isActive }) =>
+                `flex items-center justify-center w-9 h-9 rounded transition-all ${
+                  isActive
+                    ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/40'
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-yellow-400'
+                }`
+              }
+            >
+              <span className="text-lg">{item.icon}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* 右侧：状态（紧凑显示） */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           {proxyStatus && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-gray-900/50 border border-yellow-500/30 rounded-lg">
-              <div className={`w-3 h-3 rounded-full ${getStatusColor(proxyStatus.status)} ${proxyStatus.status === 'running' ? 'animate-pulse' : ''}`} />
-              <span className="text-sm font-semibold text-gray-200">
-                {getStatusText(proxyStatus.status)}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-900/50 border border-yellow-500/30 rounded">
+              <div className={`w-2 h-2 rounded-full ${getStatusColor(proxyStatus.status)} ${proxyStatus.status === 'running' ? 'animate-pulse' : ''}`} />
+              <span className="text-xs text-gray-300 whitespace-nowrap">
+                {proxyStatus.status === 'running' ? '运行' : '停止'}
               </span>
-              {proxyStatus.active_config_name && (
+              {proxyStatus.active_config_name && proxyStatus.status === 'running' && (
                 <>
-                  <div className="w-px h-4 bg-gray-700" />
-                  <span className="text-sm text-yellow-400 font-medium">
+                  <div className="w-px h-3 bg-gray-700" />
+                  <span className="text-xs text-yellow-400 whitespace-nowrap max-w-[120px] truncate">
                     {proxyStatus.active_config_name}
-                  </span>
-                </>
-              )}
-              {proxyStatus.status === 'running' && (
-                <>
-                  <div className="w-px h-4 bg-gray-700" />
-                  <span className="text-xs text-gray-400 font-mono">
-                    {proxyStatus.listen_host}:{proxyStatus.listen_port}
                   </span>
                 </>
               )}
             </div>
           )}
 
-          {/* 语言切换 */}
           <button
             onClick={toggleLanguage}
-            className="px-3 py-2 bg-gray-900/50 border border-yellow-500/30 rounded-lg hover:border-yellow-500/50 transition-all text-sm font-medium text-gray-200 hover:text-yellow-400"
+            className="w-9 h-9 flex items-center justify-center bg-gray-900/50 border border-yellow-500/30 rounded hover:border-yellow-500/50 transition-all"
             title="切换语言"
           >
-            {currentLanguage === 'zh-CN' ? '中文' : 'EN'}
-          </button>
-
-          {/* 帮助 */}
-          <button
-            className="px-3 py-2 bg-gray-900/50 border border-yellow-500/30 rounded-lg hover:border-yellow-500/50 transition-all text-sm font-medium text-gray-200 hover:text-yellow-400"
-            title="帮助"
-          >
-            ❓
+            <span className="text-xs text-gray-300">{currentLanguage === 'zh-CN' ? '中' : 'EN'}</span>
           </button>
         </div>
       </header>

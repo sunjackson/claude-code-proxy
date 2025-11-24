@@ -489,6 +489,7 @@ impl ProxyService {
     pub async fn switch_config(&self, config_id: i64) -> AppResult<ProxyServiceModel> {
         // Get current configuration
         let current_config = self.server.config().await;
+        let source_config_id = current_config.active_config_id;
 
         // Verify target configuration exists
         let target_config = self.db_pool.with_connection(|conn| {
@@ -517,6 +518,31 @@ impl ProxyService {
         self.server.update_config(config).await;
 
         log::info!("Switched to config: {}", target_config.name);
+
+        // Record manual switch log
+        if let Some(group_id) = target_config.group_id {
+            use crate::models::switch_log::{CreateSwitchLogInput, SwitchReason};
+            use crate::services::auto_switch::AutoSwitchService;
+
+            let auto_switch = AutoSwitchService::new(self.db_pool.clone());
+            let log_input = CreateSwitchLogInput {
+                reason: SwitchReason::Manual,
+                source_config_id,
+                target_config_id: config_id,
+                group_id,
+                latency_before_ms: None,
+                latency_after_ms: None,
+                error_message: None,
+                retry_count: None,
+                error_type: None,
+                error_details: None,
+            };
+
+            match auto_switch.log_switch(log_input).await {
+                Ok(log_id) => log::info!("Manual switch log recorded (id: {})", log_id),
+                Err(e) => log::warn!("Failed to record manual switch log: {}", e),
+            }
+        }
 
         // Get updated status and emit event
         let status = self.get_status().await?;

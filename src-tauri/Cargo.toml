@@ -1,6 +1,6 @@
 [package]
 name = "claude-code-proxy"
-version = "1.0.1"
+version = "1.0.2"
 description = "Claude Code 代理服务"
 authors = ["Your Name"]
 license = ""

@@ -57,9 +57,8 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
   };
 
   const navItems = [
-    { path: '/', icon: '🏠', title: '仪表盘' },
-    { path: '/claude-code', icon: '🔗', title: '集成' },
-    { path: '/settings', icon: '🛠️', title: '设置' },
+    { path: '/', title: '仪表盘' },
+    { path: '/settings', title: '设置' },
   ];
 
   return (
@@ -78,22 +77,25 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
           </span>
         </div>
 
-        {/* 中间：导航标签（图标为主） */}
-        <nav className="flex items-center gap-1 flex-shrink-0">
+        {/* 中间：导航标签（文字显示） */}
+        <nav className="flex items-center gap-2 flex-shrink-0">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
-              title={item.title}
+              end
               className={({ isActive }) =>
-                `flex items-center justify-center w-9 h-9 rounded transition-all ${
+                `relative px-4 py-1.5 rounded text-sm font-medium ${
                   isActive
-                    ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/40'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-yellow-400'
+                    ? 'bg-yellow-500 text-black'
+                    : 'text-gray-400 hover:bg-gray-800/50 hover:text-yellow-400'
                 }`
               }
+              style={{
+                transition: 'color 0.15s ease-in-out, background-color 0.15s ease-in-out',
+              }}
             >
-              <span className="text-lg">{item.icon}</span>
+              {item.title}
             </NavLink>
           ))}
         </nav>

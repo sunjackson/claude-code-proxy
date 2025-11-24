@@ -112,8 +112,7 @@ pub async fn switch_proxy_config(
 ) -> AppResult<ProxyServiceModel> {
     log::info!("Command: switch_proxy_config (config_id: {})", config_id);
 
-    // TODO: Record switch log with reason='manual' (will be implemented in Phase 8)
-    // For now, just perform the switch
+    // Manual switch log is recorded in ProxyService::switch_config
     state.service().switch_config(config_id).await
 }
 

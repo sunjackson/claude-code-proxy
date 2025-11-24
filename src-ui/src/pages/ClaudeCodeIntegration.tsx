@@ -4,16 +4,14 @@
  */
 
 import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ClaudeCodePathDetector } from '../components/ClaudeCodePathDetector';
 import { BackupList } from '../components/BackupList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { AppLayout } from '../components/AppLayout';
+import { CompactLayout } from '../components/CompactLayout';
 import type { ClaudeCodePath, ConfigBackup } from '../types/tauri';
 
 export const ClaudeCodeIntegration: React.FC = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const [claudeCodePath, setClaudeCodePath] = useState<ClaudeCodePath | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -82,7 +80,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
   };
 
   return (
-    <AppLayout title={t('nav.claudeCode')} subtitle={t('claudeCode.subtitle')}>
+    <CompactLayout>
       {/* 主要内容区域 */}
       <div className="space-y-6">
           {/* 路径检测器 */}
@@ -200,7 +198,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
         onConfirm={confirmDialog.onConfirm}
         onCancel={handleCancelConfirm}
       />
-    </AppLayout>
+    </CompactLayout>
   );
 };
 

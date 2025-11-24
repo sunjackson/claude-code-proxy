@@ -10,7 +10,7 @@ import type { RecommendedService } from '../types/tauri';
 import * as recommendationApi from '../api/recommendation';
 import { ServiceCard } from '../components/ServiceCard';
 import { FilterBar } from '../components/FilterBar';
-import { AppLayout } from '../components/AppLayout';
+import { CompactLayout } from '../components/CompactLayout';
 
 export const Recommendations: React.FC = () => {
   const { t } = useTranslation();
@@ -89,7 +89,7 @@ export const Recommendations: React.FC = () => {
 
   if (loading && services.length === 0) {
     return (
-      <AppLayout title={t('nav.recommendations')} subtitle={t('recommendations.subtitle')}>
+      <CompactLayout>
         <div className="flex flex-col items-center justify-center h-96">
           <div className="relative">
             <div className="w-16 h-16 border-4 border-gray-800 border-t-yellow-500 rounded-full animate-spin"></div>
@@ -102,12 +102,12 @@ export const Recommendations: React.FC = () => {
           <p className="mt-6 text-gray-400 font-medium">{t('common.loading')}</p>
           <p className="mt-2 text-sm text-gray-500">正在加载推荐服务...</p>
         </div>
-      </AppLayout>
+      </CompactLayout>
     );
   }
 
   return (
-    <AppLayout title={t('nav.recommendations')} subtitle={t('recommendations.subtitle')}>
+    <CompactLayout>
       <div className="space-y-6">
         {/* 错误提示 */}
         {error && (
@@ -214,7 +214,7 @@ export const Recommendations: React.FC = () => {
           </>
         )}
       </div>
-    </AppLayout>
+    </CompactLayout>
   );
 };
 

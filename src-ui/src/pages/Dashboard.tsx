@@ -4,22 +4,17 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ProxyService, ConfigGroup, ApiConfig, SwitchLog, ProxyConfig } from '../types/tauri';
 import * as proxyApi from '../api/proxy';
 import * as configApi from '../api/config';
 import * as claudeCodeApi from '../api/claude-code';
-import { AppLayout } from '../components/AppLayout';
-import { ProxyStatusCard } from '../components/ProxyStatusCard';
-import { QuickActionsPanel } from '../components/QuickActionsPanel';
-import { SwitchLogTable } from '../components/SwitchLogTable';
+import { CompactLayout } from '../components/CompactLayout';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import { showSuccess, showError } from '../services/toast';
 
 const Dashboard: React.FC = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   // 状态管理
   const [proxyStatus, setProxyStatus] = useState<ProxyService | null>(null);
@@ -293,142 +288,316 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // 获取当前分组的配置列表
+  const currentGroupConfigs = configs.filter(
+    config => config.group_id === proxyStatus?.active_group_id
+  );
+
+  // 获取当前分组
+  const currentGroup = groups.find(g => g.id === proxyStatus?.active_group_id);
+
+  // 计算延迟的健康度(0-100)
+  const getHealthScore = (latency?: number | null): number => {
+    if (!latency || latency <= 0) return 0;
+    if (latency < 100) return 100;
+    if (latency < 200) return 90;
+    if (latency < 300) return 70;
+    if (latency < 500) return 50;
+    return 30;
+  };
+
+  // 获取健康度颜色
+  const getHealthColor = (score: number): string => {
+    if (score >= 90) return 'bg-green-500';
+    if (score >= 70) return 'bg-yellow-500';
+    if (score >= 50) return 'bg-orange-500';
+    return 'bg-red-500';
+  };
+
   if (loading) {
     return (
-      <AppLayout title={t('nav.dashboard')}>
+      <CompactLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-400">{t('common.loading')}</div>
+          <div className="text-gray-400">加载中...</div>
         </div>
-      </AppLayout>
+      </CompactLayout>
     );
   }
 
   return (
-    <AppLayout title={t('nav.dashboard')} subtitle={t('dashboard.subtitle')}>
+    <CompactLayout>
       <div className="space-y-6">
-
-      {/* 错误提示 */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl shadow-lg">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-red-400 mb-1">操作失败</p>
-              <p className="text-sm text-red-400/80">{error}</p>
+        {/* 错误提示 */}
+        {error && (
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl shadow-lg">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-red-400 mb-1">操作失败</p>
+                <p className="text-sm text-red-400/80">{error}</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 代理状态卡片 */}
-      <ProxyStatusCard
-        proxyStatus={proxyStatus}
-        onStart={handleStartProxy}
-        onStop={handleStopProxy}
-        onRefresh={handleRefreshStatus}
-        actionLoading={actionLoading}
-      />
-
-      {/* Claude Code 配置状态条 */}
-      <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-gray-700 rounded-xl p-5 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center justify-center w-10 h-10 bg-purple-500/10 rounded-lg">
-              <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-sm font-semibold text-gray-200">Claude Code 集成</span>
-                {claudeCodeProxyConfig ? (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 border border-green-500/30 rounded-full">
-                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-xs text-green-400 font-medium">已连接</span>
-                    <span className="text-xs text-gray-500 font-mono">
-                      {claudeCodeProxyConfig.host}:{claudeCodeProxyConfig.port}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-gray-500/10 border border-gray-600 rounded-full">
-                    <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                    <span className="text-xs text-gray-400 font-medium">未连接</span>
-                  </div>
+        {/* 服务状态卡片 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`w-4 h-4 rounded-full ${
+                proxyStatus?.status === 'running'
+                  ? 'bg-green-500 animate-pulse'
+                  : 'bg-gray-500'
+              }`} />
+              <div>
+                <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
+                  {proxyStatus?.status === 'running' ? '运行中' : '已停止'}
+                </h2>
+                {proxyStatus?.active_config_name && (
+                  <p className="text-sm text-gray-400 mt-1">
+                    当前: <span className="text-yellow-400 font-medium">{proxyStatus.active_config_name}</span>
+                    {proxyStatus.status === 'running' && (
+                      <span className="text-gray-500 ml-3 font-mono text-xs">
+                        {proxyStatus.listen_host}:{proxyStatus.listen_port}
+                      </span>
+                    )}
+                  </p>
                 )}
               </div>
-              <p className="text-xs text-gray-400">
-                {claudeCodeProxyConfig
-                  ? '代理服务已自动配置到 Claude Code，请求将通过本地代理转发'
-                  : '启动代理服务后将自动配置到 Claude Code'}
-              </p>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/claude-code')}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-purple-500/50 rounded-lg transition-all"
-              title="查看备份和详细设置"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span>详细设置</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 快捷操作面板 */}
-      <QuickActionsPanel
-        proxyStatus={proxyStatus}
-        groups={groups}
-        configs={configs}
-        onSwitchGroup={handleSwitchGroup}
-        onSwitchConfig={handleSwitchConfig}
-        onToggleAutoSwitch={handleToggleAutoSwitch}
-        actionLoading={actionLoading}
-      />
-
-      {/* 最近切换日志 */}
-      {recentLogs.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-blue-500/10 rounded-lg">
-                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-amber-400">切换历史</h2>
-                <p className="text-xs text-gray-400">最近 5 条切换记录</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
+              {proxyStatus?.status === 'running' ? (
+                <button
+                  onClick={handleStopProxy}
+                  disabled={actionLoading}
+                  className="px-6 py-3 bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600/30 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all font-medium"
+                >
+                  ⏸ 停止
+                </button>
+              ) : (
+                <button
+                  onClick={handleStartProxy}
+                  disabled={actionLoading}
+                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-bold rounded-lg transition-all shadow-lg shadow-yellow-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ▶️ 启动
+                </button>
+              )}
               <button
-                onClick={() => setShowClearLogsDialog(true)}
+                onClick={handleRefreshStatus}
                 disabled={actionLoading}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600/30 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all"
+                className="px-4 py-3 bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-yellow-500/50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all"
+                title="刷新"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span>清空历史</span>
+                🔄
               </button>
             </div>
           </div>
-          <SwitchLogTable
-            logs={recentLogs}
-            onLoadMore={() => {}}
-            hasMore={false}
-            loading={false}
-          />
         </div>
-      )}
+
+        {/* 快速切换区域 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+          <h3 className="text-lg font-bold text-yellow-400 mb-4">快速切换</h3>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* 分组选择 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">分组</label>
+              <select
+                value={proxyStatus?.active_group_id ?? ''}
+                onChange={(e) => handleSwitchGroup(Number(e.target.value))}
+                disabled={actionLoading}
+                className="w-full px-4 py-2 bg-black border border-yellow-500/30 text-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {groups.map(group => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 配置选择 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">配置</label>
+              <select
+                value={proxyStatus?.active_config_id ?? ''}
+                onChange={(e) => handleSwitchConfig(Number(e.target.value))}
+                disabled={actionLoading || currentGroupConfigs.length === 0}
+                className="w-full px-4 py-2 bg-black border border-yellow-500/30 text-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {currentGroupConfigs.map(config => (
+                  <option key={config.id} value={config.id}>
+                    {config.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 自动切换开关 */}
+          {currentGroup && (
+            <div className="flex items-center justify-between p-3 bg-black/30 border border-yellow-500/20 rounded-lg">
+              <span className="text-sm text-gray-300">自动切换</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={currentGroup.auto_switch_enabled}
+                  onChange={(e) => handleToggleAutoSwitch(currentGroup.id, e.target.checked)}
+                  disabled={actionLoading}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-yellow-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* 配置列表 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+          <h3 className="text-lg font-bold text-yellow-400 mb-4">配置列表</h3>
+
+          {currentGroupConfigs.length === 0 ? (
+            <div className="text-center text-gray-400 py-8">
+              当前分组没有配置
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {currentGroupConfigs.map(config => {
+                const healthScore = getHealthScore(config.last_latency_ms);
+                const isActive = config.id === proxyStatus?.active_config_id;
+
+                return (
+                  <div
+                    key={config.id}
+                    className={`p-4 rounded-lg border transition-all ${
+                      isActive
+                        ? 'bg-yellow-500/10 border-yellow-500/50'
+                        : 'bg-black/30 border-gray-700 hover:border-yellow-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${
+                          config.is_available ? 'bg-green-500' : 'bg-gray-500'
+                        }`} />
+                        <span className={`font-medium ${
+                          isActive ? 'text-yellow-400' : 'text-gray-200'
+                        }`}>
+                          {config.name}
+                        </span>
+                        {isActive && (
+                          <span className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded text-xs text-yellow-400">
+                            活跃
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-400">
+                        {config.last_latency_ms ? `${config.last_latency_ms}ms` : '离线'}
+                      </span>
+                    </div>
+
+                    {/* 健康度进度条 */}
+                    <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full ${getHealthColor(healthScore)} transition-all`}
+                        style={{ width: `${healthScore}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-sm text-gray-400">
+            <span>共 {currentGroupConfigs.length} 个配置</span>
+            <span>
+              {currentGroupConfigs.filter(c => c.is_available).length} 个可用 |
+              {currentGroupConfigs.filter(c => !c.is_available).length} 个离线
+            </span>
+          </div>
+        </div>
+
+        {/* Claude Code 集成状态 */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-4 shadow-lg shadow-yellow-500/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-300">Claude Code 集成:</span>
+              {claudeCodeProxyConfig ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                  <span className="text-sm text-green-400 font-medium">已连接</span>
+                  <span className="text-xs text-gray-500 font-mono">
+                    {claudeCodeProxyConfig.host}:{claudeCodeProxyConfig.port}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-sm text-gray-400">未连接</span>
+              )}
+            </div>
+            <button
+              onClick={() => navigate('/claude-code')}
+              className="px-3 py-1 text-xs bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-yellow-500/50 rounded transition-all"
+            >
+              📋 管理备份
+            </button>
+          </div>
+        </div>
+
+        {/* 切换历史 */}
+        {recentLogs.length > 0 && (
+          <div className="bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-yellow-400">切换历史</h3>
+              <button
+                onClick={() => setShowClearLogsDialog(true)}
+                disabled={actionLoading}
+                className="px-3 py-1 text-xs bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600/30 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all"
+              >
+                清空历史
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {recentLogs.map(log => (
+                <div
+                  key={log.id}
+                  className="p-3 bg-black/30 border border-gray-800 rounded-lg"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 font-mono">
+                        {new Date(log.switch_at).toLocaleTimeString()}
+                      </span>
+                      <span className="text-sm text-gray-300">
+                        {log.source_config_name || '未知'} → {log.target_config_name}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        log.reason === 'manual'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : log.reason === 'high_latency'
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        {log.reason === 'manual' ? '手动切换' :
+                         log.reason === 'high_latency' ? '延迟优化' :
+                         log.reason === 'connection_failed' ? '连接失败' :
+                         log.reason === 'timeout' ? '超时' :
+                         log.reason === 'quota_exceeded' ? '配额耗尽' :
+                         log.reason === 'retry_failed' ? '重试失败' :
+                         log.reason === 'unrecoverable_error' ? '不可恢复错误' : '限流'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 清空日志确认对话框 */}
@@ -442,7 +611,7 @@ const Dashboard: React.FC = () => {
         onConfirm={handleClearLogs}
         onCancel={() => setShowClearLogsDialog(false)}
       />
-    </AppLayout>
+    </CompactLayout>
   );
 };
 

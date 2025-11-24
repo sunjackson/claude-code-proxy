@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import type { ConfigGroup, ApiConfig } from '../types/tauri';
 import * as configApi from '../api/config';
 import * as testApi from '../api/test';
@@ -13,12 +12,11 @@ import { ConfigEditor } from '../components/ConfigEditor';
 import { GroupEditor } from '../components/GroupEditor';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TestResultPanel } from '../components/TestResultPanel';
-import { AppLayout } from '../components/AppLayout';
+import { CompactLayout } from '../components/CompactLayout';
 import { categoryLabels, categoryColors, type ProviderCategory } from '../config/providerPresets';
 import { formatDisplayUrl } from '../utils/url';
 
 export const ConfigManagement: React.FC = () => {
-  const { t } = useTranslation();
   // 状态管理
   const [groups, setGroups] = useState<ConfigGroup[]>([]);
   const [configs, setConfigs] = useState<ApiConfig[]>([]);
@@ -314,7 +312,7 @@ export const ConfigManagement: React.FC = () => {
   };
 
   return (
-    <AppLayout title={t('nav.configs')} subtitle={t('config.subtitle')}>
+    <CompactLayout>
       {/* 错误提示 */}
       {error && (
         <div className="mb-6 bg-red-900/20 border border-red-900 rounded-lg p-4">
@@ -850,7 +848,7 @@ export const ConfigManagement: React.FC = () => {
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
       />
-    </AppLayout>
+    </CompactLayout>
   );
 };
 

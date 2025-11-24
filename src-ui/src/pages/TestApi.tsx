@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { AppLayout } from '../components/AppLayout';
+import { CompactLayout } from '../components/CompactLayout';
 
 const TestApi: React.FC = () => {
   const [results, setResults] = useState<Record<string, any>>({});
@@ -89,7 +89,7 @@ const TestApi: React.FC = () => {
   };
 
   return (
-    <AppLayout title="API 测试" subtitle="诊断后端 Tauri 命令">
+    <CompactLayout>
       <div className="space-y-6">
         {/* 测试按钮 */}
         <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
@@ -225,7 +225,7 @@ const TestApi: React.FC = () => {
           </ul>
         </div>
       </div>
-    </AppLayout>
+    </CompactLayout>
   );
 };
 

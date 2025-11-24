@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EnvironmentVariableManager } from '../components/EnvironmentVariableManager';
 import { useLanguage } from '../hooks/useLanguage';
-import { AppLayout } from '../components/AppLayout';
+import { CompactLayout } from '../components/CompactLayout';
 
 type SettingsTab = 'general' | 'environment';
 
@@ -17,7 +17,7 @@ export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('environment');
 
   return (
-    <AppLayout title={t('nav.settings')} subtitle={t('settings.subtitle')}>
+    <CompactLayout>
       {/* 标签页 */}
       <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-2 flex gap-2 shadow-lg shadow-yellow-500/5">
         <button
@@ -118,7 +118,7 @@ export const Settings: React.FC = () => {
 
         {activeTab === 'environment' && <EnvironmentVariableManager />}
       </div>
-    </AppLayout>
+    </CompactLayout>
   );
 };
 

@@ -51,7 +51,6 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
 
   const navItems = [
     { path: '/', icon: '🏠', title: '仪表盘' },
-    { path: '/configs', icon: '⚙️', title: '配置' },
     { path: '/claude-code', icon: '🔗', title: '集成' },
     { path: '/settings', icon: '🛠️', title: '设置' },
   ];

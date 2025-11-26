@@ -1,10 +1,11 @@
 /**
  * 统一仪表盘页面
  * 整合服务控制、配置管理、分组管理等功能
+ * 优化版本：突出核心功能和核心信息
  */
 
-import React, { useState, useEffect } from 'react';
-import type { ProxyService, ConfigGroup, ApiConfig, SwitchLog, ProxyConfig } from '../types/tauri';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { ProxyService, ConfigGroup, ApiConfig, SwitchLog, ProxyConfig, HealthCheckStatusResponse } from '../types/tauri';
 import * as proxyApi from '../api/proxy';
 import * as configApi from '../api/config';
 import * as claudeCodeApi from '../api/claude-code';
@@ -15,6 +16,7 @@ import { ConfigEditor } from '../components/ConfigEditor';
 import { GroupEditor } from '../components/GroupEditor';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TestResultPanel } from '../components/TestResultPanel';
+import { ProviderMonitor } from '../components/ProviderMonitor';
 import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import { showSuccess, showError } from '../services/toast';
 import { categoryLabels, categoryColors, type ProviderCategory } from '../config/providerPresets';
@@ -33,9 +35,15 @@ const Dashboard: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'test'>('list');
   const [testingConfigId, setTestingConfigId] = useState<number | null>(null);
   const [queryingBalanceId, setQueryingBalanceId] = useState<number | null>(null);
+  const [showSwitchHistory, setShowSwitchHistory] = useState(false);
+  const [showMonitor, setShowMonitor] = useState(false);
 
   // Claude Code 配置状态
   const [claudeCodeProxyConfig, setClaudeCodeProxyConfig] = useState<ProxyConfig | null>(null);
+
+  // 健康检查状态
+  const [healthCheckStatus, setHealthCheckStatus] = useState<HealthCheckStatusResponse | null>(null);
+  const [healthCheckLoading, setHealthCheckLoading] = useState(false);
 
   // 对话框状态
   const [configEditorOpen, setConfigEditorOpen] = useState(false);
@@ -57,9 +65,29 @@ const Dashboard: React.FC = () => {
     onConfirm: () => {},
   });
 
+  // 计算统计数据
+  const stats = useMemo(() => {
+    const onlineConfigs = configs.filter(c => c.is_available);
+    const configsWithLatency = configs.filter(c => c.last_latency_ms !== null && c.last_latency_ms !== undefined);
+    const avgLatency = configsWithLatency.length > 0
+      ? Math.round(configsWithLatency.reduce((sum, c) => sum + (c.last_latency_ms || 0), 0) / configsWithLatency.length)
+      : null;
+    const totalBalance = configs
+      .filter(c => c.last_balance !== null && c.last_balance !== undefined)
+      .reduce((sum, c) => sum + (c.last_balance || 0), 0);
+
+    return {
+      total: configs.length,
+      online: onlineConfigs.length,
+      onlineRate: configs.length > 0 ? Math.round((onlineConfigs.length / configs.length) * 100) : 0,
+      avgLatency,
+      totalBalance,
+      groupCount: groups.length,
+    };
+  }, [configs, groups]);
+
   // 监听自动切换事件
   useAutoSwitch((event) => {
-    // 当发生自动切换时,重新加载数据以更新UI
     console.log('Auto-switch event received:', event);
     loadData();
   });
@@ -75,19 +103,17 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // 并行加载代理状态、分组、配置和最近日志
       const [status, groupsList, configsList, logs] = await Promise.all([
         proxyApi.getProxyStatus(),
         configApi.listConfigGroups(),
         configApi.listApiConfigs(null),
-        proxyApi.getSwitchLogs(undefined, 5, 0), // 获取最近5条日志
+        proxyApi.getSwitchLogs(undefined, 5, 0),
       ]);
 
       setProxyStatus(status);
       setGroups(groupsList);
       setConfigs(configsList);
 
-      // 如果没有切换日志，添加一些模拟数据用于展示
       if (logs.length === 0 && configsList.length >= 2) {
         const now = new Date();
         const mockLogs: SwitchLog[] = [
@@ -96,7 +122,7 @@ const Dashboard: React.FC = () => {
             source_config_name: configsList[0]?.name || 'Claude API',
             target_config_name: configsList[1]?.name || 'OpenAI API',
             reason: 'manual',
-            switch_at: new Date(now.getTime() - 5 * 60000).toISOString(), // 5分钟前
+            switch_at: new Date(now.getTime() - 5 * 60000).toISOString(),
             group_name: '默认分组',
             latency_before_ms: null,
             latency_after_ms: null,
@@ -111,7 +137,7 @@ const Dashboard: React.FC = () => {
             source_config_name: configsList[1]?.name || 'OpenAI API',
             target_config_name: configsList[0]?.name || 'Claude API',
             reason: 'high_latency',
-            switch_at: new Date(now.getTime() - 15 * 60000).toISOString(), // 15分钟前
+            switch_at: new Date(now.getTime() - 15 * 60000).toISOString(),
             group_name: '默认分组',
             latency_before_ms: 3200,
             latency_after_ms: 156,
@@ -121,35 +147,18 @@ const Dashboard: React.FC = () => {
             error_type: null,
             error_details: null,
           },
-          {
-            id: 3,
-            source_config_name: configsList[0]?.name || 'Claude API',
-            target_config_name: configsList[1]?.name || 'OpenAI API',
-            reason: 'connection_failed',
-            switch_at: new Date(now.getTime() - 30 * 60000).toISOString(), // 30分钟前
-            group_name: '默认分组',
-            latency_before_ms: null,
-            latency_after_ms: 248,
-            latency_improvement_ms: null,
-            error_message: '连接超时',
-            retry_count: 3,
-            error_type: 'timeout',
-            error_details: '尝试连接服务器失败，超过最大重试次数',
-          },
         ];
         setRecentLogs(mockLogs);
       } else {
         setRecentLogs(logs);
       }
 
-      // 如果没有活跃的分组，自动选择第一个有配置的分组
       if ((status.active_group_id === null || status.active_group_id === undefined) && groupsList.length > 0 && configsList.length > 0) {
         const firstGroupWithConfigs = groupsList.find(group =>
           configsList.some(config => config.group_id === group.id)
         );
 
         if (firstGroupWithConfigs) {
-          console.log('自动选择第一个有配置的分组:', firstGroupWithConfigs.name);
           try {
             const newStatus = await proxyApi.switchProxyGroup(firstGroupWithConfigs.id);
             setProxyStatus(newStatus);
@@ -166,7 +175,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // 加载Claude Code配置
   const loadClaudeCodeConfig = async () => {
     try {
       const config = await claudeCodeApi.getClaudeCodeProxy();
@@ -237,7 +245,7 @@ const Dashboard: React.FC = () => {
 
       const status = await proxyApi.stopProxyService();
       setProxyStatus(status);
-      showSuccess('代理服务已停止，Claude Code 配置已恢复');
+      showSuccess('代理服务已停止');
     } catch (err) {
       setError(err instanceof Error ? err.message : '停止代理服务失败');
       console.error('Failed to stop proxy:', err);
@@ -250,12 +258,46 @@ const Dashboard: React.FC = () => {
   const handleRefreshStatus = async () => {
     try {
       setActionLoading(true);
-      const status = await proxyApi.getProxyStatus();
-      setProxyStatus(status);
+      await loadData();
     } catch (err) {
       console.error('Failed to refresh status:', err);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // 切换健康检查
+  const handleToggleHealthCheck = async () => {
+    try {
+      setHealthCheckLoading(true);
+      if (healthCheckStatus?.running) {
+        const status = await proxyApi.stopHealthCheck();
+        setHealthCheckStatus(status);
+        showSuccess('健康检查已停止');
+      } else {
+        const status = await proxyApi.startHealthCheck(60); // 60秒间隔
+        setHealthCheckStatus(status);
+        showSuccess('健康检查已启动，每60秒检测一次');
+      }
+    } catch (err) {
+      console.error('Failed to toggle health check:', err);
+      showError('操作健康检查失败');
+    } finally {
+      setHealthCheckLoading(false);
+    }
+  };
+
+  // 手动执行健康检查
+  const handleRunHealthCheckNow = async () => {
+    try {
+      setHealthCheckLoading(true);
+      await proxyApi.runHealthCheckNow();
+      showSuccess('健康检查已执行');
+    } catch (err) {
+      console.error('Failed to run health check:', err);
+      showError('执行健康检查失败');
+    } finally {
+      setHealthCheckLoading(false);
     }
   };
 
@@ -267,7 +309,7 @@ const Dashboard: React.FC = () => {
       const status = await proxyApi.switchProxyConfig(configId);
       setProxyStatus(status);
       showSuccess('配置已切换');
-      await loadData(); // 重新加载以更新切换历史
+      await loadData();
     } catch (err: any) {
       console.error('Failed to switch config:', err);
 
@@ -533,6 +575,9 @@ const Dashboard: React.FC = () => {
     return a.sort_order - b.sort_order;
   });
 
+  // 获取当前活跃的配置
+  const activeConfig = configs.find(c => c.id === proxyStatus?.active_config_id);
+
   if (loading) {
     return (
       <CompactLayout>
@@ -547,156 +592,316 @@ const Dashboard: React.FC = () => {
     <CompactLayout>
       {/* 错误提示 */}
       {error && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl shadow-lg">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
-            <div>
-              <p className="text-sm font-medium text-red-400 mb-1">操作失败</p>
-              <p className="text-sm text-red-400/80">{error}</p>
-            </div>
+            <p className="text-sm text-red-400">{error}</p>
           </div>
         </div>
       )}
 
-      {/* 服务控制面板 - 重新设计突出核心功能 */}
-      <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 border-2 border-yellow-500/40 rounded-xl p-6 shadow-2xl shadow-yellow-500/20 mb-6">
-        <div className="flex items-center justify-between gap-6">
-          {/* 左侧：状态信息区 */}
-          <div className="flex items-center gap-4">
-            {/* 状态指示器 */}
-            <div className="flex flex-col items-center justify-center">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center border-4 transition-all ${
-                proxyStatus?.status === 'running'
-                  ? 'bg-green-500/20 border-green-500 shadow-lg shadow-green-500/50'
-                  : 'bg-gray-700/20 border-gray-600'
-              }`}>
+      {/* ==================== 核心控制区 ==================== */}
+      <div className="mb-6">
+        <div className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-500 ${
+          proxyStatus?.status === 'running'
+            ? 'bg-gradient-to-br from-green-950/50 via-black to-green-950/30 border-green-500/50 shadow-2xl shadow-green-500/20'
+            : 'bg-gradient-to-br from-gray-900 via-black to-gray-900 border-gray-700 shadow-xl'
+        }`}>
+          {/* 背景光效 */}
+          {proxyStatus?.status === 'running' && (
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-green-500/10 rounded-full blur-3xl animate-pulse" />
+              <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-yellow-500/5 rounded-full blur-3xl" />
+            </div>
+          )}
+
+          <div className="relative p-6">
+            <div className="flex items-center justify-between">
+              {/* 左侧：状态显示 */}
+              <div className="flex items-center gap-5">
+                {/* 大型状态指示器 */}
+                <div className={`relative w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+                  proxyStatus?.status === 'running'
+                    ? 'bg-gradient-to-br from-green-500 to-green-600 shadow-lg shadow-green-500/50'
+                    : 'bg-gradient-to-br from-gray-700 to-gray-800'
+                }`}>
+                  {proxyStatus?.status === 'running' ? (
+                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                  )}
+                  {/* 运行中的脉冲动画 */}
+                  {proxyStatus?.status === 'running' && (
+                    <div className="absolute inset-0 rounded-2xl bg-green-400/30 animate-ping" style={{ animationDuration: '2s' }} />
+                  )}
+                </div>
+
+                {/* 状态文字和信息 */}
+                <div>
+                  <div className="flex items-center gap-3 mb-1">
+                    <h1 className={`text-3xl font-black tracking-tight ${
+                      proxyStatus?.status === 'running' ? 'text-green-400' : 'text-gray-400'
+                    }`}>
+                      {proxyStatus?.status === 'running' ? '服务运行中' : '服务已停止'}
+                    </h1>
+                  </div>
+
+                  {proxyStatus?.status === 'running' ? (
+                    <div className="flex items-center gap-4 text-sm">
+                      {activeConfig && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">当前配置:</span>
+                          <span className="px-2.5 py-1 bg-yellow-500/20 text-yellow-400 font-bold rounded-lg border border-yellow-500/40">
+                            {activeConfig.name}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">监听地址:</span>
+                        <code className="px-2.5 py-1 bg-gray-800/80 text-gray-300 font-mono text-xs rounded-lg border border-gray-700">
+                          {proxyStatus.listen_host}:{proxyStatus.listen_port}
+                        </code>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">点击启动按钮开始代理服务</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 右侧：控制按钮 */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleRefreshStatus}
+                  disabled={actionLoading}
+                  className="w-12 h-12 flex items-center justify-center bg-gray-800/80 border border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-yellow-500/50 hover:text-yellow-400 disabled:opacity-50 rounded-xl transition-all"
+                  title="刷新状态"
+                >
+                  <svg className={`w-5 h-5 ${actionLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+
+                {/* 健康检查开关 */}
+                {proxyStatus?.status === 'running' && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={handleToggleHealthCheck}
+                      disabled={healthCheckLoading}
+                      className={`w-12 h-12 flex items-center justify-center border rounded-xl transition-all ${
+                        healthCheckStatus?.running
+                          ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30'
+                          : 'bg-gray-800/80 border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-cyan-500/50 hover:text-cyan-400'
+                      } disabled:opacity-50`}
+                      title={healthCheckStatus?.running ? '点击停止健康检查（每60秒）' : '点击启动健康检查（每60秒）'}
+                    >
+                      {healthCheckLoading ? (
+                        <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleRunHealthCheckNow}
+                      disabled={healthCheckLoading}
+                      className="w-12 h-12 flex items-center justify-center bg-gray-800/80 border border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-cyan-500/50 hover:text-cyan-400 disabled:opacity-50 rounded-xl transition-all"
+                      title="立即执行一次健康检查"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+
                 {proxyStatus?.status === 'running' ? (
-                  <svg className="w-8 h-8 text-green-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+                  <button
+                    onClick={handleStopProxy}
+                    disabled={actionLoading}
+                    className="h-12 px-8 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-xl transition-all shadow-lg shadow-red-600/30 hover:shadow-red-600/50 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="1" />
+                    </svg>
+                    停止服务
+                  </button>
                 ) : (
-                  <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                  <button
+                    onClick={handleStartProxy}
+                    disabled={actionLoading}
+                    className="h-12 px-8 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-bold rounded-xl transition-all shadow-lg shadow-yellow-500/40 hover:shadow-yellow-500/60 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    启动服务
+                  </button>
                 )}
               </div>
             </div>
-
-            {/* 状态详情 */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">代理服务</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-2xl font-bold ${
-                  proxyStatus?.status === 'running' ? 'text-green-400' : 'text-gray-400'
-                }`}>
-                  {proxyStatus?.status === 'running' ? '运行中' : '已停止'}
-                </span>
-              </div>
-              {proxyStatus?.status === 'running' && (
-                <div className="flex flex-col gap-1 mt-1">
-                  {proxyStatus?.active_config_name && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">配置:</span>
-                      <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs font-semibold rounded border border-yellow-500/40">
-                        {proxyStatus.active_config_name}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">地址:</span>
-                    <span className="text-xs font-mono text-gray-400 bg-gray-800/50 px-2 py-0.5 rounded border border-gray-700">
-                      {proxyStatus.listen_host}:{proxyStatus.listen_port}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 右侧：操作按钮区 */}
-          <div className="flex items-center gap-3">
-            {/* 刷新按钮 */}
-            <button
-              onClick={handleRefreshStatus}
-              disabled={actionLoading}
-              className="w-10 h-10 flex items-center justify-center bg-gray-800/80 border border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-yellow-500/50 hover:text-yellow-400 disabled:opacity-50 rounded-lg transition-all hover:scale-105"
-              title="刷新状态"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-
-            {/* 启动/停止按钮 */}
-            {proxyStatus?.status === 'running' ? (
-              <button
-                onClick={handleStopProxy}
-                disabled={actionLoading}
-                className="px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-lg transition-all shadow-lg shadow-red-600/30 hover:shadow-red-600/50 disabled:opacity-50 text-base flex items-center gap-2 hover:scale-105"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                </svg>
-                停止服务
-              </button>
-            ) : (
-              <button
-                onClick={handleStartProxy}
-                disabled={actionLoading}
-                className="px-8 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-bold rounded-lg transition-all shadow-lg shadow-yellow-500/40 hover:shadow-yellow-500/60 disabled:opacity-50 text-base flex items-center gap-2 hover:scale-105"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                启动服务
-              </button>
-            )}
           </div>
         </div>
       </div>
 
-      {/* 主内容区域 - 分组和配置 */}
+      {/* ==================== 快速统计卡片 ==================== */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {/* 配置总数 */}
+        <div className="bg-gradient-to-br from-gray-900 to-black border border-gray-800 rounded-xl p-4 hover:border-yellow-500/30 transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-500 text-xs font-medium">配置总数</span>
+            <svg className="w-4 h-4 text-yellow-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+          </div>
+          <div className="text-2xl font-black text-white">{stats.total}</div>
+          <div className="text-xs text-gray-600 mt-1">{stats.groupCount} 个分组</div>
+        </div>
+
+        {/* 在线率 */}
+        <div className="bg-gradient-to-br from-gray-900 to-black border border-gray-800 rounded-xl p-4 hover:border-green-500/30 transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-500 text-xs font-medium">在线率</span>
+            <svg className="w-4 h-4 text-green-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className={`text-2xl font-black ${stats.onlineRate >= 80 ? 'text-green-400' : stats.onlineRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+              {stats.onlineRate}%
+            </span>
+          </div>
+          <div className="text-xs text-gray-600 mt-1">{stats.online}/{stats.total} 在线</div>
+        </div>
+
+        {/* 平均延迟 - 点击打开监控大屏 */}
+        <div
+          className="bg-gradient-to-br from-gray-900 to-black border border-gray-800 rounded-xl p-4 hover:border-blue-500/30 transition-all cursor-pointer group"
+          onClick={() => setShowMonitor(true)}
+          title="点击查看服务商监控大屏"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-500 text-xs font-medium">平均延迟</span>
+            <svg className="w-4 h-4 text-blue-500/50 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className={`text-2xl font-black ${
+              stats.avgLatency === null ? 'text-gray-500' :
+              stats.avgLatency < 200 ? 'text-green-400' :
+              stats.avgLatency < 500 ? 'text-yellow-400' : 'text-red-400'
+            }`}>
+              {stats.avgLatency !== null ? stats.avgLatency : '-'}
+            </span>
+            {stats.avgLatency !== null && <span className="text-gray-500 text-sm">ms</span>}
+          </div>
+          <div className="text-xs text-gray-600 mt-1 group-hover:text-blue-400/70 transition-colors">点击查看监控</div>
+        </div>
+
+        {/* 切换历史 */}
+        <div
+          className="bg-gradient-to-br from-gray-900 to-black border border-gray-800 rounded-xl p-4 hover:border-purple-500/30 transition-all cursor-pointer"
+          onClick={() => setShowSwitchHistory(!showSwitchHistory)}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-500 text-xs font-medium">切换记录</span>
+            <svg className={`w-4 h-4 text-purple-500/50 transition-transform ${showSwitchHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          <div className="text-2xl font-black text-white">{recentLogs.length}</div>
+          <div className="text-xs text-gray-600 mt-1">点击展开</div>
+        </div>
+      </div>
+
+      {/* ==================== 切换历史（可折叠） ==================== */}
+      {showSwitchHistory && recentLogs.length > 0 && (
+        <div className="mb-6 bg-gradient-to-br from-gray-900/80 to-black border border-purple-500/30 rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-purple-400">最近切换记录</h3>
+            <button
+              onClick={() => setShowClearLogsDialog(true)}
+              disabled={actionLoading}
+              className="px-2 py-1 text-xs bg-red-600/10 border border-red-600/30 text-red-400 hover:bg-red-600/20 disabled:opacity-50 rounded transition-all"
+            >
+              清空
+            </button>
+          </div>
+          <div className="space-y-2">
+            {recentLogs.map(log => (
+              <div key={log.id} className="flex items-center justify-between p-2.5 bg-black/40 border border-gray-800/50 rounded-lg text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600 font-mono w-12">
+                    {new Date(log.switch_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="text-gray-400">
+                    {log.source_config_name || '未知'}
+                  </span>
+                  <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                  <span className="text-yellow-400 font-medium">
+                    {log.target_config_name}
+                  </span>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-xs ${
+                  log.reason === 'manual' ? 'bg-blue-500/20 text-blue-400' :
+                  log.reason === 'high_latency' ? 'bg-orange-500/20 text-orange-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  {log.reason === 'manual' ? '手动' :
+                   log.reason === 'high_latency' ? '高延迟' :
+                   log.reason === 'connection_failed' ? '连接失败' :
+                   log.reason === 'timeout' ? '超时' : log.reason}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 主内容区域 ==================== */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* 左侧: 分组列表 */}
         <div className="lg:col-span-1">
-          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-4 shadow-lg shadow-yellow-500/5">
+          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/20 rounded-xl p-4">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-yellow-500/20">
-              <h2 className="text-sm font-bold text-yellow-500 tracking-wide">
-                配置分组
-              </h2>
+              <h2 className="text-sm font-bold text-yellow-500">配置分组</h2>
               <button
-                className="p-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-md hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50"
+                className="p-1.5 bg-yellow-500 text-black rounded-md hover:bg-yellow-400 transition-all"
                 onClick={handleCreateGroup}
                 title="新建分组"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                 </svg>
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {/* 全部配置 */}
               <button
-                className={`w-full text-left px-3 py-2 rounded-md transition-all duration-200 ${
+                className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
                   selectedGroupId === null
-                    ? 'bg-gradient-to-r from-yellow-500/20 to-yellow-600/20 text-yellow-400 border-2 border-yellow-500/60 shadow-lg shadow-yellow-500/10'
-                    : 'bg-gray-900/50 text-gray-400 hover:bg-gray-900 border border-gray-800 hover:border-gray-700'
+                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
+                    : 'text-gray-400 hover:bg-gray-900 border border-transparent hover:border-gray-800'
                 }`}
                 onClick={() => setSelectedGroupId(null)}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold">全部配置</span>
                   <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                    selectedGroupId === null
-                      ? 'bg-yellow-500/30 text-yellow-300'
-                      : 'bg-gray-800 text-gray-500'
+                    selectedGroupId === null ? 'bg-yellow-500/30 text-yellow-300' : 'bg-gray-800 text-gray-500'
                   }`}>
                     {configs.length}
                   </span>
@@ -711,73 +916,48 @@ const Dashboard: React.FC = () => {
                 return (
                   <div
                     key={group.id}
-                    className={`group w-full rounded-md transition-all duration-200 overflow-hidden ${
+                    className={`group rounded-lg transition-all overflow-hidden ${
                       isSelected
-                        ? 'bg-gradient-to-r from-yellow-500/20 to-yellow-600/20 border-2 border-yellow-500/60 shadow-lg shadow-yellow-500/10'
-                        : 'bg-gray-900/50 hover:bg-gray-900 border border-gray-800 hover:border-gray-700 hover:shadow-md'
+                        ? 'bg-yellow-500/20 border border-yellow-500/50'
+                        : 'hover:bg-gray-900 border border-transparent hover:border-gray-800'
                     }`}
                   >
-                    {/* 主内容区域 - 可点击 */}
                     <div
-                      className="px-3 py-2 cursor-pointer"
+                      className="px-3 py-2.5 cursor-pointer"
                       onClick={() => setSelectedGroupId(group.id)}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className={`text-sm font-semibold leading-tight truncate flex-1 ${
-                          isSelected ? 'text-yellow-400' : 'text-gray-300'
-                        }`} title={group.name}>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm font-semibold truncate ${isSelected ? 'text-yellow-400' : 'text-gray-300'}`}>
                           {group.name}
-                        </h3>
-                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                          isSelected
-                            ? 'bg-yellow-500/30 text-yellow-300'
-                            : 'bg-gray-800 text-gray-500'
+                        </span>
+                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ml-2 ${
+                          isSelected ? 'bg-yellow-500/30 text-yellow-300' : 'bg-gray-800 text-gray-500'
                         }`}>
                           {groupConfigCount}
                         </span>
                       </div>
-
-                      {group.description && (
-                        <p className={`text-xs mt-1 line-clamp-1 ${
-                          isSelected ? 'text-yellow-500/70' : 'text-gray-500'
-                        }`} title={group.description}>
-                          {group.description}
-                        </p>
-                      )}
                     </div>
 
-                    {/* 操作按钮区域 - 底部独立行 */}
+                    {/* 操作按钮 */}
                     <div className={`flex items-center gap-1 px-3 py-1.5 border-t ${
-                      isSelected
-                        ? 'border-yellow-500/30 bg-yellow-500/5'
-                        : 'border-gray-800/50 bg-gray-900/30'
+                      isSelected ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-gray-800/50 opacity-0 group-hover:opacity-100'
                     }`}>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditGroup(group);
-                        }}
-                        className={`p-1 rounded transition-all duration-200 ${
-                          isSelected
-                            ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                            : 'bg-gray-800/70 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
-                        }`}
-                        title="编辑分组"
+                        onClick={(e) => { e.stopPropagation(); handleEditGroup(group); }}
+                        className="p-1 rounded bg-gray-800/70 text-gray-400 hover:bg-gray-700 hover:text-white transition-all"
+                        title="编辑"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </button>
                       {group.id !== 0 && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteGroup(group);
-                          }}
-                          className="p-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20 hover:text-red-400 transition-all duration-200"
-                          title="删除分组"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group); }}
+                          className="p-1 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                          title="删除"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         </button>
@@ -792,40 +972,35 @@ const Dashboard: React.FC = () => {
 
         {/* 右侧: 配置列表 */}
         <div className="lg:col-span-3">
-          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 shadow-lg shadow-yellow-500/5">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-yellow-500/20">
+          <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/20 rounded-xl p-5">
+            {/* 标题栏 */}
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-yellow-500/20">
               <div className="flex items-center gap-4">
-                <h2 className="text-xl font-bold text-yellow-500 tracking-wide">
-                  {selectedGroupId === null
-                    ? '全部配置'
-                    : groups.find((g) => g.id === selectedGroupId)?.name || '配置列表'}
+                <h2 className="text-lg font-bold text-yellow-500">
+                  {selectedGroupId === null ? '全部配置' : groups.find((g) => g.id === selectedGroupId)?.name || '配置列表'}
                 </h2>
                 {/* 视图切换 */}
-                <div className="flex bg-gray-900/70 border border-gray-800 rounded-lg overflow-hidden shadow-inner">
+                <div className="flex bg-gray-900/70 border border-gray-800 rounded-lg overflow-hidden">
                   <button
-                    className={`px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
-                      viewMode === 'list'
-                        ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-lg shadow-yellow-500/30'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    className={`px-3 py-1 text-xs font-semibold transition-all ${
+                      viewMode === 'list' ? 'bg-yellow-500 text-black' : 'text-gray-400 hover:text-white'
                     }`}
                     onClick={() => setViewMode('list')}
                   >
-                    列表视图
+                    列表
                   </button>
                   <button
-                    className={`px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
-                      viewMode === 'test'
-                        ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-lg shadow-yellow-500/30'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    className={`px-3 py-1 text-xs font-semibold transition-all ${
+                      viewMode === 'test' ? 'bg-yellow-500 text-black' : 'text-gray-400 hover:text-white'
                     }`}
                     onClick={() => setViewMode('test')}
                   >
-                    端点测速
+                    测速
                   </button>
                 </div>
               </div>
               <button
-                className="px-5 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50"
+                className="px-4 py-2 bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-all font-bold text-sm"
                 onClick={handleCreateConfig}
               >
                 + 新建配置
@@ -840,356 +1015,172 @@ const Dashboard: React.FC = () => {
                 onRefresh={loadData}
               />
             ) : sortedConfigs.length === 0 ? (
-              <div className="text-center py-12">
-                <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              <div className="text-center py-16">
+                <svg className="mx-auto h-12 w-12 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-400">暂无配置</h3>
-                <p className="mt-1 text-sm text-gray-500">点击"新建配置"按钮开始添加 API 配置</p>
+                <h3 className="mt-3 text-sm font-medium text-gray-400">暂无配置</h3>
+                <p className="mt-1 text-xs text-gray-600">点击"新建配置"按钮开始添加</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {sortedConfigs.map((config) => (
-                  <div
-                    key={config.id}
-                    className={`bg-gradient-to-br from-gray-900 via-gray-900 to-black rounded-lg p-4 transition-all duration-300 ${
-                      proxyStatus?.active_config_id === config.id
-                        ? 'border-2 border-yellow-500 shadow-xl shadow-yellow-500/20 ring-2 ring-yellow-500/30'
-                        : 'border border-gray-800 hover:border-yellow-500/60 hover:shadow-xl hover:shadow-yellow-500/10 hover:scale-[1.01]'
-                    }`}
-                  >
-                    {/* 标题栏：配置名 + 标签 + 操作按钮 */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className={`text-base font-semibold ${
-                          proxyStatus?.active_config_id === config.id ? 'text-yellow-400' : 'text-white'
-                        }`}>{config.name}</h3>
+                {sortedConfigs.map((config) => {
+                  const isActive = proxyStatus?.active_config_id === config.id;
 
-                        {/* 分类标签 */}
-                        {config.category && config.category !== 'custom' && (
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded border ${
-                            categoryColors[config.category as ProviderCategory]?.bg || 'bg-gray-500/20'
-                          } ${
-                            categoryColors[config.category as ProviderCategory]?.text || 'text-gray-400'
-                          } ${
-                            categoryColors[config.category as ProviderCategory]?.border || 'border-gray-500'
+                  return (
+                    <div
+                      key={config.id}
+                      className={`rounded-xl p-4 transition-all duration-200 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-yellow-500/10 via-yellow-500/5 to-transparent border-2 border-yellow-500/60 shadow-lg shadow-yellow-500/10'
+                          : 'bg-gray-900/50 border border-gray-800 hover:border-gray-700 hover:bg-gray-900'
+                      }`}
+                    >
+                      {/* 第一行：名称 + 标签 + 操作 */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className={`text-base font-bold ${isActive ? 'text-yellow-400' : 'text-white'}`}>
+                            {config.name}
+                          </h3>
+
+                          {/* 活跃标签 */}
+                          {isActive && (
+                            <span className="px-2 py-0.5 bg-yellow-500 text-black text-xs font-bold rounded animate-pulse">
+                              活跃
+                            </span>
+                          )}
+
+                          {/* 在线状态 */}
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                            config.is_available
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-red-500/20 text-red-400'
                           }`}>
-                            {categoryLabels[config.category as ProviderCategory] || config.category}
+                            {config.is_available ? '在线' : '离线'}
                           </span>
-                        )}
 
-                        {/* 合作伙伴标签 */}
-                        {config.is_partner && (
-                          <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-medium rounded border border-blue-500/50">
-                            <svg className="w-2.5 h-2.5 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                            合作伙伴
-                          </span>
-                        )}
-
-                        {/* 活跃标签 - 当前正在使用的配置 */}
-                        {proxyStatus?.active_config_id === config.id && (
-                          <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded border border-yellow-500/50 shadow-lg shadow-yellow-500/20">
-                            <span className="inline-block w-1.5 h-1.5 bg-yellow-400 rounded-full mr-1 animate-pulse"></span>
-                            活跃
-                          </span>
-                        )}
-
-                        {/* 可用性标签 */}
-                        {config.is_available ? (
-                          <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded border border-green-500/50">
-                            <span className="inline-block w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></span>
-                            在线
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded border border-red-500/50">
-                            <span className="inline-block w-1.5 h-1.5 bg-red-400 rounded-full mr-1"></span>
-                            离线
-                          </span>
-                        )}
-                      </div>
-
-                      {/* 操作按钮组 */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                        {/* 切换按钮 - 仅当代理运行中且不是当前配置时显示 */}
-                        {proxyStatus?.status === 'running' && proxyStatus.active_config_id !== config.id && (
-                          <button
-                            className="px-2.5 py-1.5 bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 text-yellow-400 rounded hover:from-yellow-500/20 hover:to-yellow-600/20 transition-all duration-200 text-xs border border-yellow-500/40 hover:border-yellow-500/60 font-semibold"
-                            onClick={() => handleSwitchConfig(config.id)}
-                            disabled={actionLoading}
-                            title="切换到此配置"
-                          >
-                            <svg className="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                            切换
-                          </button>
-                        )}
-
-                        <button
-                          className={`px-2.5 py-1.5 rounded transition-all duration-200 text-xs border flex items-center font-semibold ${
-                            testingConfigId === config.id
-                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/50 cursor-wait'
-                              : 'bg-blue-500/10 text-blue-400 border-blue-500/40 hover:bg-blue-500/20 hover:border-blue-500/60'
-                          }`}
-                          onClick={() => handleTestConfig(config)}
-                          disabled={testingConfigId !== null}
-                          title={testingConfigId === config.id ? '测试中...' : '测试连接'}
-                        >
-                          {testingConfigId === config.id ? (
-                            <>
-                              <svg className="animate-spin w-3 h-3 mr-0.5" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              测试中
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                              测试
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          className={`px-2.5 py-1.5 rounded transition-all duration-200 text-xs border flex items-center font-semibold ${
-                            queryingBalanceId === config.id
-                              ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 cursor-wait'
-                              : config.balance_query_url && config.auto_balance_check
-                              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/40 hover:bg-yellow-500/20 hover:border-yellow-500/60'
-                              : 'bg-gray-600/10 text-gray-500 border-gray-600/30 cursor-not-allowed'
-                          }`}
-                          onClick={() => handleQueryBalance(config)}
-                          disabled={queryingBalanceId !== null || !config.balance_query_url || !config.auto_balance_check}
-                          title={
-                            !config.balance_query_url
-                              ? '未配置余额查询URL'
-                              : !config.auto_balance_check
-                              ? '余额查询已禁用（查询失败后自动禁用，请在配置编辑中重新启用）'
-                              : queryingBalanceId === config.id
-                              ? '查询中...'
-                              : '查询余额'
-                          }
-                        >
-                          {queryingBalanceId === config.id ? (
-                            <>
-                              <svg className="animate-spin w-3 h-3 mr-0.5" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              查询中
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              余额
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          className="px-2.5 py-1.5 bg-gray-800/50 text-gray-300 rounded hover:bg-gray-700 transition-all duration-200 text-xs border border-gray-700/50 hover:border-gray-600 font-semibold"
-                          onClick={() => handleEditConfig(config)}
-                          title="编辑配置"
-                        >
-                          <svg className="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          编辑
-                        </button>
-
-                        <button
-                          className="px-2.5 py-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-all duration-200 text-xs border border-red-500/40 hover:border-red-500/60 font-semibold"
-                          onClick={() => handleDeleteConfig(config)}
-                          title="删除配置"
-                        >
-                          <svg className="w-3.5 h-3.5 inline mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          删除
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 配置详情 */}
-                    <div className="space-y-2 text-sm mt-3 pt-3 border-t border-gray-800/50">
-                      {/* 服务器地址 */}
-                      <div className="flex items-start">
-                        <span className="text-gray-500 w-20 flex-shrink-0 text-xs">服务器</span>
-                        <span className="text-gray-300 break-all font-mono text-xs" title={config.server_url}>
-                          {formatDisplayUrl(config.server_url)}
-                        </span>
-                      </div>
-
-                      {/* 所属分组 */}
-                      <div className="flex items-center">
-                        <span className="text-gray-500 w-20 flex-shrink-0 text-xs">分组</span>
-                        <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded border border-yellow-500/40 text-xs">
-                          {groups.find((g) => g.id === config.group_id)?.name || '未分组'}
-                        </span>
-                      </div>
-
-                      {/* 测试信息 */}
-                      {config.last_test_at && (
-                        <div className="flex items-center">
-                          <span className="text-gray-500 w-20 flex-shrink-0 text-xs">测试</span>
-                          <div className="flex items-center gap-2 text-gray-400">
-                            <span className="text-xs">
-                              {new Date(config.last_test_at).toLocaleString('zh-CN', {
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+                          {/* 分类标签 */}
+                          {config.category && config.category !== 'custom' && (
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                              categoryColors[config.category as ProviderCategory]?.bg || 'bg-gray-500/20'
+                            } ${categoryColors[config.category as ProviderCategory]?.text || 'text-gray-400'}`}>
+                              {categoryLabels[config.category as ProviderCategory] || config.category}
                             </span>
-                            {config.last_latency_ms && (
-                              <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
-                                config.last_latency_ms < 200
-                                  ? 'bg-green-500/20 text-green-400 border-green-500/50'
-                                  : config.last_latency_ms < 500
-                                  ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50'
-                                  : 'bg-red-500/20 text-red-400 border-red-500/50'
-                              }`}>
-                                {config.last_latency_ms}ms
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                          )}
 
-                      {/* 余额信息 */}
-                      {config.last_balance !== null && config.last_balance !== undefined && (
-                        <div className="flex items-center">
-                          <span className="text-gray-500 w-20 flex-shrink-0 text-xs">余额</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono border ${
-                              config.last_balance >= 10
-                                ? 'bg-green-500/20 text-green-400 border-green-500/50'
-                                : config.last_balance >= 1
-                                ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50'
-                                : 'bg-red-500/20 text-red-400 border-red-500/50'
+                          {/* 延迟显示 */}
+                          {config.last_latency_ms && (
+                            <span className={`px-2 py-0.5 text-xs font-mono font-bold rounded ${
+                              config.last_latency_ms < 200 ? 'bg-green-500/20 text-green-400' :
+                              config.last_latency_ms < 500 ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
                             }`}>
-                              {(() => {
-                                const currencySymbols: Record<string, string> = {
-                                  'CNY': '¥',
-                                  'USD': '$',
-                                  'EUR': '€',
-                                  'JPY': '¥',
-                                };
-                                const symbol = config.balance_currency ? currencySymbols[config.balance_currency] || config.balance_currency : '';
-                                return `${symbol}${config.last_balance.toFixed(2)}`;
-                              })()}
+                              {config.last_latency_ms}ms
                             </span>
-                            {config.last_balance_check_at && (
-                              <span className="text-xs text-gray-500">
-                                {new Date(config.last_balance_check_at).toLocaleString('zh-CN', {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                            )}
-                            {!config.auto_balance_check && (
-                              <span className="inline-block px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded border border-orange-500/50">
-                                已禁用余额查询
-                              </span>
-                            )}
-                          </div>
+                          )}
                         </div>
-                      )}
 
-                      {/* 模型配置信息 */}
-                      {(config.default_model || config.sonnet_model || config.haiku_model || config.opus_model) && (
-                        <div className="flex items-start pt-2 border-t border-gray-800/50">
-                          <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">模型配置</span>
-                          <div className="flex flex-wrap gap-2">
-                            {config.default_model && (
-                              <span className="px-2.5 py-1 bg-purple-500/10 text-purple-400 rounded-md text-xs border border-purple-500/40 font-semibold">
-                                默认: {config.default_model}
-                              </span>
-                            )}
-                            {config.sonnet_model && (
-                              <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-md text-xs border border-blue-500/40 font-semibold">
-                                Sonnet: {config.sonnet_model}
-                              </span>
-                            )}
-                            {config.haiku_model && (
-                              <span className="px-2.5 py-1 bg-green-500/10 text-green-400 rounded-md text-xs border border-green-500/40 font-semibold">
-                                Haiku: {config.haiku_model}
-                              </span>
-                            )}
-                            {config.opus_model && (
-                              <span className="px-2.5 py-1 bg-orange-500/10 text-orange-400 rounded-md text-xs border border-orange-500/40 font-semibold">
-                                Opus: {config.opus_model}
-                              </span>
-                            )}
-                          </div>
+                        {/* 操作按钮 */}
+                        <div className="flex items-center gap-1.5">
+                          {/* 切换按钮 */}
+                          {proxyStatus?.status === 'running' && !isActive && (
+                            <button
+                              className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-all text-xs font-bold border border-yellow-500/40"
+                              onClick={() => handleSwitchConfig(config.id)}
+                              disabled={actionLoading}
+                            >
+                              切换
+                            </button>
+                          )}
+
+                          <button
+                            className={`px-2.5 py-1.5 rounded-lg transition-all text-xs font-semibold ${
+                              testingConfigId === config.id
+                                ? 'bg-blue-500/30 text-blue-300 cursor-wait'
+                                : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
+                            }`}
+                            onClick={() => handleTestConfig(config)}
+                            disabled={testingConfigId !== null}
+                          >
+                            {testingConfigId === config.id ? '测试中' : '测试'}
+                          </button>
+
+                          {config.balance_query_url && config.auto_balance_check && (
+                            <button
+                              className={`px-2.5 py-1.5 rounded-lg transition-all text-xs font-semibold ${
+                                queryingBalanceId === config.id
+                                  ? 'bg-yellow-500/30 text-yellow-300 cursor-wait'
+                                  : 'bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20'
+                              }`}
+                              onClick={() => handleQueryBalance(config)}
+                              disabled={queryingBalanceId !== null}
+                            >
+                              {queryingBalanceId === config.id ? '查询中' : '余额'}
+                            </button>
+                          )}
+
+                          <button
+                            className="px-2.5 py-1.5 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-all text-xs font-semibold"
+                            onClick={() => handleEditConfig(config)}
+                          >
+                            编辑
+                          </button>
+
+                          <button
+                            className="px-2.5 py-1.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-all text-xs font-semibold"
+                            onClick={() => handleDeleteConfig(config)}
+                          >
+                            删除
+                          </button>
                         </div>
-                      )}
+                      </div>
+
+                      {/* 第二行：关键信息 */}
+                      <div className="flex items-center gap-6 text-xs text-gray-500">
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                          </svg>
+                          <span className="text-gray-400 font-mono">{formatDisplayUrl(config.server_url)}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                          <span className="text-gray-400">{groups.find((g) => g.id === config.group_id)?.name || '未分组'}</span>
+                        </div>
+
+                        {config.last_balance !== null && config.last_balance !== undefined && (
+                          <div className="flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className={`font-mono font-bold ${
+                              config.last_balance >= 10 ? 'text-green-400' :
+                              config.last_balance >= 1 ? 'text-yellow-400' : 'text-red-400'
+                            }`}>
+                              {config.balance_currency === 'CNY' ? '¥' : config.balance_currency === 'USD' ? '$' : ''}
+                              {config.last_balance.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+
+                        {config.default_model && (
+                          <div className="flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-purple-400">{config.default_model}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
-
-          {/* 切换历史 - 放在右侧配置列表底部 */}
-          {recentLogs.length > 0 && (
-            <div className="mt-6 bg-gradient-to-br from-gray-900 to-gray-900/50 border border-yellow-500/30 rounded-lg p-5 shadow-lg shadow-yellow-500/5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-yellow-400">最近切换</h3>
-                <button
-                  onClick={() => setShowClearLogsDialog(true)}
-                  disabled={actionLoading}
-                  className="px-2.5 py-1 text-xs bg-red-600/10 border border-red-600/30 text-red-400 hover:bg-red-600/20 hover:border-red-600/40 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all"
-                >
-                  清空
-                </button>
-              </div>
-
-              <div className="space-y-1.5">
-                {recentLogs.map(log => (
-                  <div
-                    key={log.id}
-                    className="p-2.5 bg-black/20 border border-gray-800/50 rounded hover:border-gray-700 transition-all"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-gray-600 font-mono shrink-0">
-                          {new Date(log.switch_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className="text-gray-400 truncate">
-                          {log.source_config_name || '未知'} → {log.target_config_name}
-                        </span>
-                      </div>
-                      <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ml-2 ${
-                        log.reason === 'manual'
-                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                          : log.reason === 'high_latency'
-                          ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
-                          : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                      }`}>
-                        {log.reason === 'manual' ? '手动' :
-                         log.reason === 'high_latency' ? '延迟' :
-                         log.reason === 'connection_failed' ? '失败' :
-                         log.reason === 'timeout' ? '超时' :
-                         log.reason === 'quota_exceeded' ? '配额' :
-                         log.reason === 'retry_failed' ? '重试' :
-                         log.reason === 'unrecoverable_error' ? '错误' : '限流'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1218,7 +1209,6 @@ const Dashboard: React.FC = () => {
         onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
       />
 
-      {/* 清空日志确认对话框 */}
       <ConfirmDialog
         isOpen={showClearLogsDialog}
         title="确认清空日志"
@@ -1228,6 +1218,15 @@ const Dashboard: React.FC = () => {
         variant="danger"
         onConfirm={handleClearLogs}
         onCancel={() => setShowClearLogsDialog(false)}
+      />
+
+      {/* 服务商监控大屏 */}
+      <ProviderMonitor
+        isOpen={showMonitor}
+        onClose={() => setShowMonitor(false)}
+        configs={configs}
+        groups={groups}
+        selectedGroupId={selectedGroupId}
       />
     </CompactLayout>
   );

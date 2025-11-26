@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 7;
+const CURRENT_DB_VERSION: i32 = 8;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -88,6 +88,10 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             7 => {
                 // v6 -> v7: 添加 provider_type 字段以支持不同的 API 提供商
                 migrate_v6_to_v7(conn)?;
+            }
+            8 => {
+                // v7 -> v8: 添加代理请求日志表
+                migrate_v7_to_v8(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -339,6 +343,40 @@ fn migrate_v6_to_v7(conn: &Connection) -> AppResult<()> {
         })?;
 
     log::info!("v6 -> v7 迁移完成: 已添加 provider_type 字段");
+    Ok(())
+}
+
+/// 迁移: v7 -> v8 - 添加代理请求日志表
+/// 用于记录代理接口的实际请求延迟
+fn migrate_v7_to_v8(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v7 -> v8 迁移: 添加代理请求日志表");
+
+    // 检查表是否已存在
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ProxyRequestLog')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查表是否存在失败: {}", e),
+        })?;
+
+    if table_exists {
+        log::info!("v7 -> v8 迁移: ProxyRequestLog 表已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v8_proxy_request_log.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v7->v8 迁移失败: {}", e),
+        })?;
+
+    log::info!("v7 -> v8 迁移完成: 已添加代理请求日志表");
     Ok(())
 }
 

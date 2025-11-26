@@ -12,22 +12,23 @@ mod utils;
 
 use commands::{
     apply_config_to_env, check_anthropic_env, clear_all_claude_code_backups, clear_anthropic_env,
-    clear_switch_logs, count_configs_in_group, create_api_config, create_claude_code_backup,
-    create_config_group, delete_api_config, delete_claude_code_backup, delete_config_group,
-    detect_claude_code_path, disable_claude_code_proxy, enable_claude_code_proxy,
-    get_all_balance_info, get_api_config, get_api_key, get_claude_code_proxy,
-    get_claude_code_settings, get_config_group, get_environment_variable,
-    get_provider_categories, get_provider_preset, get_provider_presets_by_category,
+    clear_switch_logs, cleanup_proxy_request_logs, count_configs_in_group, create_api_config,
+    create_claude_code_backup, create_config_group, delete_api_config, delete_claude_code_backup,
+    delete_config_group, detect_claude_code_path, disable_claude_code_proxy,
+    enable_claude_code_proxy, get_all_balance_info, get_all_proxy_request_logs, get_api_config,
+    get_api_key, get_claude_code_proxy, get_claude_code_settings, get_config_group,
+    get_environment_variable, get_provider_categories, get_provider_preset,
+    get_provider_presets_by_category, get_proxy_request_log_count, get_proxy_request_logs,
     get_proxy_status, get_recommended_provider_presets, get_switch_logs, get_test_results,
     list_api_configs, list_claude_code_backups, list_config_groups, list_environment_variables,
     list_provider_presets, load_recommended_services, preview_claude_code_backup,
     query_all_balances, query_balance, quick_test_config_url, reorder_api_config,
     refresh_recommended_services, restore_claude_code_backup, restore_claude_code_config,
-    set_environment_variable, set_environment_variables, start_proxy_service,
-    stop_proxy_service, switch_proxy_config, switch_proxy_group, test_api_config,
-    test_api_endpoints, test_group_configs, toggle_auto_switch, unset_environment_variable,
-    update_api_config, update_config_group, EnvironmentVariableState, ProxyServiceState,
-    RecommendationServiceState,
+    run_health_check_now, set_environment_variable, set_environment_variables,
+    start_health_check, start_proxy_service, stop_health_check, stop_proxy_service,
+    switch_proxy_config, switch_proxy_group, test_api_config, test_api_endpoints,
+    test_group_configs, toggle_auto_switch, unset_environment_variable, update_api_config,
+    update_config_group, EnvironmentVariableState, ProxyServiceState, RecommendationServiceState,
 };
 use db::{initialize_database, DbPool};
 use services::balance_scheduler::BalanceScheduler;
@@ -174,6 +175,15 @@ fn main() {
             apply_config_to_env,
             check_anthropic_env,
             clear_anthropic_env,
+            // 代理请求日志
+            get_proxy_request_logs,
+            get_all_proxy_request_logs,
+            cleanup_proxy_request_logs,
+            get_proxy_request_log_count,
+            // 健康检查
+            start_health_check,
+            stop_health_check,
+            run_health_check_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

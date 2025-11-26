@@ -4,7 +4,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { ProxyService, SwitchLog } from '../types/tauri';
+import type { ProxyService, SwitchLog, ProxyRequestLog, HealthCheckStatusResponse } from '../types/tauri';
 
 /**
  * 启动代理服务
@@ -85,4 +85,83 @@ export async function clearSwitchLogs(groupId?: number): Promise<number> {
   return invoke<number>('clear_switch_logs', {
     groupId: groupId ?? null,
   });
+}
+
+/**
+ * 获取指定配置的代理请求日志
+ * @param configId 配置 ID
+ * @param limit 返回数量限制，默认100
+ * @returns 代理请求日志列表
+ */
+export async function getProxyRequestLogs(
+  configId: number,
+  limit?: number
+): Promise<ProxyRequestLog[]> {
+  return invoke<ProxyRequestLog[]>('get_proxy_request_logs', {
+    configId,
+    limit: limit ?? 100,
+  });
+}
+
+/**
+ * 获取所有代理请求日志（带分页）
+ * @param limit 返回数量限制，默认100
+ * @param offset 偏移量，默认0
+ * @returns 代理请求日志列表
+ */
+export async function getAllProxyRequestLogs(
+  limit?: number,
+  offset?: number
+): Promise<ProxyRequestLog[]> {
+  return invoke<ProxyRequestLog[]>('get_all_proxy_request_logs', {
+    limit: limit ?? 100,
+    offset: offset ?? 0,
+  });
+}
+
+/**
+ * 清理旧的代理请求日志
+ * @param keepCount 保留的日志数量，默认10000
+ * @returns 删除的日志数量
+ */
+export async function cleanupProxyRequestLogs(keepCount?: number): Promise<number> {
+  return invoke<number>('cleanup_proxy_request_logs', {
+    keepCount: keepCount ?? 10000,
+  });
+}
+
+/**
+ * 获取代理请求日志总数
+ * @returns 日志总数
+ */
+export async function getProxyRequestLogCount(): Promise<number> {
+  return invoke<number>('get_proxy_request_log_count');
+}
+
+// ============== 健康检查 API ==============
+
+/**
+ * 启动健康检查调度器
+ * @param intervalSecs 检查间隔（秒），默认60秒
+ * @returns 健康检查状态
+ */
+export async function startHealthCheck(intervalSecs?: number): Promise<HealthCheckStatusResponse> {
+  return invoke<HealthCheckStatusResponse>('start_health_check', {
+    intervalSecs: intervalSecs ?? null,
+  });
+}
+
+/**
+ * 停止健康检查调度器
+ * @returns 健康检查状态
+ */
+export async function stopHealthCheck(): Promise<HealthCheckStatusResponse> {
+  return invoke<HealthCheckStatusResponse>('stop_health_check');
+}
+
+/**
+ * 手动执行一次健康检查
+ */
+export async function runHealthCheckNow(): Promise<void> {
+  return invoke<void>('run_health_check_now');
 }

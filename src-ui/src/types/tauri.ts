@@ -444,3 +444,43 @@ export interface BalanceInfo {
   /** 错误信息 */
   error_message: string | null;
 }
+
+/**
+ * 代理请求日志
+ */
+export interface ProxyRequestLog {
+  /** 日志ID */
+  id: number;
+  /** 请求时间 */
+  request_at: string;
+  /** HTTP方法 */
+  method: string;
+  /** 请求URI */
+  uri: string;
+  /** 目标URL */
+  target_url: string;
+  /** 配置ID */
+  config_id: number | null;
+  /** 配置名称 */
+  config_name: string | null;
+  /** 延迟(毫秒) */
+  latency_ms: number;
+  /** HTTP状态码 */
+  status_code: number;
+  /** 是否成功 */
+  is_success: boolean;
+  /** 错误信息 */
+  error_message: string | null;
+  /** 客户端地址 */
+  remote_addr: string | null;
+}
+
+/**
+ * 健康检查状态响应
+ */
+export interface HealthCheckStatusResponse {
+  /** 是否运行中 */
+  running: boolean;
+  /** 检查间隔（秒） */
+  interval_secs: number;
+}

@@ -6,7 +6,9 @@ pub mod balance;
 pub mod claude_code;
 pub mod config_group;
 pub mod env_var;
+pub mod health_check;
 pub mod provider_preset;
+pub mod proxy_log;
 pub mod proxy_service;
 pub mod recommendation;
 
@@ -53,3 +55,10 @@ pub use env_var::{
     list_environment_variables, set_environment_variable, set_environment_variables,
     unset_environment_variable, EnvironmentVariableState,
 };
+
+pub use proxy_log::{
+    cleanup_proxy_request_logs, get_all_proxy_request_logs, get_proxy_request_log_count,
+    get_proxy_request_logs,
+};
+
+pub use health_check::{run_health_check_now, start_health_check, stop_health_check};

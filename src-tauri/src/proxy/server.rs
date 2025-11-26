@@ -8,6 +8,7 @@ use crate::models::error::{AppError, AppResult};
 use crate::proxy::logger::ProxyLogger;
 use crate::proxy::router::RequestRouter;
 use crate::services::auto_switch::AutoSwitchService;
+use crate::services::proxy_log::ProxyRequestLogService;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Request, Response};
@@ -391,6 +392,14 @@ impl ProxyServer {
                 let log_entry = log_builder.finish(response.status());
                 ProxyLogger::log_request(&log_entry);
 
+                // Save to database (async, don't block response)
+                let db = db_pool.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
+                        log::warn!("Failed to save proxy request log: {}", e);
+                    }
+                });
+
                 Ok(response)
             }
             Err(e) => {
@@ -406,6 +415,14 @@ impl ProxyServer {
                     error_msg,
                 );
                 ProxyLogger::log_request(&log_entry);
+
+                // Save to database (async, don't block response)
+                let db = db_pool.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
+                        log::warn!("Failed to save proxy request log: {}", e);
+                    }
+                });
 
                 Ok(response)
             }

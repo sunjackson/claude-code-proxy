@@ -11,6 +11,7 @@ pub mod provider_preset;
 pub mod proxy_log;
 pub mod proxy_service;
 pub mod recommendation;
+pub mod setup;
 
 // 重新导出常用命令
 pub use api_config::{
@@ -62,3 +63,8 @@ pub use proxy_log::{
 };
 
 pub use health_check::{run_health_check_now, start_health_check, stop_health_check};
+
+pub use setup::{
+    check_can_install, detect_environment, generate_environment_report, get_claude_version,
+    install_claude_code, run_claude_doctor, uninstall_claude_code, verify_claude_installation,
+};

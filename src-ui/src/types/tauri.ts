@@ -484,3 +484,80 @@ export interface HealthCheckStatusResponse {
   /** 检查间隔（秒） */
   interval_secs: number;
 }
+
+/**
+ * 环境检测状态
+ */
+export interface EnvironmentStatus {
+  /** 操作系统类型 */
+  os_type: string;
+  /** 操作系统版本 */
+  os_version: string;
+  /** Shell 环境 */
+  shell: string | null;
+  /** Claude Code 是否已安装 */
+  claude_installed: boolean;
+  /** Claude Code 版本 */
+  claude_version: string | null;
+  /** Homebrew 是否已安装 (macOS) */
+  homebrew_installed: boolean;
+  /** WSL 是否已安装 (Windows) */
+  wsl_installed: boolean;
+  /** Git Bash 是否已安装 (Windows) */
+  git_bash_installed: boolean;
+  /** Node.js 是否已安装 */
+  node_installed: boolean;
+  /** Node.js 版本 */
+  node_version: string | null;
+  /** ripgrep 是否已安装 */
+  ripgrep_installed: boolean;
+  /** 网络是否可用 */
+  network_available: boolean;
+}
+
+/**
+ * 安装方式
+ */
+export type InstallMethod = 'Native' | 'Homebrew' | 'NPM';
+
+/**
+ * 安装选项
+ */
+export interface InstallOptions {
+  /** 安装方式 */
+  method: InstallMethod;
+  /** 自动配置 */
+  auto_configure: boolean;
+  /** 自动备份 */
+  auto_backup: boolean;
+  /** 自动测试 */
+  auto_test: boolean;
+  /** 自动启动代理 */
+  auto_start_proxy: boolean;
+}
+
+/**
+ * 安装阶段
+ */
+export type InstallStage =
+  | 'Detecting'
+  | 'Downloading'
+  | 'Installing'
+  | 'Configuring'
+  | 'Testing'
+  | 'Complete'
+  | 'Failed';
+
+/**
+ * 安装进度
+ */
+export interface InstallProgress {
+  /** 当前阶段 */
+  stage: InstallStage;
+  /** 进度 (0.0 - 1.0) */
+  progress: number;
+  /** 进度消息 */
+  message: string;
+  /** 是否成功 */
+  success: boolean;
+}

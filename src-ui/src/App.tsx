@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard';
 import Recommendations from './pages/Recommendations';
 import Settings from './pages/Settings';
 import TestApi from './pages/TestApi';
+import { EnvironmentSetup } from './pages/EnvironmentSetup';
 
 /**
  * App 主组件
@@ -27,6 +28,7 @@ const App: React.FC = () => {
           <Route path="/settings" element={<Settings />} />
           <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/test-api" element={<TestApi />} />
+          <Route path="/environment-setup" element={<EnvironmentSetup />} />
 
           {/* 旧路由兼容 - 重定向 */}
           <Route path="/configs" element={<Navigate to="/" replace />} />

@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { EnvironmentStatus, InstallOptions, InstallProgress, InstallMethod } from '../types/tauri';
 import {
   detectEnvironment,
@@ -23,7 +22,6 @@ interface SetupWizardProps {
 }
 
 export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) => {
-  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<WizardStep>('welcome');
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
   const [canInstall, setCanInstall] = useState<boolean>(false);
@@ -134,7 +132,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
 
   const handleComplete = () => {
     onComplete();
-    navigate('/');
   };
 
   const handleSkipSetup = () => {
@@ -248,10 +245,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => navigate('/environment-setup')}
+                    onClick={handleSkipSetup}
                     className="flex-1 px-6 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 font-semibold"
                   >
-                    📋 查看详细信息
+                    📋 稍后手动设置
                   </button>
                   <button
                     onClick={handleSkipSetup}

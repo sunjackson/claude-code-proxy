@@ -3,15 +3,26 @@
  * 用于判断是否需要显示设置向导
  */
 
+import { invoke } from '@tauri-apps/api/core';
+
 const FIRST_RUN_KEY = 'claudecodeproxy_first_run';
 const SETUP_COMPLETED_KEY = 'claudecodeproxy_setup_completed';
 const AUTO_CONFIG_NEEDED_KEY = 'claudecodeproxy_auto_config_needed';
 
 /**
  * 检查是否首次运行
+ * 通过后端 API 检查数据库中是否有配置数据
  */
-export function isFirstRun(): boolean {
-  return localStorage.getItem(FIRST_RUN_KEY) === null;
+export async function isFirstRun(): Promise<boolean> {
+  try {
+    // 调用后端 API 检查系统是否已配置
+    const isConfigured = await invoke<boolean>('check_system_configured');
+    return !isConfigured;
+  } catch (error) {
+    console.error('检查系统配置状态失败:', error);
+    // 出错时回退到 localStorage 检查
+    return localStorage.getItem(FIRST_RUN_KEY) === null;
+  }
 }
 
 /**

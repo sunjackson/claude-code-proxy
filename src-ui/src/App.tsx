@@ -26,9 +26,19 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // 检查是否需要显示首次启动向导
-    const shouldShowWizard = isFirstRun();
-    setShowWizard(shouldShowWizard);
-    setWizardChecked(true);
+    const checkFirstRun = async () => {
+      try {
+        const shouldShowWizard = await isFirstRun();
+        setShowWizard(shouldShowWizard);
+      } catch (error) {
+        console.error('检查首次运行状态失败:', error);
+        setShowWizard(false);
+      } finally {
+        setWizardChecked(true);
+      }
+    };
+
+    checkFirstRun();
   }, []);
 
   const handleWizardComplete = () => {

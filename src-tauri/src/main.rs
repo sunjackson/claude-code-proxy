@@ -34,7 +34,7 @@ use commands::{
     switch_proxy_config, switch_proxy_group, test_api_config, test_api_endpoints,
     test_group_configs, test_mcp_server, toggle_auto_switch, uninstall_claude_code,
     unset_environment_variable, update_api_config, update_claude_code, update_config_group, update_mcp_server,
-    update_permissions_config, update_skill, verify_claude_installation, EnvironmentVariableState,
+    update_permissions_config, update_skill, verify_claude_installation, check_system_configured, EnvironmentVariableState,
     ProxyServiceState, RecommendationServiceState,
 };
 use db::{initialize_database, DbPool};
@@ -202,6 +202,7 @@ fn main() {
             check_can_install,
             check_for_updates,
             update_claude_code,
+            check_system_configured,
             // MCP 配置管理
             list_mcp_servers,
             add_mcp_server,

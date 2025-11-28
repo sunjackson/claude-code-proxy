@@ -193,6 +193,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
               <h2 className="text-2xl font-bold text-yellow-400 mb-2">正在检测系统环境</h2>
               <p className="text-gray-400">请稍候,这可能需要几秒钟...</p>
             </div>
+
+            <button
+              onClick={handleSkipSetup}
+              className="w-full px-6 py-3 bg-gray-800/50 text-gray-300 font-semibold rounded-lg hover:bg-gray-700/50 transition-all border border-gray-700"
+            >
+              跳过向导
+            </button>
           </div>
         )}
 
@@ -264,13 +271,23 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
                   </div>
                 )}
 
-                <button
-                  onClick={handleAutoInstall}
-                  disabled={installing}
-                  className="w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-yellow-500/30 text-lg"
-                >
-                  {installing ? '安装中...' : '🚀 开始自动安装'}
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleAutoInstall}
+                    disabled={installing}
+                    className="w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-yellow-500/30 text-lg"
+                  >
+                    {installing ? '安装中...' : '🚀 开始自动安装'}
+                  </button>
+
+                  <button
+                    onClick={handleSkipSetup}
+                    disabled={installing}
+                    className="w-full px-6 py-3 bg-gray-800/50 text-gray-300 font-semibold rounded-lg hover:bg-gray-700/50 transition-all border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    跳过向导
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -305,12 +322,21 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
               </p>
             </div>
 
-            <button
-              onClick={handleComplete}
-              className="w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-lg shadow-yellow-500/30 text-lg"
-            >
-              进入控制面板 →
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={handleComplete}
+                className="w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-lg shadow-yellow-500/30 text-lg"
+              >
+                进入控制面板 →
+              </button>
+
+              <button
+                onClick={handleSkipSetup}
+                className="w-full px-6 py-3 bg-gray-800/50 text-gray-300 font-semibold rounded-lg hover:bg-gray-700/50 transition-all border border-gray-700"
+              >
+                稍后手动配置
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -68,7 +68,7 @@ pub use proxy_log::{
 pub use health_check::{run_health_check_now, start_health_check, stop_health_check};
 
 pub use setup::{
-    check_can_install, check_for_updates, detect_environment, generate_environment_report, get_claude_version,
+    check_can_install, check_for_updates, check_system_configured, detect_environment, generate_environment_report, get_claude_version,
     install_claude_code, run_claude_doctor, uninstall_claude_code, update_claude_code, verify_claude_installation,
 };
 

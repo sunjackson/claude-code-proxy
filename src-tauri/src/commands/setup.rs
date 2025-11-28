@@ -1,7 +1,23 @@
 // 环境设置和 Claude Code 安装相关的 Tauri Commands
 
+use crate::db::DbPool;
 use crate::services::{ClaudeInstaller, EnvironmentStatus, InstallOptions, InstallProgress};
-use tauri::{Emitter, Window};
+use std::sync::Arc;
+use tauri::{Emitter, State, Window};
+
+/// 检查系统是否已完成初始配置
+/// 通过检查数据库中是否有配置项来判断
+#[tauri::command]
+pub async fn check_system_configured(pool: State<'_, Arc<DbPool>>) -> Result<bool, String> {
+    pool.with_connection(|conn| {
+        // 检查是否至少有一个配置项
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM ApiConfig", [], |row| row.get(0))
+            .map_err(|e| format!("数据库查询失败: {}", e))?;
+        Ok(count > 0)
+    })
+    .map_err(|e| e.to_string())
+}
 
 /// 检测系统环境
 #[tauri::command]

@@ -7,10 +7,14 @@ pub mod claude_code;
 pub mod config_group;
 pub mod env_var;
 pub mod health_check;
+pub mod mcp;
+pub mod permissions;
 pub mod provider_preset;
 pub mod proxy_log;
 pub mod proxy_service;
 pub mod recommendation;
+pub mod setup;
+pub mod skills;
 
 // 重新导出常用命令
 pub use api_config::{
@@ -62,3 +66,20 @@ pub use proxy_log::{
 };
 
 pub use health_check::{run_health_check_now, start_health_check, stop_health_check};
+
+pub use setup::{
+    check_can_install, check_for_updates, detect_environment, generate_environment_report, get_claude_version,
+    install_claude_code, run_claude_doctor, uninstall_claude_code, update_claude_code, verify_claude_installation,
+};
+
+pub use mcp::{
+    add_mcp_server, add_mcp_server_from_template, export_mcp_servers, get_mcp_templates,
+    import_mcp_servers, list_mcp_servers, remove_mcp_server, test_mcp_server, update_mcp_server,
+};
+
+pub use permissions::{clear_permissions_config, get_permissions_config, update_permissions_config};
+
+pub use skills::{
+    add_skill, export_skills, import_skills, list_skills, read_skill_prompt, remove_skill,
+    update_skill,
+};

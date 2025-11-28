@@ -135,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
         {/* 右侧: 状态和操作 */}
         <div className="flex items-center gap-3">
           {/* 当前活跃配置信息 + 快速切换 */}
-          {proxyStatus && proxyStatus.active_config_name && (
+          {proxyStatus && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowConfigMenu(!showConfigMenu)}
@@ -149,7 +149,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
                     </span>
                   )}
                   <span className="text-sm font-semibold text-yellow-400 group-hover:text-yellow-300 transition-colors leading-tight">
-                    {proxyStatus.active_config_name}
+                    {proxyStatus.active_config_name || '选择配置'}
                   </span>
                 </div>
 

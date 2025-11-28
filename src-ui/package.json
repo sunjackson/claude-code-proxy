@@ -1,6 +1,6 @@
 {
   "name": "claude-code-proxy-ui",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Claude Code 代理服务 - 前端界面",
   "type": "module",
   "scripts": {

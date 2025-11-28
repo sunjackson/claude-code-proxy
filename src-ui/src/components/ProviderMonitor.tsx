@@ -157,19 +157,19 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
     };
   };
 
-  // 测试所有配置连通性
+  // 测试所有配置连通性 - 与 Dashboard 保持一致的测试方法
   const handleTestAll = async () => {
     if (testingAll || filteredConfigs.length === 0) return;
 
     setTestingAll(true);
     try {
-      const groupId = selectedGroupId ?? filteredConfigs[0]?.group_id;
-      if (groupId !== null && groupId !== undefined) {
-        await testApi.testGroupConfigs(groupId);
-      } else {
-        // 逐个测试
-        for (const config of filteredConfigs) {
+      // 逐个测试所有配置，与 Dashboard 的 handleTestConfig 逻辑保持一致
+      for (const config of filteredConfigs) {
+        try {
           await testApi.testApiConfig(config.id);
+        } catch (err) {
+          console.error(`Failed to test config ${config.id}:`, err);
+          // 继续测试下一个配置
         }
       }
       // 重新加载数据

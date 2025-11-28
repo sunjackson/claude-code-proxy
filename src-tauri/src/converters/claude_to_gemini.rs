@@ -3,6 +3,8 @@
  */
 
 use super::claude_types::{ClaudeRequest, ClaudeContent, ClaudeContentBlock, ClaudeMessageRole};
+#[cfg(test)]
+use super::claude_types::ClaudeMessage;
 use super::gemini_types::{GeminiRequest, GeminiContent, GeminiPart, GeminiGenerationConfig};
 use crate::models::error::AppResult;
 

@@ -4,9 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CompactLayout } from '../components/CompactLayout';
-import type { EnvironmentStatus, InstallOptions, InstallProgress, InstallMethod } from '../types/tauri';
+import type { EnvironmentStatus, InstallOptions, InstallProgress, InstallMethod, VersionInfo } from '../types/tauri';
 import {
   detectEnvironment,
   installClaudeCode,
@@ -14,12 +13,13 @@ import {
   getClaudeVersion,
   verifyClaudeInstallation,
   checkCanInstall,
+  checkForUpdates,
+  updateClaudeCode,
 } from '../api/setup';
 
 type SetupTab = 'detection' | 'install' | 'verify';
 
 export const EnvironmentSetup: React.FC = () => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<SetupTab>('detection');
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,6 +36,9 @@ export const EnvironmentSetup: React.FC = () => {
   const [verifying, setVerifying] = useState(false);
   const [doctorOutput, setDoctorOutput] = useState<string>('');
   const [claudeVersion, setClaudeVersion] = useState<string>('');
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     loadEnvironmentStatus();
@@ -53,10 +56,8 @@ export const EnvironmentSetup: React.FC = () => {
       setCanInstall(can);
       setMissingDeps(missing);
 
-      // 如果已安装,自动切换到验证标签
+      // 如果已安装,获取版本信息但不自动切换标签
       if (status.claude_installed) {
-        setActiveTab('verify');
-        // 获取版本信息
         try {
           const version = await getClaudeVersion();
           setClaudeVersion(version);
@@ -106,11 +107,18 @@ export const EnvironmentSetup: React.FC = () => {
   const handleRunDoctor = async () => {
     setVerifying(true);
     setError(null);
+    setDoctorOutput(''); // 清空之前的输出
     try {
+      console.log('开始运行 claude doctor...');
       const output = await runClaudeDoctor();
-      setDoctorOutput(output);
+      console.log('claude doctor 输出:', output);
+      setDoctorOutput(output || '✅ claude doctor 执行成功，但没有输出');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '运行 claude doctor 失败');
+      console.error('claude doctor 执行失败:', err);
+      const errorMsg = err instanceof Error ? err.message : '运行 claude doctor 失败';
+      setError(errorMsg);
+      // 同时在 doctor 输出区域显示错误
+      setDoctorOutput(`❌ 执行失败\n\n${errorMsg}`);
     } finally {
       setVerifying(false);
     }
@@ -125,6 +133,8 @@ export const EnvironmentSetup: React.FC = () => {
         const version = await getClaudeVersion();
         setClaudeVersion(version);
         setDoctorOutput('✅ Claude Code 已正确安装');
+        // 验证成功后检查更新
+        checkUpdates();
       } else {
         setError('Claude Code 未安装或安装不完整');
       }
@@ -132,6 +142,37 @@ export const EnvironmentSetup: React.FC = () => {
       setError(err instanceof Error ? err.message : '验证失败');
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const checkUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      const info = await checkForUpdates();
+      setVersionInfo(info);
+    } catch (err) {
+      console.error('Failed to check for updates:', err);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    setUpdating(true);
+    setError(null);
+    setInstallProgress(null);
+
+    try {
+      await updateClaudeCode(installMethod, (progress) => {
+        setInstallProgress(progress);
+      });
+
+      // 更新完成,重新检测环境
+      await loadEnvironmentStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新失败');
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -448,41 +489,119 @@ export const EnvironmentSetup: React.FC = () => {
           <div className="space-y-4">
             {/* 版本信息 */}
             {claudeVersion && (
-              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Claude Code 版本:</span>
+                  <span className="text-gray-400">当前版本:</span>
                   <span className="text-white font-mono">{claudeVersion}</span>
                 </div>
+
+                {versionInfo && (
+                  <>
+                    {versionInfo.latest && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">最新版本:</span>
+                        <span className="text-white font-mono">{versionInfo.latest}</span>
+                      </div>
+                    )}
+
+                    {versionInfo.update_available && (
+                      <div className="mt-3 pt-3 border-t border-gray-800">
+                        <div className="flex items-center gap-2 text-yellow-400 mb-2">
+                          <span>🎉</span>
+                          <span className="font-semibold">发现新版本！</span>
+                        </div>
+                        {versionInfo.changelog_url && (
+                          <a
+                            href={versionInfo.changelog_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-400 hover:text-blue-300 underline"
+                          >
+                            查看更新日志
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {!versionInfo.update_available && versionInfo.latest && (
+                      <div className="mt-2 text-sm text-green-400 flex items-center gap-2">
+                        <span>✅</span>
+                        <span>已是最新版本</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
             {/* 操作按钮 */}
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleVerifyInstallation}
-                disabled={verifying}
-                className="flex-1 px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50 font-semibold"
+                disabled={verifying || updating}
+                className="px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50 font-semibold transition-all"
               >
                 {verifying ? '验证中...' : '🔍 验证安装'}
               </button>
               <button
                 onClick={handleRunDoctor}
-                disabled={verifying}
-                className="flex-1 px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50 font-semibold"
+                disabled={verifying || updating}
+                className="px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50 font-semibold transition-all"
               >
                 {verifying ? '运行中...' : '🏥 运行 Doctor'}
               </button>
+              <button
+                onClick={checkUpdates}
+                disabled={checkingUpdate || updating}
+                className="px-4 py-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 font-semibold transition-all"
+              >
+                {checkingUpdate ? '检查中...' : '🔄 检查更新'}
+              </button>
+              {versionInfo?.update_available && (
+                <button
+                  onClick={handleUpdate}
+                  disabled={updating}
+                  className="px-4 py-3 bg-gradient-to-r from-green-500/20 to-green-600/20 hover:from-green-500/30 hover:to-green-600/30 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 font-semibold transition-all"
+                >
+                  {updating ? '更新中...' : '⬆️ 更新版本'}
+                </button>
+              )}
             </div>
 
+            {/* 更新进度 */}
+            {updating && installProgress && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-yellow-400">
+                    {installProgress.stage}
+                  </span>
+                  <span className="text-sm text-gray-400">
+                    {Math.round(installProgress.progress * 100)}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-300 ${getProgressBarColor(installProgress.stage)}`}
+                    style={{ width: `${installProgress.progress * 100}%` }}
+                  />
+                </div>
+                <p className="text-sm text-gray-300">{installProgress.message}</p>
+              </div>
+            )}
+
             {/* Doctor 输出 */}
-            {doctorOutput && (
-              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-                <h3 className="text-sm font-semibold text-yellow-400 mb-2">诊断输出</h3>
+            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
+              <h3 className="text-sm font-semibold text-yellow-400 mb-2">诊断输出</h3>
+              {doctorOutput ? (
                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto">
                   {doctorOutput}
                 </pre>
-              </div>
-            )}
+              ) : (
+                <div className="text-sm text-gray-500 italic py-4 text-center">
+                  点击 "运行 Doctor" 按钮查看诊断信息
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -21,6 +21,183 @@ pub struct EnvironmentStatus {
     pub network_available: bool,
 }
 
+/// 辅助函数：检查命令是否存在
+#[allow(dead_code)]
+fn command_exists(cmd: &str) -> bool {
+    // 方法1：使用 which/where 检查 PATH
+    #[cfg(target_os = "windows")]
+    let which_cmd = "where";
+    
+    #[cfg(not(target_os = "windows"))]
+    let which_cmd = "which";
+    
+    let in_path = Command::new(which_cmd)
+        .arg(cmd)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+    
+    if in_path {
+        return true;
+    }
+    
+    // 方法2：检查常见安装路径（macOS 和 Linux）
+    #[cfg(not(target_os = "windows"))]
+    {
+        let common_paths = vec![
+            format!("/usr/local/bin/{}", cmd),
+            format!("/opt/homebrew/bin/{}", cmd),
+            format!("/usr/bin/{}", cmd),
+            format!("/bin/{}", cmd),
+            format!("/opt/local/bin/{}", cmd),
+        ];
+        
+        // 检查用户 home 目录下的常见路径
+        if let Ok(home) = std::env::var("HOME") {
+            let user_paths = vec![
+                format!("{}/.local/bin/{}", home, cmd),
+                format!("{}/.cargo/bin/{}", home, cmd),
+                format!("{}/bin/{}", home, cmd),
+            ];
+            
+            for path in user_paths {
+                if std::path::Path::new(&path).exists() {
+                    log::info!("在用户目录找到命令 {} : {}", cmd, path);
+                    return true;
+                }
+            }
+        }
+        
+        for path in common_paths {
+            if std::path::Path::new(&path).exists() {
+                log::info!("在常见路径找到命令 {} : {}", cmd, path);
+                return true;
+            }
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        let common_paths = vec![
+            format!("C:\\Program Files\\nodejs\\{}.exe", cmd),
+            format!("C:\\Program Files (x86)\\nodejs\\{}.exe", cmd),
+        ];
+        
+        for path in common_paths {
+            if std::path::Path::new(&path).exists() {
+                log::info!("在常见路径找到命令 {} : {}", cmd, path);
+                return true;
+            }
+        }
+    }
+    
+    false
+}
+
+/// 辅助函数：安全地执行命令并获取输出
+fn safe_command_output(cmd: &str, args: &[&str]) -> Option<String> {
+    // 方法1：尝试直接执行（依赖 PATH）
+    if let Ok(output) = Command::new(cmd).args(args).output() {
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !result.is_empty() {
+                return Some(result);
+            }
+        }
+    }
+    
+    // 方法2：查找命令的完整路径并执行
+    let full_path = find_command_path(cmd)?;
+    
+    Command::new(&full_path)
+        .args(args)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !result.is_empty() {
+                    Some(result)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+}
+
+/// 查找命令的完整路径
+fn find_command_path(cmd: &str) -> Option<String> {
+    // 检查常见安装路径（macOS 和 Linux）
+    #[cfg(not(target_os = "windows"))]
+    {
+        let common_paths = vec![
+            format!("/usr/local/bin/{}", cmd),
+            format!("/opt/homebrew/bin/{}", cmd),
+            format!("/usr/bin/{}", cmd),
+            format!("/bin/{}", cmd),
+            format!("/opt/local/bin/{}", cmd),
+        ];
+        
+        // 检查用户 home 目录下的常见路径
+        if let Ok(home) = std::env::var("HOME") {
+            let user_paths = vec![
+                format!("{}/.local/bin/{}", home, cmd),
+                format!("{}/.cargo/bin/{}", home, cmd),
+                format!("{}/bin/{}", home, cmd),
+            ];
+            
+            for path in user_paths {
+                if std::path::Path::new(&path).exists() {
+                    log::info!("找到命令完整路径: {}", path);
+                    return Some(path);
+                }
+            }
+        }
+        
+        for path in common_paths {
+            if std::path::Path::new(&path).exists() {
+                log::info!("找到命令完整路径: {}", path);
+                return Some(path);
+            }
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        let extensions = vec!["exe", "cmd", "bat"];
+        let program_files = vec![
+            "C:\\Program Files",
+            "C:\\Program Files (x86)",
+        ];
+        
+        // 检查 nodejs 目录
+        for pf in &program_files {
+            for ext in &extensions {
+                let path = format!("{}\\nodejs\\{}.{}", pf, cmd, ext);
+                if std::path::Path::new(&path).exists() {
+                    log::info!("找到命令完整路径: {}", path);
+                    return Some(path);
+                }
+            }
+        }
+        
+        // 检查 Git 目录
+        for pf in &program_files {
+            for ext in &extensions {
+                let path = format!("{}\\Git\\cmd\\{}.{}", pf, cmd, ext);
+                if std::path::Path::new(&path).exists() {
+                    log::info!("找到命令完整路径: {}", path);
+                    return Some(path);
+                }
+            }
+        }
+    }
+    
+    None
+}
+
 impl EnvironmentStatus {
     /// 检测当前系统环境
     pub fn detect() -> AppResult<Self> {
@@ -114,14 +291,13 @@ impl EnvironmentStatus {
 
     /// 检测 Claude Code 是否已安装
     fn detect_claude() -> (bool, Option<String>) {
-        if let Ok(output) = Command::new("claude").arg("--version").output() {
-            if output.status.success() {
-                let version = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .to_string();
-                return (true, Some(version));
-            }
+        // 使用安全的命令执行
+        if let Some(version) = safe_command_output("claude", &["--version"]) {
+            log::info!("检测到 Claude Code 版本: {}", version);
+            return (true, Some(version));
         }
+        
+        log::warn!("Claude Code 未检测到");
         (false, None)
     }
 
@@ -129,11 +305,13 @@ impl EnvironmentStatus {
     fn detect_homebrew() -> bool {
         #[cfg(target_os = "macos")]
         {
-            Command::new("brew")
-                .arg("--version")
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
+            let installed = safe_command_output("brew", &["--version"]).is_some();
+            if installed {
+                log::info!("检测到 Homebrew");
+            } else {
+                log::warn!("Homebrew 未检测到");
+            }
+            installed
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -169,34 +347,39 @@ impl EnvironmentStatus {
 
     /// 检测 Node.js
     fn detect_node() -> (bool, Option<String>) {
-        if let Ok(output) = Command::new("node").arg("--version").output() {
-            if output.status.success() {
-                let version = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .trim_start_matches('v')
-                    .to_string();
-
-                // 检查版本是否 >= 18
-                let installed = version
-                    .split('.')
-                    .next()
-                    .and_then(|major| major.parse::<u32>().ok())
-                    .map(|major| major >= 18)
-                    .unwrap_or(false);
-
-                return (installed, Some(version));
+        if let Some(version_str) = safe_command_output("node", &["--version"]) {
+            let version = version_str.trim_start_matches('v').to_string();
+            
+            // 检查版本是否 >= 18
+            let meets_requirement = version
+                .split('.')
+                .next()
+                .and_then(|major| major.parse::<u32>().ok())
+                .map(|major| major >= 18)
+                .unwrap_or(false);
+            
+            if meets_requirement {
+                log::info!("检测到 Node.js 版本: {} (满足要求)", version);
+                return (true, Some(version));
+            } else {
+                log::warn!("检测到 Node.js 版本: {} (不满足 >=18 的要求)", version);
+                return (false, Some(version));
             }
         }
+        
+        log::warn!("Node.js 未检测到");
         (false, None)
     }
 
     /// 检测 ripgrep
     fn detect_ripgrep() -> bool {
-        Command::new("rg")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        let installed = safe_command_output("rg", &["--version"]).is_some();
+        if installed {
+            log::info!("检测到 ripgrep");
+        } else {
+            log::warn!("ripgrep 未检测到");
+        }
+        installed
     }
 
     /// 检查网络连接

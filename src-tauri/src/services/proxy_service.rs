@@ -193,7 +193,7 @@ impl ProxyService {
             .map(|n| n.as_str())
             .unwrap_or("未选择配置");
 
-        let title = format!("Claude Code Router\n{} - {}", status_text, config_name);
+        let title = format!("ClaudeCodeProxy\n{} - {}", status_text, config_name);
 
         if let Some(tray) = handle.tray_by_id("main") {
             if let Err(e) = tray.set_tooltip(Some(&title)) {

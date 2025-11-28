@@ -70,3 +70,27 @@ pub async fn check_can_install() -> Result<(bool, Vec<String>), String> {
     let env = EnvironmentStatus::detect().map_err(|e| e.to_string())?;
     Ok(env.can_install())
 }
+
+/// 检查 Claude Code 更新
+#[tauri::command]
+pub async fn check_for_updates() -> Result<crate::services::VersionInfo, String> {
+    ClaudeInstaller::check_for_updates()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 更新 Claude Code
+#[tauri::command]
+pub async fn update_claude_code(
+    method: crate::services::InstallMethod,
+    window: Window,
+) -> Result<(), String> {
+    // 创建进度回调，通过事件发送进度
+    let progress_callback = move |progress: InstallProgress| {
+        let _ = window.emit("install-progress", &progress);
+    };
+
+    ClaudeInstaller::update(method, progress_callback)
+        .await
+        .map_err(|e| e.to_string())
+}

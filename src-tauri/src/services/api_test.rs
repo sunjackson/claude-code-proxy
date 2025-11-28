@@ -23,9 +23,6 @@ use tokio::time::timeout;
 /// API 测试超时时间(秒) - 增加到30秒以支持较慢的API
 const TEST_TIMEOUT_SECS: u64 = 30;
 
-/// API 响应内容最大长度
-const MAX_RESPONSE_TEXT_LENGTH: usize = 100;
-
 /// API 测试响应结构
 struct ApiTestResponse {
     response_text: String,
@@ -53,63 +50,24 @@ fn classify_error(error: &reqwest::Error) -> String {
     }
 }
 
-/// 解析 SSE 响应流
-async fn parse_sse_response(response: reqwest::Response) -> Result<String, String> {
-    use futures_util::StreamExt;
-
-    let mut stream = response.bytes_stream();
-    let mut response_text = String::new();
-    let mut buffer = Vec::new();
-
-    while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result.map_err(|e| format!("读取响应流失败: {}", e))?;
-        buffer.extend_from_slice(&chunk);
-
-        // 尝试将 buffer 转换为字符串并按行处理
-        if let Ok(text) = String::from_utf8(buffer.clone()) {
-            let lines: Vec<&str> = text.lines().collect();
-
-            for line in &lines {
-                if line.starts_with("data: ") {
-                    let json_str = line.strip_prefix("data: ").unwrap();
-
-                    if json_str == "[DONE]" {
-                        buffer.clear();
-                        break;
-                    }
-
-                    // 解析 JSON
-                    if let Ok(event) = serde_json::from_str::<serde_json::Value>(json_str) {
-                        // 提取 content_block_delta
-                        if let Some(delta_text) = event["delta"]["text"].as_str() {
-                            response_text.push_str(delta_text);
-                        }
-
-                        // 检查错误
-                        if event["type"] == "error" {
-                            return Err(event["error"]["message"]
-                                .as_str()
-                                .unwrap_or("API Error")
-                                .to_string());
-                        }
-                    }
-                }
-            }
-
-            buffer.clear();
+/// 提取 URL 的基础部分（scheme://host:port），移除路径
+fn extract_base_url(url: &str) -> String {
+    // 查找 :// 分隔符
+    if let Some(scheme_pos) = url.find("://") {
+        let scheme_end = scheme_pos + 3;
+        let after_scheme = &url[scheme_end..];
+        
+        // 在主机部分查找第一个 / (路径开始)
+        if let Some(path_pos) = after_scheme.find('/') {
+            // 截取 scheme + host:port
+            String::from(&url[..scheme_end + path_pos])
+        } else {
+            // 没有路径，返回整个 URL
+            String::from(url)
         }
-    }
-
-    // 限制长度（避免过长）
-    if response_text.len() > MAX_RESPONSE_TEXT_LENGTH {
-        response_text.truncate(MAX_RESPONSE_TEXT_LENGTH);
-        response_text.push_str("...");
-    }
-
-    if response_text.is_empty() {
-        Ok("Success".to_string())
     } else {
-        Ok(response_text)
+        // 没有协议前缀，返回原始字符串
+        String::from(url)
     }
 }
 
@@ -356,220 +314,73 @@ impl ApiTestService {
         Ok(results)
     }
 
-    /// 执行实际的 API 测试（支持流式响应）
+    /// 执行服务器连接测试
     ///
-    /// 使用 Anthropic Messages API 发送一个简单的测试请求
-    /// 完全模拟 Claude Code 客户端行为以兼容 88code 等服务商
+    /// 简化版测速：仅测试服务器主域名是否可访问（HTTP HEAD 请求）
+    /// 参考常规网站测速工具的实现
     async fn perform_api_test(
         &self,
         server_url: &str,
-        api_key: &str,
-        model: Option<&str>,
+        _api_key: &str,
+        _model: Option<&str>,
     ) -> Result<ApiTestResponse, String> {
-        use serde_json::json;
-
-        // 确定测试模型
-        let test_model = model.unwrap_or("claude-haiku-4-5-20251001");
-
         log::debug!("========================================");
-        log::debug!("API 测试开始");
+        log::debug!("服务器连接测试开始");
         log::debug!("服务器: {}", server_url);
-        log::debug!("模型: {}", test_model);
-        log::debug!("API Key: {}...{}", &api_key[..8.min(api_key.len())], if api_key.len() > 8 { &api_key[api_key.len()-4..] } else { "" });
         log::debug!("========================================");
 
-        // 构建完整的 Claude Code 风格请求体
-        // 参考 claude-codex-api 的实现，包含 system, tools, metadata
-        let test_request_body = json!({
-            "model": test_model,
-            "max_tokens": 521,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "<system-reminder></system-reminder>"
-                    },
-                    {
-                        "type": "text",
-                        "text": "Please reply with only one word \"Success\", no thinking is allowed, and no use of any mcp services, tools or hooks is allowed."
-                    }
-                ]
-            }],
-            "temperature": 1.0,
-            "stream": true,
-            // 关键：Claude Code 系统提示
-            "system": [
-                {
-                    "type": "text",
-                    "text": "You are Claude Code, Anthropic's official CLI for Claude.",
-                    "cache_control": {
-                        "type": "ephemeral"
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": "\nYou are an interactive CLI tool that helps users with software engineering tasks."
-                }
-            ],
-            // 关键：空 tools 数组
-            "tools": [],
-            // 关键：metadata 标识
-            "metadata": {
-                "user_id": "user__account__session_111"
-            }
-        });
-
-        // 构建完整的 API URL (移除尾部斜杠)
+        // 提取主域名（移除路径部分）
         let base_url = server_url.trim_end_matches('/');
-        let api_url = format!("{}/v1/messages?beta=true", base_url);
+        
+        // 安全地解析 URL，只保留 scheme://host:port
+        let test_url = extract_base_url(base_url);
 
-        log::info!("📤 请求 API: {} (模型: {})", api_url, test_model);
+        log::info!("📤 测试服务器连接: {}", test_url);
 
-        // 记录请求体（隐藏敏感信息）
-        let debug_body = serde_json::to_string_pretty(&test_request_body).unwrap_or_default();
-        log::debug!("请求体:\n{}", debug_body);
-
-        // 创建 HTTP 客户端
+        // 创建 HTTP 客户端，设置较短的超时时间
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(TEST_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(5))
+            .connect_timeout(std::time::Duration::from_secs(3))
             .build()
             .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
 
-        // 记录请求头（隐藏敏感信息）
-        log::debug!("请求头:");
-        log::debug!("  x-api-key: {}...{}", &api_key[..8.min(api_key.len())], if api_key.len() > 8 { &api_key[api_key.len()-4..] } else { "" });
-        log::debug!("  Authorization: Bearer {}...", &api_key[..8.min(api_key.len())]);
-        log::debug!("  anthropic-version: 2023-06-01");
-        log::debug!("  anthropic-beta: claude-code-20250219,fine-grained-tool-streaming-2025-05-14");
-        log::debug!("  User-Agent: claude-cli/1.0.113 (external, cli)");
-        log::debug!("  x-app: cli");
-        log::debug!("  X-Stainless-Lang: js");
-        log::debug!("  X-Stainless-Package-Version: 0.60.0");
-        log::debug!("  content-type: application/json");
-
-        // 发送流式请求，完全模拟 Claude Code 客户端
+        // 发送 HEAD 请求测试主域名连接性
         let response = client
-            .post(&api_url)
-            // 认证头
-            .header("x-api-key", api_key)
-            .header("Authorization", format!("Bearer {}", api_key))
-            // Anthropic API 版本和特性
-            .header("anthropic-version", "2023-06-01")
-            .header("anthropic-beta", "claude-code-20250219,fine-grained-tool-streaming-2025-05-14")
-            .header("anthropic-dangerous-direct-browser-access", "true")
-            // 关键：Claude Code 客户端标识
-            .header("User-Agent", "claude-cli/1.0.113 (external, cli)")
-            .header("x-app", "cli")
-            // Stainless SDK 标识（Anthropic SDK 基于 Stainless）
-            .header("X-Stainless-Lang", "js")
-            .header("X-Stainless-Package-Version", "0.60.0")
-            .header("X-Stainless-Runtime", "node")
-            .header("X-Stainless-Runtime-Version", "v22.17.0")
-            .header("X-Stainless-Retry-Count", "0")
-            .header("x-stainless-helper-method", "stream")
-            // 内容类型
-            .header("content-type", "application/json")
-            .header("Accept", "application/json")
-            .header("accept-language", "*")
-            .header("sec-fetch-mode", "cors")
-            .json(&test_request_body)
+            .head(&test_url)
+            .header("User-Agent", "ClaudeCodeProxy/1.0")
             .send()
             .await
             .map_err(|e| {
                 let err_msg = classify_error(&e);
-                log::error!("❌ 请求失败: {}", err_msg);
+                log::error!("❌ 连接失败: {}", err_msg);
                 err_msg
             })?;
 
         let status = response.status();
+        let status_code = status.as_u16();
 
-        log::info!("📥 响应状态: {}", status);
+        log::info!("📥 响应状态: HTTP {}", status_code);
 
-        // 记录响应头
-        log::debug!("响应头:");
-        for (name, value) in response.headers() {
-            if let Ok(val_str) = value.to_str() {
-                log::debug!("  {}: {}", name, val_str);
-            }
-        }
-
-        // 检查响应状态
-        if status.is_success() {
-            log::info!("✅ 请求成功，开始解析 SSE 响应");
-            // 解析 SSE 响应
-            let response_text = parse_sse_response(response).await?;
-            log::info!("✅ 测试完成，响应: {}", if response_text.len() > 50 {
-                format!("{}...", &response_text[..50])
-            } else {
-                response_text.clone()
-            });
+        // 判断服务器是否可访问
+        // 200 OK: 服务正常
+        // 401 Unauthorized: 服务可访问，但需要认证
+        // 405 Method Not Allowed: 服务可访问，但不支持 HEAD 方法
+        // 这些都表示服务器正常对外提供服务
+        if status.is_success() || status_code == 401 || status_code == 405 {
+            let response_text = format!("服务器可访问 (HTTP {})", status_code);
+            log::info!("✅ {}", response_text);
             Ok(ApiTestResponse {
                 response_text,
-                model: test_model.to_string(),
+                model: "connectivity-test".to_string(),
             })
-        } else if status.as_u16() == 401 {
-            let error_text = response.text().await.unwrap_or_default();
-            log::error!("❌ 401 认证失败");
-            log::error!("响应体: {}", if error_text.len() > 500 { format!("{}...", &error_text[..500]) } else { error_text.clone() });
-            Err("认证失败：API Key 无效".to_string())
-        } else if status.as_u16() == 403 {
-            let error_text = response.text().await.unwrap_or_default();
-            log::error!("❌ 403 访问被拒绝");
-            log::error!("响应体: {}", if error_text.len() > 500 { format!("{}...", &error_text[..500]) } else { error_text.clone() });
-
-            // 尝试解析 JSON 错误信息
-            if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-                log::error!("错误详情: {}", serde_json::to_string_pretty(&error_json).unwrap_or_default());
-            }
-
-            Err(format!("访问被拒绝：{}", error_text))
-        } else if status.as_u16() == 429 {
-            let error_text = response.text().await.unwrap_or_default();
-            log::error!("❌ 429 配额耗尽");
-            log::error!("响应体: {}", if error_text.len() > 500 { format!("{}...", &error_text[..500]) } else { error_text.clone() });
-            Err("配额耗尽：请求过多或余额不足".to_string())
-        } else if status.as_u16() == 400 {
-            // 400 说明服务器有响应，服务可用但请求格式有问题
-            let error_text = response.text().await.unwrap_or_default();
-            log::error!("❌ 400 请求格式错误");
-            log::error!("响应体: {}", if error_text.len() > 500 { format!("{}...", &error_text[..500]) } else { error_text.clone() });
-
-            // 尝试解析 JSON 错误信息
-            if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-                log::error!("错误详情: {}", serde_json::to_string_pretty(&error_json).unwrap_or_default());
-            }
-
-            // 尝试从错误中提取有用信息
-            if error_text.contains("invalid") || error_text.contains("model") {
-                Err(format!("模型不支持：{}", error_text))
-            } else {
-                Err(format!("请求格式错误：{}", error_text))
-            }
-        } else if status.as_u16() >= 500 && status.as_u16() < 600 {
-            // 5xx 服务器错误，表示服务不可用
-            let error_text = response.text().await.unwrap_or_default();
-            log::error!("❌ HTTP {} 服务器错误", status);
-            log::error!("响应体: {}", if error_text.len() > 500 { format!("{}...", &error_text[..500]) } else { error_text.clone() });
-
-            // 尝试解析 JSON 错误信息
-            if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-                log::error!("错误详情: {}", serde_json::to_string_pretty(&error_json).unwrap_or_default());
-            }
-
-            Err(format!("服务器错误：HTTP {} - {}", status, error_text))
+        } else if status_code >= 500 && status_code < 600 {
+            // 5xx 服务器错误
+            log::error!("❌ 服务器错误: HTTP {}", status_code);
+            Err(format!("服务器错误 (HTTP {})", status_code))
         } else {
-            // 其他状态码（如 3xx, 4xx 等），表示服务可用但有其他问题
-            let error_text = response.text().await.unwrap_or_default();
-            log::error!("❌ HTTP {} 错误", status);
-            log::error!("响应体: {}", if error_text.len() > 500 { format!("{}...", &error_text[..500]) } else { error_text.clone() });
-
-            // 尝试解析 JSON 错误信息
-            if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-                log::error!("错误详情: {}", serde_json::to_string_pretty(&error_json).unwrap_or_default());
-            }
-
-            Err(format!("HTTP {}：{}", status, error_text))
+            // 其他错误状态
+            log::error!("❌ 服务不可用: HTTP {}", status_code);
+            Err(format!("服务不可用 (HTTP {})", status_code))
         }
     }
 

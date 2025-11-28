@@ -21,6 +21,7 @@ import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import { showSuccess, showError } from '../services/toast';
 import { categoryLabels, categoryColors, type ProviderCategory } from '../config/providerPresets';
 import { formatDisplayUrl } from '../utils/url';
+import { needsAutoConfig, markAutoConfigDone } from '../utils/setupState';
 
 const Dashboard: React.FC = () => {
   // 状态管理
@@ -97,6 +98,43 @@ const Dashboard: React.FC = () => {
     loadData();
     loadClaudeCodeConfig();
   }, []);
+
+  // 首次进入时自动配置代理
+  useEffect(() => {
+    const performAutoConfig = async () => {
+      if (!needsAutoConfig()) return;
+
+      console.log('[Dashboard] 检测到需要自动配置，开始执行...');
+
+      try {
+        // 1. 启用代理配置
+        console.log('[Dashboard] 步骤 1: 启用代理配置...');
+        await claudeCodeApi.enableClaudeCodeProxy('127.0.0.1', 3000);
+        await loadClaudeCodeConfig();
+        console.log('[Dashboard] 步骤 1: 代理配置已启用');
+
+        // 2. 启动代理服务
+        console.log('[Dashboard] 步骤 2: 启动代理服务...');
+        const status = await proxyApi.startProxyService();
+        setProxyStatus(status);
+        console.log('[Dashboard] 步骤 2: 代理服务已启动');
+
+        // 标记自动配置完成
+        markAutoConfigDone();
+        showSuccess('代理服务已自动配置并启动');
+      } catch (err) {
+        console.error('[Dashboard] 自动配置失败:', err);
+        // 即使失败也标记完成，避免反复尝试
+        markAutoConfigDone();
+        // 不显示错误，用户可以手动启动
+      }
+    };
+
+    // 等待初始数据加载完成后执行
+    if (!loading && proxyStatus !== null) {
+      performAutoConfig();
+    }
+  }, [loading, proxyStatus]);
 
   const loadData = async () => {
     try {
@@ -1026,15 +1064,22 @@ const Dashboard: React.FC = () => {
               <div className="space-y-3">
                 {sortedConfigs.map((config) => {
                   const isActive = proxyStatus?.active_config_id === config.id;
+                  const isProxyRunning = proxyStatus?.status === 'running';
 
                   return (
                     <div
                       key={config.id}
+                      onClick={() => {
+                        // 代理未运行时，点击卡片直接切换配置
+                        if (!isProxyRunning && !isActive) {
+                          handleSwitchConfig(config.id);
+                        }
+                      }}
                       className={`rounded-xl p-4 transition-all duration-200 ${
                         isActive
                           ? 'bg-gradient-to-r from-yellow-500/10 via-yellow-500/5 to-transparent border-2 border-yellow-500/60 shadow-lg shadow-yellow-500/10'
                           : 'bg-gray-900/50 border border-gray-800 hover:border-gray-700 hover:bg-gray-900'
-                      }`}
+                      } ${!isProxyRunning && !isActive ? 'cursor-pointer' : ''}`}
                     >
                       {/* 第一行：名称 + 标签 + 操作 */}
                       <div className="flex items-center justify-between mb-3">
@@ -1082,11 +1127,14 @@ const Dashboard: React.FC = () => {
 
                         {/* 操作按钮 */}
                         <div className="flex items-center gap-1.5">
-                          {/* 切换按钮 */}
-                          {proxyStatus?.status === 'running' && !isActive && (
+                          {/* 切换按钮 - 只在代理运行时显示 */}
+                          {isProxyRunning && !isActive && (
                             <button
                               className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-all text-xs font-bold border border-yellow-500/40"
-                              onClick={() => handleSwitchConfig(config.id)}
+                              onClick={(e) => {
+                                e.stopPropagation(); // 阻止事件冒泡到父容器
+                                handleSwitchConfig(config.id);
+                              }}
                               disabled={actionLoading}
                             >
                               切换
@@ -1099,7 +1147,10 @@ const Dashboard: React.FC = () => {
                                 ? 'bg-blue-500/30 text-blue-300 cursor-wait'
                                 : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
                             }`}
-                            onClick={() => handleTestConfig(config)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTestConfig(config);
+                            }}
                             disabled={testingConfigId !== null}
                           >
                             {testingConfigId === config.id ? '测试中' : '测试'}
@@ -1112,7 +1163,10 @@ const Dashboard: React.FC = () => {
                                   ? 'bg-yellow-500/30 text-yellow-300 cursor-wait'
                                   : 'bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20'
                               }`}
-                              onClick={() => handleQueryBalance(config)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQueryBalance(config);
+                              }}
                               disabled={queryingBalanceId !== null}
                             >
                               {queryingBalanceId === config.id ? '查询中' : '余额'}
@@ -1121,14 +1175,20 @@ const Dashboard: React.FC = () => {
 
                           <button
                             className="px-2.5 py-1.5 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-all text-xs font-semibold"
-                            onClick={() => handleEditConfig(config)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditConfig(config);
+                            }}
                           >
                             编辑
                           </button>
 
                           <button
                             className="px-2.5 py-1.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-all text-xs font-semibold"
-                            onClick={() => handleDeleteConfig(config)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteConfig(config);
+                            }}
                           >
                             删除
                           </button>

@@ -58,6 +58,8 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
 
   const navItems = [
     { path: '/', title: '仪表盘' },
+    { path: '/claude-code-setup', title: 'Claude Code 设置' },
+    { path: '/recommendations', title: '推荐配置' },
     { path: '/settings', title: '设置' },
   ];
 
@@ -73,7 +75,7 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
             </svg>
           </div>
           <span className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 whitespace-nowrap">
-            Claude Router
+            ClaudeCodeProxy
           </span>
         </div>
 

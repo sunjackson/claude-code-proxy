@@ -561,3 +561,106 @@ export interface InstallProgress {
   /** 是否成功 */
   success: boolean;
 }
+
+/**
+ * Claude Code 版本信息
+ */
+export interface VersionInfo {
+  /** 当前版本 */
+  current: string | null;
+  /** 最新版本 */
+  latest: string | null;
+  /** 是否有更新 */
+  update_available: boolean;
+  /** 变更日志 URL */
+  changelog_url: string | null;
+}
+
+/**
+ * MCP 服务器配置
+ */
+export interface McpServerConfig {
+  /** 启动命令 */
+  command: string;
+  /** 命令参数 */
+  args: string[];
+  /** 环境变量 */
+  env?: Record<string, string>;
+}
+
+/**
+ * MCP 服务器信息
+ */
+export interface McpServerInfo {
+  /** 服务器名称 */
+  name: string;
+  /** 启动命令 */
+  command: string;
+  /** 命令参数 */
+  args: string[];
+  /** 环境变量 */
+  env?: Record<string, string>;
+  /** 是否启用 */
+  enabled: boolean;
+}
+
+/**
+ * MCP 服务器模板
+ */
+export interface McpServerTemplate {
+  /** 模板名称(内部标识) */
+  name: string;
+  /** 显示名称 */
+  display_name: string;
+  /** 模板描述 */
+  description: string;
+  /** 分类 */
+  category: string;
+  /** 标签 */
+  tags: string[];
+  /** 是否推荐 */
+  recommended: boolean;
+  /** 服务器配置 */
+  config: McpServerConfig;
+  /** 必需的环境变量 */
+  required_env_vars: string[];
+  /** 环境变量说明 */
+  env_var_descriptions: Record<string, string>;
+}
+
+/**
+ * Permissions 配置
+ * 基于 ~/.claude/settings.json 中的 permissions 字段
+ */
+export interface PermissionsConfig {
+  /** 允许的工具列表 */
+  allow: string[];
+  /** 禁止的工具列表 */
+  deny: string[];
+}
+
+/**
+ * 技能信息
+ */
+export interface SkillInfo {
+  /** 技能名称 */
+  name: string;
+  /** 提示词文件路径 */
+  prompt: string;
+  /** 技能描述 */
+  description?: string;
+  /** 是否启用 */
+  enabled: boolean;
+}
+
+/**
+ * 技能定义
+ */
+export interface SkillDefinition {
+  /** 技能提示词文件路径 */
+  prompt: string;
+  /** 技能描述 */
+  description?: string;
+  /** 是否启用 */
+  enabled: boolean;
+}

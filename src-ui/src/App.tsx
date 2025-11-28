@@ -15,7 +15,7 @@ import Dashboard from './pages/Dashboard';
 import Recommendations from './pages/Recommendations';
 import Settings from './pages/Settings';
 import TestApi from './pages/TestApi';
-import { EnvironmentSetup } from './pages/EnvironmentSetup';
+import ClaudeCodeSetup from './pages/ClaudeCodeSetup';
 
 /**
  * App 主组件
@@ -76,11 +76,13 @@ const App: React.FC = () => {
           <Route path="/settings" element={<Settings />} />
           <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/test-api" element={<TestApi />} />
-          <Route path="/environment-setup" element={<EnvironmentSetup />} />
+          <Route path="/claude-code-setup" element={<ClaudeCodeSetup />} />
 
           {/* 旧路由兼容 - 重定向 */}
           <Route path="/configs" element={<Navigate to="/" replace />} />
-          <Route path="/claude-code" element={<Navigate to="/settings" replace />} />
+          <Route path="/claude-code" element={<Navigate to="/claude-code-setup" replace />} />
+          <Route path="/environment-setup" element={<Navigate to="/claude-code-setup" replace />} />
+          <Route path="/advanced-config" element={<Navigate to="/claude-code-setup" replace />} />
 
           {/* 404 重定向到首页 */}
           <Route path="*" element={<Navigate to="/" replace />} />

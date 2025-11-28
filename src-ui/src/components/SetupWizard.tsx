@@ -1,6 +1,6 @@
 /**
  * Zero-Config Code Flow 首次启动向导
- * 自动检测环境,引导用户一键安装 Claude Code
+ * 仅检测和安装 Claude Code，自动配置在进入主页面后执行
  */
 
 import React, { useState, useEffect } from 'react';
@@ -9,12 +9,9 @@ import {
   detectEnvironment,
   installClaudeCode,
   checkCanInstall,
-  verifyClaudeInstallation,
 } from '../api/setup';
-import { enableClaudeCodeProxy } from '../api/claude-code';
-import { startProxyService } from '../api/proxy';
 
-type WizardStep = 'welcome' | 'detecting' | 'install' | 'configure' | 'complete';
+type WizardStep = 'welcome' | 'detecting' | 'install' | 'complete';
 
 interface SetupWizardProps {
   onComplete: () => void;
@@ -47,9 +44,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
       setCanInstall(can);
       setMissingDeps(missing);
 
-      // 如果已安装,直接跳到配置步骤
+      // 如果已安装，直接进入完成步骤
       if (status.claude_installed) {
-        setCurrentStep('configure');
+        setCurrentStep('complete');
       } else {
         setCurrentStep('install');
       }
@@ -92,7 +89,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
       auto_configure: true,
       auto_backup: true,
       auto_test: true,
-      auto_start_proxy: false, // 稍后在配置步骤启动
+      auto_start_proxy: false,
     };
 
     try {
@@ -100,33 +97,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
         setInstallProgress(progress);
       });
 
-      // 安装完成,进入配置步骤
-      setCurrentStep('configure');
+      // 安装完成，直接进入完成步骤
+      setCurrentStep('complete');
     } catch (err) {
       setError(err instanceof Error ? err.message : '安装失败');
     } finally {
       setInstalling(false);
-    }
-  };
-
-  const handleAutoConfigure = async () => {
-    try {
-      // 1. 启用代理配置
-      await enableClaudeCodeProxy('127.0.0.1', 3000);
-
-      // 2. 启动代理服务
-      await startProxyService();
-
-      // 3. 验证安装
-      const isInstalled = await verifyClaudeInstallation();
-
-      if (isInstalled) {
-        setCurrentStep('complete');
-      } else {
-        setError('配置验证失败');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '自动配置失败');
     }
   };
 
@@ -157,13 +133,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
                 </svg>
               </div>
               <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 mb-4">
-                欢迎使用 Claude Code Router
+                欢迎使用 ClaudeCodeProxy
               </h1>
               <p className="text-gray-300 text-lg mb-2">
-                让我们快速设置您的 Claude Code 环境
+                让我们快速检测您的 Claude Code 环境
               </p>
               <p className="text-gray-400 text-sm">
-                这个向导将帮助您自动检测系统环境并安装必要的组件
+                这个向导将帮助您检测系统环境并安装 Claude Code CLI
               </p>
             </div>
 
@@ -178,7 +154,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
                 onClick={handleStartSetup}
                 className="w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-lg shadow-yellow-500/30 text-lg"
               >
-                🚀 开始自动设置
+                🚀 开始检测
               </button>
               <button
                 onClick={handleSkipSetup}
@@ -197,15 +173,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-yellow-500 mt-0.5">✓</span>
-                  <span>自动安装 Claude Code CLI</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-yellow-500 mt-0.5">✓</span>
-                  <span>配置代理服务器</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-yellow-500 mt-0.5">✓</span>
-                  <span>验证安装和配置</span>
+                  <span>自动安装 Claude Code CLI（如需要）</span>
                 </li>
               </ul>
             </div>
@@ -308,58 +276,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
           </div>
         )}
 
-        {/* 配置步骤 */}
-        {currentStep === 'configure' && (
-          <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 border border-yellow-500/30 rounded-2xl p-8 shadow-2xl">
-            <h2 className="text-2xl font-bold text-yellow-400 mb-6">配置代理服务</h2>
-
-            <div className="space-y-6">
-              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✅</span>
-                  <div className="flex-1">
-                    <p className="text-green-400 font-semibold mb-1">Claude Code 已安装</p>
-                    <p className="text-sm text-gray-300">
-                      版本: {envStatus?.claude_version || '未知'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-                <h3 className="text-sm font-semibold text-yellow-400 mb-3">即将配置:</h3>
-                <ul className="space-y-2 text-sm text-gray-300">
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-0.5">•</span>
-                    <span>启用 Claude Code 代理配置</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-0.5">•</span>
-                    <span>启动代理服务 (127.0.0.1:3000)</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-0.5">•</span>
-                    <span>验证配置和连接</span>
-                  </li>
-                </ul>
-              </div>
-
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                  <p className="text-red-400 text-sm">{error}</p>
-                </div>
-              )}
-
-              <button
-                onClick={handleAutoConfigure}
-                className="w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-lg shadow-yellow-500/30 text-lg"
-              >
-                ⚙️ 自动配置
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* 完成步骤 */}
         {currentStep === 'complete' && (
           <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 border border-yellow-500/30 rounded-2xl p-8 shadow-2xl">
@@ -370,35 +286,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
                 </svg>
               </div>
               <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-green-600 mb-4">
-                🎉 设置完成!
+                🎉 Claude Code 已就绪!
               </h2>
               <p className="text-gray-300 text-lg">
-                您的 Claude Code 环境已经准备就绪
+                检测到 Claude Code 已安装
               </p>
-            </div>
-
-            <div className="bg-gray-900/50 rounded-lg p-6 border border-gray-800 mb-6">
-              <h3 className="text-yellow-400 font-semibold mb-4">✅ 已完成:</h3>
-              <ul className="space-y-3 text-sm text-gray-300">
-                <li className="flex items-start gap-2">
-                  <span className="text-green-400 mt-0.5">✓</span>
-                  <span>Claude Code CLI 已安装</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-400 mt-0.5">✓</span>
-                  <span>代理服务已配置并启动</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-400 mt-0.5">✓</span>
-                  <span>配置已验证</span>
-                </li>
-              </ul>
+              {envStatus?.claude_version && (
+                <p className="text-gray-400 text-sm mt-2">
+                  版本: {envStatus.claude_version}
+                </p>
+              )}
             </div>
 
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6">
-              <p className="text-yellow-400 font-semibold mb-2">💡 下一步</p>
+              <p className="text-yellow-400 font-semibold mb-2">💡 进入后自动配置</p>
               <p className="text-sm text-gray-300">
-                您可以在控制面板中添加 API 配置并开始使用代理服务
+                进入控制面板后将自动启用代理配置和代理服务
               </p>
             </div>
 

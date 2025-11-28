@@ -40,6 +40,16 @@ pub struct InstallProgress {
     pub success: bool,
 }
 
+
+/// 版本信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionInfo {
+    pub current: Option<String>,
+    pub latest: Option<String>,
+    pub update_available: bool,
+    pub changelog_url: Option<String>,
+}
+
 pub struct ClaudeInstaller;
 
 impl ClaudeInstaller {
@@ -250,12 +260,27 @@ impl ClaudeInstaller {
 
     /// 验证安装
     pub async fn verify_installation() -> bool {
-        AsyncCommand::new("claude")
+        match AsyncCommand::new("claude")
             .arg("--version")
             .output()
             .await
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        {
+            Ok(output) => {
+                let success = output.status.success();
+                if success {
+                    let version = String::from_utf8_lossy(&output.stdout);
+                    log::info!("Claude Code 验证成功: {}", version.trim());
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("Claude Code 验证失败 (命令执行但返回错误): {}", stderr);
+                }
+                success
+            }
+            Err(e) => {
+                log::error!("Claude Code 验证失败 (无法执行命令): {}", e);
+                false
+            }
+        }
     }
 
     /// 运行 claude doctor
@@ -331,6 +356,177 @@ impl ClaudeInstaller {
         }
 
         Ok(())
+    }
+
+    /// 检查 Claude Code 版本更新
+    pub async fn check_for_updates() -> Result<VersionInfo, String> {
+        // 获取本地版本
+        let current = Self::get_version().await.ok();
+        
+        // 获取最新版本（通过 npm registry）
+        let latest = Self::fetch_latest_version().await.ok();
+        
+        let update_available = match (&current, &latest) {
+            (Some(cur), Some(lat)) => Self::compare_versions(cur, lat),
+            _ => false,
+        };
+        
+        Ok(VersionInfo {
+            current,
+            latest,
+            update_available,
+            changelog_url: Some("https://github.com/anthropics/claude-code/releases".to_string()),
+        })
+    }
+    
+    /// 从 npm registry 获取最新版本
+    async fn fetch_latest_version() -> Result<String, String> {
+        let output = AsyncCommand::new("npm")
+            .args(&["view", "@anthropic-ai/claude-code", "version"])
+            .output()
+            .await
+            .map_err(|e| format!("获取最新版本失败: {}", e))?;
+        
+        if output.status.success() {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            log::info!("Claude Code 最新版本: {}", version);
+            Ok(version)
+        } else {
+            Err("无法获取最新版本信息".to_string())
+        }
+    }
+    
+    /// 比较版本号
+    fn compare_versions(current: &str, latest: &str) -> bool {
+        // 移除 'v' 前缀和其他非数字字符
+        let parse_version = |v: &str| -> Vec<u32> {
+            v.trim_start_matches('v')
+                .split('.')
+                .filter_map(|s| s.parse().ok())
+                .collect()
+        };
+        
+        let current_parts = parse_version(current);
+        let latest_parts = parse_version(latest);
+        
+        // 比较主版本号、次版本号、修订号
+        for i in 0..3 {
+            let cur = current_parts.get(i).copied().unwrap_or(0);
+            let lat = latest_parts.get(i).copied().unwrap_or(0);
+            
+            if lat > cur {
+                return true;
+            } else if lat < cur {
+                return false;
+            }
+        }
+        
+        false
+    }
+    
+    /// 更新 Claude Code 到最新版本
+    pub async fn update(
+        method: InstallMethod,
+        progress_callback: impl Fn(InstallProgress) + Send + 'static,
+    ) -> Result<(), String> {
+        log::info!("开始更新 Claude Code...");
+        
+        progress_callback(InstallProgress {
+            stage: InstallStage::Detecting,
+            progress: 0.1,
+            message: "检查更新...".to_string(),
+            success: true,
+        });
+        
+        // 检查是否有更新
+        let version_info = Self::check_for_updates().await?;
+        
+        if !version_info.update_available {
+            return Err("已是最新版本".to_string());
+        }
+        
+        progress_callback(InstallProgress {
+            stage: InstallStage::Downloading,
+            progress: 0.3,
+            message: format!("发现新版本: {}", version_info.latest.unwrap_or_default()),
+            success: true,
+        });
+        
+        // 根据安装方式更新
+        match method {
+            InstallMethod::Homebrew => {
+                Self::update_via_homebrew(&progress_callback).await
+            }
+            InstallMethod::NPM => {
+                Self::update_via_npm(&progress_callback).await
+            }
+            InstallMethod::Native => {
+                // Native 方式：重新安装
+                Self::install_via_native_script(&progress_callback).await
+            }
+        }
+    }
+    
+    /// 通过 Homebrew 更新
+    async fn update_via_homebrew(
+        progress_callback: &(impl Fn(InstallProgress) + Send),
+    ) -> Result<(), String> {
+        progress_callback(InstallProgress {
+            stage: InstallStage::Installing,
+            progress: 0.5,
+            message: "通过 Homebrew 更新...".to_string(),
+            success: true,
+        });
+        
+        let output = AsyncCommand::new("brew")
+            .args(&["upgrade", "claude-code"])
+            .output()
+            .await
+            .map_err(|e| format!("Homebrew 更新失败: {}", e))?;
+        
+        if output.status.success() {
+            progress_callback(InstallProgress {
+                stage: InstallStage::Complete,
+                progress: 1.0,
+                message: "更新成功!".to_string(),
+                success: true,
+            });
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("Homebrew 更新失败: {}", stderr))
+        }
+    }
+    
+    /// 通过 NPM 更新
+    async fn update_via_npm(
+        progress_callback: &(impl Fn(InstallProgress) + Send),
+    ) -> Result<(), String> {
+        progress_callback(InstallProgress {
+            stage: InstallStage::Installing,
+            progress: 0.5,
+            message: "通过 NPM 更新...".to_string(),
+            success: true,
+        });
+        
+        let output = AsyncCommand::new("npm")
+            .args(&["install", "-g", "@anthropic-ai/claude-code@latest"])
+            .output()
+            .await
+            .map_err(|e| format!("NPM 更新失败: {}", e))?;
+        
+        if output.status.success() {
+            progress_callback(InstallProgress {
+                stage: InstallStage::Complete,
+                progress: 1.0,
+                message: "更新成功!".to_string(),
+                success: true,
+            });
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("NPM 更新失败: {}", stderr))
+        }
     }
 }
 

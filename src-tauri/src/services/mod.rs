@@ -13,20 +13,26 @@ pub mod error_classifier;
 pub mod health_check_scheduler;
 pub mod keychain;
 pub mod latency_test;
+pub mod mcp_config;
+pub mod permissions_config;
 pub mod provider_preset;
 pub mod proxy_log;
 pub mod proxy_service;
 pub mod recommendation;
 pub mod retry_manager;
+pub mod skills_config;
 
 // 重新导出常用类型
 pub use api_config::ApiConfigService;
 pub use backup::BackupService;
 pub use balance_service::BalanceService;
 pub use claude_config::{ClaudeConfigService, ProxyConfig};
-pub use claude_installer::{ClaudeInstaller, InstallMethod, InstallOptions, InstallProgress};
+pub use claude_installer::{ClaudeInstaller, InstallMethod, InstallOptions, InstallProgress, VersionInfo};
 pub use config_manager::ConfigManager;
 pub use env_detection::EnvironmentStatus;
 pub use latency_test::LatencyTestService;
+pub use mcp_config::McpConfigService;
+pub use permissions_config::PermissionsConfigService;
 pub use provider_preset::ProviderPresetService;
+pub use skills_config::SkillsConfigService;
 // ProxyRequestLog 和 ProxyRequestLogService 在 commands/proxy_log.rs 中直接导入使用

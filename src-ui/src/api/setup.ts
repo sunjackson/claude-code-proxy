@@ -9,6 +9,7 @@ import type {
   InstallOptions,
   InstallProgress,
   InstallMethod,
+  VersionInfo,
 } from '../types/tauri';
 
 /**
@@ -85,4 +86,36 @@ export async function generateEnvironmentReport(): Promise<string> {
  */
 export async function checkCanInstall(): Promise<[boolean, string[]]> {
   return await invoke<[boolean, string[]]>('check_can_install');
+}
+
+/**
+ * 检查 Claude Code 更新
+ */
+export async function checkForUpdates(): Promise<VersionInfo> {
+  return await invoke<VersionInfo>('check_for_updates');
+}
+
+/**
+ * 更新 Claude Code
+ * @param method 安装方式
+ * @param onProgress 进度回调
+ */
+export async function updateClaudeCode(
+  method: InstallMethod,
+  onProgress?: (progress: InstallProgress) => void
+): Promise<void> {
+  // 监听安装进度事件
+  if (onProgress) {
+    const unlisten = await listen<InstallProgress>('install-progress', (event) => {
+      onProgress(event.payload);
+    });
+
+    try {
+      await invoke<void>('update_claude_code', { method });
+    } finally {
+      unlisten();
+    }
+  } else {
+    await invoke<void>('update_claude_code', { method });
+  }
 }

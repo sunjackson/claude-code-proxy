@@ -170,36 +170,40 @@ impl ProxyService {
                 log::info!("✅ 已发送 proxy-status-changed 事件: config={:?}", status.active_config_name);
             }
 
-            // 更新系统托盘
-            Self::update_tray_direct(handle, &status).await;
+            // 更新系统托盘 - 使用完整的更新方法
+            let status_text = match status.status {
+                ProxyStatus::Running => "运行中",
+                ProxyStatus::Stopped => "已停止",
+                ProxyStatus::Starting => "启动中",
+                ProxyStatus::Stopping => "停止中",
+                ProxyStatus::Error => "错误",
+            };
+
+            // 更新托盘状态文本和图标
+            if let Err(e) = crate::tray::update_tray_status(
+                handle,
+                status.active_config_name.clone(),
+                status_text,
+            ) {
+                log::error!("更新托盘状态失败: {}", e);
+            }
+
+            // 更新托盘菜单中的配置列表
+            if let Err(e) = crate::tray::update_tray_menu(
+                handle,
+                db_pool.clone(),
+                status.active_group_id,
+                status.active_config_id,
+                status.active_config_name.clone(),
+                status_text,
+            ) {
+                log::error!("更新托盘菜单失败: {}", e);
+            }
+
+            log::info!("✅ 系统托盘已更新: config={:?}", status.active_config_name);
         }
 
         Ok(())
-    }
-
-    /// 直接更新系统托盘状态（静态方法）
-    async fn update_tray_direct(handle: &AppHandle, status: &ProxyServiceModel) {
-        let status_text = match status.status {
-            ProxyStatus::Running => "运行中",
-            ProxyStatus::Stopped => "已停止",
-            ProxyStatus::Starting => "启动中",
-            ProxyStatus::Stopping => "停止中",
-            ProxyStatus::Error => "错误",
-        };
-
-        let config_name = status
-            .active_config_name
-            .as_ref()
-            .map(|n| n.as_str())
-            .unwrap_or("未选择配置");
-
-        let title = format!("ClaudeCodeProxy\n{} - {}", status_text, config_name);
-
-        if let Some(tray) = handle.tray_by_id("main") {
-            if let Err(e) = tray.set_tooltip(Some(&title)) {
-                log::error!("Failed to update tray tooltip: {}", e);
-            }
-        }
     }
 
     /// Emit proxy status changed event

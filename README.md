@@ -1,4 +1,4 @@
-# Claude Code Proxy
+# ClaudeCodeProxy
 
 <div align="center">
 
@@ -21,9 +21,17 @@
 
 ## 📖 简介
 
-Claude Code Proxy 是一个专为 Claude Code 设计的本地代理管理工具，帮助您轻松管理多个 API 中转服务，实现智能路由、自动故障切换和负载均衡。通过简洁优雅的黑金主题界面，您可以一键配置、测试和切换不同的 API 服务。
+ClaudeCodeProxy 是一个专为 Claude Code 设计的本地代理管理工具，帮助您轻松管理多个 API 中转服务，实现智能路由、自动故障切换和负载均衡。通过简洁优雅的黑金主题界面，您可以一键配置、测试和切换不同的 API 服务。
 
-### 为什么选择 Claude Code Proxy？
+### 🆕 v1.0.4 新增功能
+
+- **🚀 Zero-Config 首次启动向导** - 自动检测并安装 Claude Code CLI，一键完成所有配置
+- **🔍 增强环境检测** - 支持多种安装路径检测(Homebrew Intel/Apple Silicon、用户目录等)，大幅提高检测成功率
+- **⚙️ 高级配置管理** - 新增 MCP 服务器、权限配置、Skills 技能管理功能
+- **🔧 Doctor 诊断工具** - 集成 `claude doctor` 命令，快速诊断配置问题
+- **📛 统一品牌名称** - 应用名称统一为 ClaudeCodeProxy，提升品牌一致性
+
+### 为什么选择 ClaudeCodeProxy？
 
 - 🎯 **专为 Claude Code 优化** - 自动检测并配置 Claude Code，无需手动修改配置文件
 - 🚀 **智能路由** - 支持多配置分组管理，自动负载均衡和故障切换
@@ -37,6 +45,22 @@ Claude Code Proxy 是一个专为 Claude Code 设计的本地代理管理工具�
 ## ✨ 功能特性
 
 ### 核心功能
+
+- **🚀 Zero-Config 首次启动向导**（v1.0.4 新增）
+  - 自动检测系统环境和依赖
+  - 一键安装 Claude Code CLI
+  - 智能选择最佳安装方式(Homebrew/NPM/Native)
+  - 自动配置代理服务
+
+- **⚙️ 高级配置管理**（v1.0.4 新增）
+  - **MCP 服务器管理** - 配置和管理 Model Context Protocol 服务器
+  - **权限配置** - 精细化控制 Claude Code 访问权限
+  - **Skills 管理** - 自定义 Claude Code 技能和工作流
+
+- **🔧 环境诊断工具**（v1.0.4 新增）
+  - 集成 `claude doctor` 诊断命令
+  - 增强环境检测(支持多种安装路径)
+  - 实时显示诊断输出和错误信息
 
 - **🔌 一键配置 Claude Code**
   - 自动检测 Claude Code 配置文件
@@ -104,6 +128,16 @@ Claude Code Proxy 是一个专为 Claude Code 设计的本地代理管理工具�
 管理应用设置和环境变量，支持从配置应用导入和清除 Anthropic 变量。
 
 ![系统设置](./png/ScreenShot_2025-11-18_214951_359.png)
+
+### 6. 环境设置向导（v1.0.4 新增）
+首次启动向导，自动检测并安装 Claude Code，配置开发环境。
+
+![环境设置向导](./png/ScreenShot_2025-11-28_214031_899.png)
+
+### 7. 高级配置（v1.0.4 新增）
+MCP 服务器、权限配置和 Skills 技能管理。
+
+![高级配置](./png/ScreenShot_2025-11-28_214141_387.png)
 
 ### 5. 新建配置
 快速开始向导和预设模板，支持官方、国内官方、第三方和聚合平台等多种配置。
@@ -645,9 +679,9 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 
 ## 📊 项目状态
 
-- **版本**: 1.0.3
+- **版本**: 1.0.4
 - **状态**: 生产就绪
-- **最后更新**: 2025-11-26
+- **最后更新**: 2025-11-28
 - **CI/CD**: GitHub Actions 自动化构建多平台版本
 
 ---
@@ -656,6 +690,6 @@ sudo apt install -y libwebkit2gtk-4.0-37 \
 
 **⭐ 如果这个项目对您有帮助，请给我们一个 Star！**
 
-Made with ❤️ by the Claude Code Proxy Team
+Made with ❤️ by the ClaudeCodeProxy Team
 
 </div>

@@ -49,6 +49,7 @@ lerna-debug.log*
 # Claude Code 相关配置
 .claude/
 .specify/
+.serena/
 
 # Playwright 和 MCP 截图
 .playwright-mcp/

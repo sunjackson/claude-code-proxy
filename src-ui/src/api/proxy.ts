@@ -4,7 +4,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { ProxyService, SwitchLog, ProxyRequestLog, HealthCheckStatusResponse } from '../types/tauri';
+import type { ProxyService, SwitchLog, ProxyRequestLog, ProxyRequestLogDetail, LogStats, HealthCheckStatusResponse } from '../types/tauri';
 
 /**
  * 启动代理服务
@@ -138,6 +138,30 @@ export async function getProxyRequestLogCount(): Promise<number> {
   return invoke<number>('get_proxy_request_log_count');
 }
 
+/**
+ * 获取单条代理请求日志详情
+ * @param logId 日志 ID
+ * @returns 日志详情
+ */
+export async function getProxyRequestLogDetail(
+  logId: number
+): Promise<ProxyRequestLogDetail | null> {
+  return invoke<ProxyRequestLogDetail | null>('get_proxy_request_log_detail', {
+    logId,
+  });
+}
+
+/**
+ * 获取代理请求日志统计信息
+ * @param hours 统计时间范围（小时），默认24小时
+ * @returns 日志统计信息
+ */
+export async function getProxyRequestLogStats(hours?: number): Promise<LogStats> {
+  return invoke<LogStats>('get_proxy_request_log_stats', {
+    hours: hours ?? 24,
+  });
+}
+
 // ============== 健康检查 API ==============
 
 /**
@@ -164,4 +188,36 @@ export async function stopHealthCheck(): Promise<HealthCheckStatusResponse> {
  */
 export async function runHealthCheckNow(): Promise<void> {
   return invoke<void>('run_health_check_now');
+}
+
+/**
+ * 获取健康检查状态
+ * @returns 健康检查状态
+ */
+export async function getHealthCheckStatus(): Promise<HealthCheckStatusResponse> {
+  return invoke<HealthCheckStatusResponse>('get_health_check_status');
+}
+
+/**
+ * 获取所有配置的健康检查摘要
+ * @param hours 统计的小时数，默认24小时
+ * @returns 配置健康摘要列表
+ */
+export async function getHealthCheckSummaries(hours?: number): Promise<import('../types/tauri').ConfigHealthSummary[]> {
+  return invoke<import('../types/tauri').ConfigHealthSummary[]>('get_health_check_summaries', {
+    hours: hours ?? null,
+  });
+}
+
+/**
+ * 切换自动健康检查
+ * @param enabled 是否启用
+ * @param intervalSecs 检查间隔（秒），默认300秒（5分钟）
+ * @returns 健康检查状态
+ */
+export async function toggleAutoHealthCheck(enabled: boolean, intervalSecs?: number): Promise<HealthCheckStatusResponse> {
+  return invoke<HealthCheckStatusResponse>('toggle_auto_health_check', {
+    enabled,
+    intervalSecs: intervalSecs ?? null,
+  });
 }

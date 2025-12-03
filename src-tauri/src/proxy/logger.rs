@@ -9,6 +9,8 @@
  * - Latency
  * - Status code
  * - Error information (if any)
+ * - Request/Response headers and bodies (dev mode)
+ * - Timing details
  */
 
 use chrono::{DateTime, Utc};
@@ -38,6 +40,35 @@ pub struct RequestLogEntry {
     pub error: Option<String>,
     /// Client remote address
     pub remote_addr: String,
+    // === 新增详细字段 ===
+    /// Request headers (JSON serialized)
+    pub request_headers: Option<String>,
+    /// Request body (truncated if too large)
+    pub request_body: Option<String>,
+    /// Response headers (JSON serialized)
+    pub response_headers: Option<String>,
+    /// Response body (truncated if too large)
+    pub response_body: Option<String>,
+    /// Response start timestamp
+    pub response_start_at: Option<DateTime<Utc>>,
+    /// Response end timestamp
+    pub response_end_at: Option<DateTime<Utc>>,
+    /// Request body size in bytes
+    pub request_body_size: u64,
+    /// Response body size in bytes
+    pub response_body_size: u64,
+    /// Whether the response is streaming
+    pub is_streaming: bool,
+    /// Number of stream chunks received
+    pub stream_chunk_count: u32,
+    /// Time to first byte in milliseconds
+    pub time_to_first_byte_ms: Option<u64>,
+    /// Content-Type header value
+    pub content_type: Option<String>,
+    /// User-Agent header value
+    pub user_agent: Option<String>,
+    /// Model name if available (e.g., claude-3-opus)
+    pub model: Option<String>,
 }
 
 impl RequestLogEntry {
@@ -134,6 +165,14 @@ impl ProxyLogger {
             target_url: None,
             config_id: None,
             config_name: None,
+            // 新增详细字段
+            request_headers: None,
+            request_body: None,
+            request_body_size: 0,
+            user_agent: None,
+            content_type: None,
+            model: None,
+            response_start_time: None,
         }
     }
 }
@@ -148,6 +187,14 @@ pub struct RequestLogBuilder {
     target_url: Option<String>,
     config_id: Option<i64>,
     config_name: Option<String>,
+    // 新增详细字段
+    request_headers: Option<String>,
+    request_body: Option<String>,
+    request_body_size: u64,
+    user_agent: Option<String>,
+    content_type: Option<String>,
+    model: Option<String>,
+    response_start_time: Option<Instant>,
 }
 
 impl RequestLogBuilder {
@@ -164,9 +211,48 @@ impl RequestLogBuilder {
         self
     }
 
+    /// Set request headers (JSON serialized)
+    pub fn with_request_headers(mut self, headers: String) -> Self {
+        self.request_headers = Some(headers);
+        self
+    }
+
+    /// Set request body (truncated if needed)
+    pub fn with_request_body(mut self, body: String, size: u64) -> Self {
+        self.request_body = Some(body);
+        self.request_body_size = size;
+        self
+    }
+
+    /// Set User-Agent header
+    pub fn with_user_agent(mut self, user_agent: String) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Set Content-Type header
+    pub fn with_content_type(mut self, content_type: String) -> Self {
+        self.content_type = Some(content_type);
+        self
+    }
+
+    /// Set model name
+    pub fn with_model(mut self, model: String) -> Self {
+        self.model = Some(model);
+        self
+    }
+
+    /// Mark response start time
+    pub fn mark_response_start(&mut self) {
+        self.response_start_time = Some(Instant::now());
+    }
+
     /// Finalize log entry with success response
+    #[allow(dead_code)]
     pub fn finish(self, status_code: StatusCode) -> RequestLogEntry {
         let latency_ms = self.start_time.elapsed().as_millis() as u64;
+        let time_to_first_byte_ms = self.response_start_time
+            .map(|t| self.start_time.elapsed().as_millis() as u64 - t.elapsed().as_millis() as u64);
 
         RequestLogEntry {
             timestamp: self.timestamp,
@@ -179,6 +265,65 @@ impl RequestLogBuilder {
             status_code,
             error: None,
             remote_addr: self.remote_addr,
+            // 新增详细字段
+            request_headers: self.request_headers,
+            request_body: self.request_body,
+            response_headers: None,
+            response_body: None,
+            response_start_at: None,
+            response_end_at: None,
+            request_body_size: self.request_body_size,
+            response_body_size: 0,
+            is_streaming: false,
+            stream_chunk_count: 0,
+            time_to_first_byte_ms,
+            content_type: self.content_type,
+            user_agent: self.user_agent,
+            model: self.model,
+        }
+    }
+
+    /// Finalize log entry with detailed response info
+    pub fn finish_with_details(
+        self,
+        status_code: StatusCode,
+        response_headers: Option<String>,
+        response_body: Option<String>,
+        response_body_size: u64,
+        is_streaming: bool,
+        stream_chunk_count: u32,
+    ) -> RequestLogEntry {
+        let now = Utc::now();
+        let latency_ms = self.start_time.elapsed().as_millis() as u64;
+        let time_to_first_byte_ms = self.response_start_time
+            .map(|t| self.start_time.elapsed().as_millis() as u64 - t.elapsed().as_millis() as u64);
+
+        RequestLogEntry {
+            timestamp: self.timestamp,
+            method: self.method,
+            uri: self.uri,
+            target_url: self.target_url.unwrap_or_else(|| "unknown".to_string()),
+            config_id: self.config_id,
+            config_name: self.config_name,
+            latency_ms,
+            status_code,
+            error: None,
+            remote_addr: self.remote_addr,
+            // 详细字段
+            request_headers: self.request_headers,
+            request_body: self.request_body,
+            response_headers,
+            response_body,
+            response_start_at: self.response_start_time.map(|_| self.timestamp),
+            response_end_at: Some(now),
+            request_body_size: self.request_body_size,
+            response_body_size,
+            is_streaming,
+            stream_chunk_count,
+            time_to_first_byte_ms,
+            content_type: self.content_type,
+            user_agent: self.user_agent,
+            model: self.model,
         }
     }
 
@@ -201,6 +346,21 @@ impl RequestLogBuilder {
             status_code,
             error: Some(error),
             remote_addr: self.remote_addr,
+            // 错误情况下的默认值
+            request_headers: self.request_headers,
+            request_body: self.request_body,
+            response_headers: None,
+            response_body: None,
+            response_start_at: None,
+            response_end_at: Some(Utc::now()),
+            request_body_size: self.request_body_size,
+            response_body_size: 0,
+            is_streaming: false,
+            stream_chunk_count: 0,
+            time_to_first_byte_ms: None,
+            content_type: self.content_type,
+            user_agent: self.user_agent,
+            model: self.model,
         }
     }
 }
@@ -209,9 +369,8 @@ impl RequestLogBuilder {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_request_log_entry_success() {
-        let entry = RequestLogEntry {
+    fn create_base_entry() -> RequestLogEntry {
+        RequestLogEntry {
             timestamp: Utc::now(),
             method: Method::POST,
             uri: "/v1/messages".parse().unwrap(),
@@ -222,7 +381,27 @@ mod tests {
             status_code: StatusCode::OK,
             error: None,
             remote_addr: "127.0.0.1:54321".to_string(),
-        };
+            // 新增字段默认值
+            request_headers: None,
+            request_body: None,
+            response_headers: None,
+            response_body: None,
+            response_start_at: None,
+            response_end_at: None,
+            request_body_size: 0,
+            response_body_size: 0,
+            is_streaming: false,
+            stream_chunk_count: 0,
+            time_to_first_byte_ms: None,
+            content_type: None,
+            user_agent: None,
+            model: None,
+        }
+    }
+
+    #[test]
+    fn test_request_log_entry_success() {
+        let entry = create_base_entry();
 
         assert!(entry.is_success());
         assert!(!entry.is_error());
@@ -237,18 +416,16 @@ mod tests {
 
     #[test]
     fn test_request_log_entry_error() {
-        let entry = RequestLogEntry {
-            timestamp: Utc::now(),
-            method: Method::GET,
-            uri: "/health".parse().unwrap(),
-            target_url: "https://api.test.com:443".to_string(),
-            config_id: Some(2),
-            config_name: Some("Test Config 2".to_string()),
-            latency_ms: 5000,
-            status_code: StatusCode::BAD_GATEWAY,
-            error: Some("Connection refused".to_string()),
-            remote_addr: "127.0.0.1:54322".to_string(),
-        };
+        let mut entry = create_base_entry();
+        entry.method = Method::GET;
+        entry.uri = "/health".parse().unwrap();
+        entry.target_url = "https://api.test.com:443".to_string();
+        entry.config_id = Some(2);
+        entry.config_name = Some("Test Config 2".to_string());
+        entry.latency_ms = 5000;
+        entry.status_code = StatusCode::BAD_GATEWAY;
+        entry.error = Some("Connection refused".to_string());
+        entry.remote_addr = "127.0.0.1:54322".to_string();
 
         assert!(!entry.is_success());
         assert!(entry.is_error());
@@ -295,5 +472,37 @@ mod tests {
 
         assert_eq!(entry.status_code, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(entry.error, Some("Server down".to_string()));
+    }
+
+    #[test]
+    fn test_request_log_builder_with_details() {
+        let builder = ProxyLogger::start_request(
+            Method::POST,
+            "/v1/messages".parse().unwrap(),
+            "127.0.0.1:12345".to_string(),
+        );
+
+        let entry = builder
+            .with_target("https://api.anthropic.com:443".to_string())
+            .with_config(1, "Claude API".to_string())
+            .with_request_headers(r#"{"Content-Type": "application/json"}"#.to_string())
+            .with_request_body(r#"{"model": "claude-3-opus"}"#.to_string(), 27)
+            .with_user_agent("claude-code/1.0".to_string())
+            .with_content_type("application/json".to_string())
+            .with_model("claude-3-opus".to_string())
+            .finish_with_details(
+                StatusCode::OK,
+                Some(r#"{"X-Request-Id": "abc123"}"#.to_string()),
+                Some(r#"{"content": [{"text": "Hello"}]}"#.to_string()),
+                34,
+                false,
+                0,
+            );
+
+        assert_eq!(entry.status_code, StatusCode::OK);
+        assert_eq!(entry.request_body_size, 27);
+        assert_eq!(entry.response_body_size, 34);
+        assert_eq!(entry.model, Some("claude-3-opus".to_string()));
+        assert!(!entry.is_streaming);
     }
 }

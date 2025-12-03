@@ -5,6 +5,7 @@ use tauri::{
 };
 use crate::db::DbPool;
 use crate::services::api_config::ApiConfigService;
+use crate::utils::constants::default_proxy_port;
 use std::sync::Arc;
 
 /// 创建系统托盘
@@ -407,7 +408,7 @@ pub fn update_tray_menu<R: Runtime>(
     let is_running = status == "运行中";
     let info = TrayStatusInfo {
         is_running,
-        port: Some(25341), // 默认端口
+        port: Some(default_proxy_port()),
         config_name: active_config_name,
         config_id: active_config_id,
         group_id: active_group_id,

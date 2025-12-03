@@ -4,8 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import type { McpServerInfo, McpServerConfig, McpServerTemplate } from '../types/tauri';
 import * as mcpApi from '../api/mcp';
+import { ConfirmDialog, MessageDialog } from './ui/Dialog';
 
 interface McpServerEditorProps {
   isOpen: boolean;
@@ -383,6 +386,14 @@ export const McpServerManager: React.FC = () => {
   const [editingServer, setEditingServer] = useState<McpServerInfo | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<McpServerTemplate | null>(null);
 
+  // 删除确认弹窗状态
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [serverToDelete, setServerToDelete] = useState<string | null>(null);
+
+  // 测试结果弹窗状态
+  const [testResultOpen, setTestResultOpen] = useState(false);
+  const [testResultContent, setTestResultContent] = useState('');
+
   const loadServers = async () => {
     try {
       setLoading(true);
@@ -445,18 +456,24 @@ export const McpServerManager: React.FC = () => {
   };
 
   const handleRemoveServer = async (name: string) => {
-    if (!window.confirm(`确定要删除服务器 "${name}" 吗?`)) {
-      return;
-    }
+    setServerToDelete(name);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteServer = async () => {
+    if (!serverToDelete) return;
 
     try {
       setError(null);
-      await mcpApi.removeMcpServer(name);
+      await mcpApi.removeMcpServer(serverToDelete);
       showSuccess('服务器已删除');
       await loadServers();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除服务器失败');
       console.error('Failed to remove MCP server:', err);
+    } finally {
+      setDeleteConfirmOpen(false);
+      setServerToDelete(null);
     }
   };
 
@@ -464,7 +481,8 @@ export const McpServerManager: React.FC = () => {
     try {
       setError(null);
       const result = await mcpApi.testMcpServer(name);
-      alert(`测试结果:\n${result}`);
+      setTestResultContent(result);
+      setTestResultOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : '测试服务器失败');
       console.error('Failed to test MCP server:', err);
@@ -498,16 +516,26 @@ export const McpServerManager: React.FC = () => {
 
   const handleExport = async () => {
     try {
+      // 使用 Tauri 对话框让用户选择保存位置
+      const filePath = await save({
+        title: '导出 MCP 服务器配置',
+        defaultPath: 'mcp-servers-export.json',
+        filters: [
+          { name: 'JSON', extensions: ['json'] }
+        ]
+      });
+
+      if (!filePath) {
+        // 用户取消了保存
+        return;
+      }
+
       const configs = await mcpApi.exportMcpServers();
       const json = JSON.stringify(configs, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'mcp-servers-export.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      showSuccess('配置已导出');
+
+      // 写入文件
+      await writeTextFile(filePath, json);
+      showSuccess(`配置已导出到: ${filePath}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '导出配置失败');
       console.error('Failed to export MCP servers:', err);
@@ -685,6 +713,40 @@ export const McpServerManager: React.FC = () => {
         }}
         template={selectedTemplate}
         onConfirm={handleConfirmTemplate}
+      />
+
+      {/* 删除确认弹窗 */}
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        type="danger"
+        title="删除 MCP 服务器"
+        subtitle="此操作不可撤销"
+        content={
+          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/50">
+            <p className="text-gray-300">
+              确定要删除服务器 <span className="text-amber-400 font-medium">"{serverToDelete}"</span> 吗？
+            </p>
+          </div>
+        }
+        confirmText="确认删除"
+        onConfirm={confirmDeleteServer}
+        onCancel={() => {
+          setDeleteConfirmOpen(false);
+          setServerToDelete(null);
+        }}
+      />
+
+      {/* 测试结果弹窗 */}
+      <MessageDialog
+        isOpen={testResultOpen}
+        type="info"
+        title="MCP 服务器测试结果"
+        content={
+          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/50 max-h-60 overflow-y-auto">
+            <pre className="text-gray-300 text-sm whitespace-pre-wrap font-mono">{testResultContent}</pre>
+          </div>
+        }
+        onClose={() => setTestResultOpen(false)}
       />
     </div>
   );

@@ -272,26 +272,67 @@ impl ProxyService {
         }
 
         // Get current configuration
-        let config = self.server.config().await;
+        let mut config = self.server.config().await;
 
         // Note: Port availability check is removed here.
         // The server.start() method has built-in port fallback mechanism
         // that will automatically try ports 25341-25350 if needed.
 
         // Check if current group has available configurations
-        if let Some(group_id) = config.active_group_id {
+        let group_id = config.active_group_id;
+        if let Some(gid) = group_id {
             let count = self.db_pool.with_connection(|conn| {
                 use crate::services::config_manager::ConfigManager;
-                ConfigManager::count_configs_in_group(conn, group_id)
+                ConfigManager::count_configs_in_group(conn, gid)
             })?;
 
             if count == 0 {
-                return Err(AppError::EmptyGroup { group_id });
+                return Err(AppError::EmptyGroup { group_id: gid });
             }
         }
 
-        // Check if there's an active configuration
-        if config.active_config_id.is_none() {
+        // Check if there's an active configuration and if it's available
+        // If active config is unavailable, try to switch to first available config
+        if let Some(active_config_id) = config.active_config_id {
+            let active_config = self.db_pool.with_connection(|conn| {
+                use crate::services::api_config::ApiConfigService;
+                ApiConfigService::get_config_by_id(conn, active_config_id)
+            });
+
+            let need_switch = match active_config {
+                Ok(cfg) => !cfg.is_available,
+                Err(_) => true, // Config not found, need to switch
+            };
+
+            if need_switch {
+                log::warn!(
+                    "Active config (id: {}) is unavailable, trying to find an available one...",
+                    active_config_id
+                );
+
+                // Try to find first available config in the group
+                let configs = self.db_pool.with_connection(|conn| {
+                    use crate::services::api_config::ApiConfigService;
+                    ApiConfigService::list_configs(conn, group_id)
+                })?;
+
+                if let Some(available_config) = configs.into_iter().find(|c| c.is_available) {
+                    log::info!(
+                        "Switching to available config: '{}' (id: {})",
+                        available_config.name,
+                        available_config.id
+                    );
+                    config.active_config_id = Some(available_config.id);
+                    self.server.update_config(config.clone()).await;
+                } else {
+                    // No available config found, but still start the service
+                    // The user can manually switch or wait for health check
+                    log::warn!(
+                        "No available config found in group, service will start but may not work properly"
+                    );
+                }
+            }
+        } else {
             return Err(AppError::NoConfigAvailable);
         }
 
@@ -303,6 +344,21 @@ impl ProxyService {
             config.host,
             config.port
         );
+
+        // 自动清理旧的请求日志，只保留最近100条
+        let db = self.db_pool.clone();
+        tokio::spawn(async move {
+            use crate::services::proxy_log::ProxyRequestLogService;
+            match ProxyRequestLogService::cleanup_old_logs(&db, 100) {
+                Ok(deleted) if deleted > 0 => {
+                    log::info!("启动时清理旧日志: 已删除 {} 条记录，保留最近100条", deleted);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    log::warn!("启动时清理日志失败: {}", e);
+                }
+            }
+        });
 
         // 自动配置 Claude Code 指向本地代理
         self.configure_claude_code_proxy(&config).await;
@@ -375,31 +431,26 @@ impl ProxyService {
         };
 
         // Check if current active config is unavailable
-        // If the service is running but the active config became unavailable,
-        // set status to Error to alert the user
+        // Log a warning but don't change status to Error - the service is still running
+        // and can handle requests (it will try to switch to an available config)
         let status = match server_status {
             ProxyServerStatus::Stopped => ProxyStatus::Stopped,
             ProxyServerStatus::Starting => ProxyStatus::Starting,
             ProxyServerStatus::Stopping => ProxyStatus::Stopping,
             ProxyServerStatus::Error => ProxyStatus::Error,
             ProxyServerStatus::Running => {
-                // Check if active config is still available
+                // Check if active config is still available (just for logging)
                 if let Some(ref config) = active_config {
                     if !config.is_available {
                         log::warn!(
-                            "Proxy is running but active config '{}' (id: {}) is now unavailable",
+                            "Proxy is running but active config '{}' (id: {}) is unavailable - consider switching to another config",
                             config.name,
                             config.id
                         );
-                        ProxyStatus::Error
-                    } else {
-                        ProxyStatus::Running
                     }
-                } else {
-                    // No active config - this shouldn't happen if running
-                    log::warn!("Proxy is running but no active config found");
-                    ProxyStatus::Error
                 }
+                // Always return Running if the server is actually running
+                ProxyStatus::Running
             }
         };
 

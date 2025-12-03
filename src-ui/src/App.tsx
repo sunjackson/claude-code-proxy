@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Toaster } from './services/toast';
+import { Toaster, ToasterConfig } from './services/toast';
 import { SetupWizard } from './components/SetupWizard';
 import { isFirstRun, markSetupCompleted, skipSetup } from './utils/setupState';
 
@@ -16,6 +16,7 @@ import Recommendations from './pages/Recommendations';
 import Settings from './pages/Settings';
 import TestApi from './pages/TestApi';
 import ClaudeCodeSetup from './pages/ClaudeCodeSetup';
+import DevLogs from './pages/DevLogs';
 
 /**
  * App 主组件
@@ -87,6 +88,7 @@ const App: React.FC = () => {
           <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/test-api" element={<TestApi />} />
           <Route path="/claude-code-setup" element={<ClaudeCodeSetup />} />
+          <Route path="/dev-logs" element={<DevLogs />} />
 
           {/* 旧路由兼容 - 重定向 */}
           <Route path="/configs" element={<Navigate to="/" replace />} />
@@ -99,7 +101,12 @@ const App: React.FC = () => {
         </Routes>
 
         {/* 全局 Toast 通知 */}
-        <Toaster />
+        <Toaster
+          position={ToasterConfig.position}
+          gutter={ToasterConfig.gutter}
+          containerStyle={ToasterConfig.containerStyle}
+          toastOptions={ToasterConfig.toastOptions}
+        />
       </BrowserRouter>
     </ErrorBoundary>
   );

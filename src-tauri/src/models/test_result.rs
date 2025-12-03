@@ -155,13 +155,13 @@ impl TestResult {
 
     /// 检查服务是否可用
     ///
-    /// 服务可用的标准：能够连接并收到HTTP响应
-    /// - ✅ 可用：200-499 状态码（包括400、401、403、429等）
-    /// - ❌ 不可用：500-599状态码、超时、连接失败、DNS失败
+    /// 服务可用的标准：能够连接并收到HTTP响应，且不是服务器端错误
+    /// - ✅ 可用：200-299 成功，400-499 客户端错误（认证、权限、限流等可修复问题）
+    /// - ❌ 不可用：500-599状态码、server_error、超时、连接失败、DNS失败、负载过高
     ///
     /// 注意：此方法与 is_success() 不同
     /// - is_success()：API调用完全成功（200-299且有正确响应）
-    /// - is_available()：服务器可连接（即使认证失败或请求格式错误）
+    /// - is_available()：服务器可连接且能正常处理请求（不是服务端问题）
     pub fn is_available(&self) -> bool {
         match self.status {
             // 成功的测试，服务肯定可用
@@ -173,8 +173,25 @@ impl TestResult {
             // 失败的测试，需要检查错误信息来判断
             TestStatus::Failed => {
                 if let Some(ref error) = self.error_message {
+                    let error_lower = error.to_lowercase();
+
                     // 服务器错误（5xx）表示不可用
-                    if error.contains("HTTP 5") || error.contains("服务器错误") {
+                    if error.contains("HTTP 5")
+                        || error.contains("服务器错误")
+                        || error.contains("服务商错误") {
+                        return false;
+                    }
+
+                    // server_error 类型的错误表示服务端问题，不可用
+                    if error_lower.contains("server_error") {
+                        return false;
+                    }
+
+                    // 负载过高、服务过载等表示不可用
+                    if error.contains("负载过高")
+                        || error.contains("过载")
+                        || error_lower.contains("overloaded")
+                        || error_lower.contains("overload") {
                         return false;
                     }
 
@@ -434,5 +451,32 @@ mod tests {
             ..success_result.clone()
         };
         assert!(!dns_failed_result.is_available());
+
+        // server_error 类型错误（如负载过高），服务不可用
+        let server_error_overload = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("服务商错误: 错误代码 400 - server_error: 当前模型负载过高，请稍后重试".to_string()),
+            latency_ms: Some(1500),
+            ..success_result.clone()
+        };
+        assert!(!server_error_overload.is_available());
+
+        // 包含 "负载过高" 关键词的错误，服务不可用
+        let load_too_high = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("API 错误: 当前模型负载过高".to_string()),
+            latency_ms: Some(1500),
+            ..success_result.clone()
+        };
+        assert!(!load_too_high.is_available());
+
+        // overloaded 错误，服务不可用
+        let overloaded_result = TestResult {
+            status: TestStatus::Failed,
+            error_message: Some("Error: Service is overloaded, please try again later".to_string()),
+            latency_ms: Some(1500),
+            ..success_result.clone()
+        };
+        assert!(!overloaded_result.is_available());
     }
 }

@@ -4,6 +4,10 @@
 
 set -e  # 遇到错误时退出
 
+# 端口配置
+DEV_PROXY_PORT=15341   # 开发环境代理端口
+VITE_PORT=5173         # Vite 开发服务器端口
+
 # 颜色定义
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -463,19 +467,34 @@ print_header "第 3 步: 清理端口占用"
 print_header "═══════════════════════════════════════"
 echo ""
 
-# 检查端口 5173
-if lsof -ti:5173 &> /dev/null; then
-    print_warning "端口 5173 被占用"
-    if ask_yes_no "是否清理端口 5173?" "y"; then
-        VITE_PIDS=$(lsof -ti:5173 2>/dev/null)
-        if [ ! -z "$VITE_PIDS" ]; then
-            kill -9 $VITE_PIDS 2>/dev/null
+# 检查代理端口 (开发环境: 15341)
+if lsof -ti:$DEV_PROXY_PORT &> /dev/null; then
+    print_warning "代理端口 $DEV_PROXY_PORT 被占用"
+    if ask_yes_no "是否清理代理端口 $DEV_PROXY_PORT?" "y"; then
+        PROXY_PIDS=$(lsof -ti:$DEV_PROXY_PORT 2>/dev/null)
+        if [ ! -z "$PROXY_PIDS" ]; then
+            kill -9 $PROXY_PIDS 2>/dev/null
             sleep 1
-            print_success "端口 5173 已清理"
+            print_success "代理端口 $DEV_PROXY_PORT 已清理"
         fi
     fi
 else
-    print_success "端口 5173 可用"
+    print_success "代理端口 $DEV_PROXY_PORT 可用"
+fi
+
+# 检查 Vite 端口 5173
+if lsof -ti:$VITE_PORT &> /dev/null; then
+    print_warning "Vite 端口 $VITE_PORT 被占用"
+    if ask_yes_no "是否清理 Vite 端口 $VITE_PORT?" "y"; then
+        VITE_PIDS=$(lsof -ti:$VITE_PORT 2>/dev/null)
+        if [ ! -z "$VITE_PIDS" ]; then
+            kill -9 $VITE_PIDS 2>/dev/null
+            sleep 1
+            print_success "Vite 端口 $VITE_PORT 已清理"
+        fi
+    fi
+else
+    print_success "Vite 端口 $VITE_PORT 可用"
 fi
 
 echo ""
@@ -488,7 +507,8 @@ echo ""
 
 print_success "环境检查完成，即将启动应用..."
 echo ""
-print_info "前端地址: ${CYAN}http://localhost:5173${NC}"
+print_info "前端地址: ${CYAN}http://localhost:$VITE_PORT${NC}"
+print_info "代理端口: ${CYAN}$DEV_PROXY_PORT${NC} (开发环境)"
 print_info "应用窗口将自动打开..."
 print_info "按 ${RED}Ctrl+C${NC} 停止开发服务器"
 echo ""
@@ -510,9 +530,14 @@ echo ""
 print_info "正在关闭开发服务器..."
 
 # 清理可能残留的进程
-VITE_PIDS=$(lsof -ti:5173 2>/dev/null)
+VITE_PIDS=$(lsof -ti:$VITE_PORT 2>/dev/null)
 if [ ! -z "$VITE_PIDS" ]; then
     kill -9 $VITE_PIDS 2>/dev/null
+fi
+
+PROXY_PIDS=$(lsof -ti:$DEV_PROXY_PORT 2>/dev/null)
+if [ ! -z "$PROXY_PIDS" ]; then
+    kill -9 $PROXY_PIDS 2>/dev/null
 fi
 
 print_success "开发服务器已停止"

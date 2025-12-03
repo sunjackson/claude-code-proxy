@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import type { ApiConfig, BalanceInfo } from '../types/tauri';
 import * as balanceApi from '../api/balance';
+import { MessageDialog } from './ui/Dialog';
 
 interface BalancePanelProps {
   /** 配置列表 */
@@ -27,6 +28,19 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
   const [balanceInfos, setBalanceInfos] = useState<Map<number, BalanceInfo>>(new Map());
   const [querying, setQuerying] = useState<Set<number>>(new Set());
   const [queryingAll, setQueryingAll] = useState(false);
+
+  // 消息弹窗状态
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const [messageDialogType, setMessageDialogType] = useState<'error' | 'info'>('error');
+  const [messageDialogTitle, setMessageDialogTitle] = useState('');
+  const [messageDialogContent, setMessageDialogContent] = useState('');
+
+  const showMessage = (type: 'error' | 'info', title: string, content: string) => {
+    setMessageDialogType(type);
+    setMessageDialogTitle(title);
+    setMessageDialogContent(content);
+    setMessageDialogOpen(true);
+  };
 
   // 加载所有余额信息
   useEffect(() => {
@@ -57,7 +71,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
       }
     } catch (error) {
       console.error(`查询余额失败 (config_id: ${configId}):`, error);
-      alert(`查询余额失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      showMessage('error', '查询失败', error instanceof Error ? error.message : '未知错误');
     } finally {
       setQuerying(prev => {
         const next = new Set(prev);
@@ -73,7 +87,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
     const enabledConfigs = configs.filter(c => c.auto_balance_check && c.balance_query_url);
 
     if (enabledConfigs.length === 0) {
-      alert('没有启用自动余额查询的配置');
+      showMessage('info', '无可用配置', '没有启用自动余额查询的配置');
       return;
     }
 
@@ -90,7 +104,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
       }
     } catch (error) {
       console.error('批量查询余额失败:', error);
-      alert(`批量查询余额失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      showMessage('error', '批量查询失败', error instanceof Error ? error.message : '未知错误');
     } finally {
       setQueryingAll(false);
     }
@@ -352,6 +366,15 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
           })}
         </div>
       )}
+
+      {/* 消息弹窗 */}
+      <MessageDialog
+        isOpen={messageDialogOpen}
+        type={messageDialogType}
+        title={messageDialogTitle}
+        content={messageDialogContent}
+        onClose={() => setMessageDialogOpen(false)}
+      />
     </div>
   );
 };

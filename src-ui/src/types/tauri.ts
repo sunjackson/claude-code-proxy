@@ -446,7 +446,7 @@ export interface BalanceInfo {
 }
 
 /**
- * 代理请求日志
+ * 代理请求日志（简要版本，用于列表展示）
  */
 export interface ProxyRequestLog {
   /** 日志ID */
@@ -473,6 +473,94 @@ export interface ProxyRequestLog {
   error_message: string | null;
   /** 客户端地址 */
   remote_addr: string | null;
+  /** 是否流式响应 */
+  is_streaming: boolean;
+  /** 模型名称 */
+  model: string | null;
+  /** 请求体大小（字节） */
+  request_body_size: number;
+  /** 响应体大小（字节） */
+  response_body_size: number;
+}
+
+/**
+ * 代理请求日志详情（完整版本）
+ */
+export interface ProxyRequestLogDetail {
+  /** 日志ID */
+  id: number;
+  /** 请求时间 */
+  request_at: string;
+  /** HTTP方法 */
+  method: string;
+  /** 请求URI */
+  uri: string;
+  /** 目标URL */
+  target_url: string;
+  /** 配置ID */
+  config_id: number | null;
+  /** 配置名称 */
+  config_name: string | null;
+  /** 延迟(毫秒) */
+  latency_ms: number;
+  /** HTTP状态码 */
+  status_code: number;
+  /** 是否成功 */
+  is_success: boolean;
+  /** 错误信息 */
+  error_message: string | null;
+  /** 客户端地址 */
+  remote_addr: string | null;
+  /** 请求头（JSON字符串） */
+  request_headers: string | null;
+  /** 请求体 */
+  request_body: string | null;
+  /** 响应头（JSON字符串） */
+  response_headers: string | null;
+  /** 响应体 */
+  response_body: string | null;
+  /** 响应开始时间 */
+  response_start_at: string | null;
+  /** 响应结束时间 */
+  response_end_at: string | null;
+  /** 请求体大小（字节） */
+  request_body_size: number;
+  /** 响应体大小（字节） */
+  response_body_size: number;
+  /** 是否流式响应 */
+  is_streaming: boolean;
+  /** 流式响应块数量 */
+  stream_chunk_count: number;
+  /** 首字节时间（毫秒） */
+  time_to_first_byte_ms: number | null;
+  /** Content-Type */
+  content_type: string | null;
+  /** User-Agent */
+  user_agent: string | null;
+  /** 模型名称 */
+  model: string | null;
+}
+
+/**
+ * 日志统计信息
+ */
+export interface LogStats {
+  /** 总请求数 */
+  total_count: number;
+  /** 成功请求数 */
+  success_count: number;
+  /** 失败请求数 */
+  error_count: number;
+  /** 平均延迟（毫秒） */
+  avg_latency_ms: number;
+  /** 最大延迟（毫秒） */
+  max_latency_ms: number;
+  /** 最小延迟（毫秒） */
+  min_latency_ms: number;
+  /** 总请求大小（字节） */
+  total_request_size: number;
+  /** 总响应大小（字节） */
+  total_response_size: number;
 }
 
 /**
@@ -483,6 +571,73 @@ export interface HealthCheckStatusResponse {
   running: boolean;
   /** 检查间隔（秒） */
   interval_secs: number;
+}
+
+/**
+ * 健康检查状态
+ */
+export type HealthCheckStatus = 'success' | 'failed' | 'timeout';
+
+/**
+ * 健康检查记录
+ */
+export interface HealthCheckRecord {
+  /** 记录 ID */
+  id: number;
+  /** 配置 ID */
+  config_id: number;
+  /** 检查时间 */
+  check_at: string;
+  /** 检查状态 */
+  status: HealthCheckStatus;
+  /** 延迟(毫秒) */
+  latency_ms: number | null;
+  /** 错误信息 */
+  error_message: string | null;
+  /** HTTP 状态码 */
+  http_status_code: number | null;
+}
+
+/**
+ * 小时级别健康检查统计
+ */
+export interface HealthCheckHourlyStats {
+  /** 配置 ID */
+  config_id: number;
+  /** 小时时间戳 (格式: YYYY-MM-DD HH:00:00) */
+  hour: string;
+  /** 总检查次数 */
+  total_checks: number;
+  /** 成功次数 */
+  success_count: number;
+  /** 失败次数 */
+  failed_count: number;
+  /** 超时次数 */
+  timeout_count: number;
+  /** 平均延迟(毫秒) */
+  avg_latency_ms: number | null;
+  /** 最小延迟(毫秒) */
+  min_latency_ms: number | null;
+  /** 最大延迟(毫秒) */
+  max_latency_ms: number | null;
+}
+
+/**
+ * 配置健康检查摘要
+ */
+export interface ConfigHealthSummary {
+  /** 配置 ID */
+  config_id: number;
+  /** 配置名称 */
+  config_name: string;
+  /** 最近24小时的小时统计 */
+  hourly_stats: HealthCheckHourlyStats[];
+  /** 最后一次检查记录 */
+  last_check: HealthCheckRecord | null;
+  /** 24小时可用率(0-100) */
+  availability_24h: number;
+  /** 24小时平均延迟 */
+  avg_latency_24h: number | null;
 }
 
 /**
@@ -499,6 +654,8 @@ export interface EnvironmentStatus {
   claude_installed: boolean;
   /** Claude Code 版本 */
   claude_version: string | null;
+  /** Claude Code 命令路径 */
+  claude_path: string | null;
   /** Homebrew 是否已安装 (macOS) */
   homebrew_installed: boolean;
   /** WSL 是否已安装 (Windows) */
@@ -509,6 +666,8 @@ export interface EnvironmentStatus {
   node_installed: boolean;
   /** Node.js 版本 */
   node_version: string | null;
+  /** Node.js 命令路径 */
+  node_path: string | null;
   /** ripgrep 是否已安装 */
   ripgrep_installed: boolean;
   /** 网络是否可用 */

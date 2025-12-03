@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import type { EnvironmentVariable, ApiConfig } from '../types/tauri';
 import * as envVarApi from '../api/env-var';
 import * as apiConfigApi from '../api/config';
+import { ConfirmDialog } from './ui/Dialog';
 
 interface ConfigSelectorDialogProps {
   isOpen: boolean;
@@ -78,6 +79,9 @@ export const EnvironmentVariableManager: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
 
+  // 清除确认弹窗状态
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+
   // 加载环境变量
   const loadVariables = async () => {
     try {
@@ -129,10 +133,10 @@ export const EnvironmentVariableManager: React.FC = () => {
 
   // 清除 Anthropic 环境变量
   const handleClearAnthropicEnv = async () => {
-    if (!window.confirm('确定要清除 Anthropic 相关的环境变量吗?')) {
-      return;
-    }
+    setClearConfirmOpen(true);
+  };
 
+  const confirmClearAnthropicEnv = async () => {
     try {
       setError(null);
       await envVarApi.clearAnthropicEnv();
@@ -140,6 +144,8 @@ export const EnvironmentVariableManager: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : '清除环境变量失败');
       console.error('Failed to clear Anthropic env:', err);
+    } finally {
+      setClearConfirmOpen(false);
     }
   };
 
@@ -325,6 +331,27 @@ export const EnvironmentVariableManager: React.FC = () => {
         onClose={() => setIsConfigDialogOpen(false)}
         onSelect={handleApplyFromConfig}
         configs={configs}
+      />
+
+      {/* 清除确认弹窗 */}
+      <ConfirmDialog
+        isOpen={clearConfirmOpen}
+        type="warning"
+        title="清除环境变量"
+        subtitle="此操作将影响当前运行环境"
+        content={
+          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/50">
+            <p className="text-gray-300">
+              确定要清除所有 <span className="text-amber-400 font-medium">Anthropic 相关</span> 的环境变量吗？
+            </p>
+            <p className="text-gray-500 text-sm mt-2">
+              包括 ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL 等变量
+            </p>
+          </div>
+        }
+        confirmText="确认清除"
+        onConfirm={confirmClearAnthropicEnv}
+        onCancel={() => setClearConfirmOpen(false)}
       />
     </div>
   );

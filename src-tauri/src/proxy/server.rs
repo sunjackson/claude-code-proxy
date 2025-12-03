@@ -9,6 +9,7 @@ use crate::proxy::logger::ProxyLogger;
 use crate::proxy::router::RequestRouter;
 use crate::services::auto_switch::AutoSwitchService;
 use crate::services::proxy_log::ProxyRequestLogService;
+use crate::utils::constants::default_proxy_port;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Request, Response};
@@ -25,7 +26,7 @@ use tokio::sync::RwLock;
 pub struct ProxyConfig {
     /// Listen host
     pub host: String,
-    /// Listen port (default: 25341)
+    /// Listen port (default: 25341 for production, 15341 for development)
     pub port: u16,
     /// Currently active config group ID
     pub active_group_id: Option<i64>,
@@ -37,7 +38,7 @@ impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 25341,
+            port: default_proxy_port(),
             active_group_id: None,
             active_config_id: None,
         }
@@ -329,12 +330,43 @@ impl ProxyServer {
         let method = req.method().clone();
         let uri = req.uri().clone();
 
+        // 捕获请求头信息用于日志
+        let request_headers: std::collections::HashMap<String, String> = req
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        let request_headers_json = serde_json::to_string(&request_headers).ok();
+
+        // 提取 User-Agent 和 Content-Type
+        let user_agent = req
+            .headers()
+            .get(hyper::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let content_type = req
+            .headers()
+            .get(hyper::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
         // Start request logging
-        let log_builder = ProxyLogger::start_request(
+        let mut log_builder = ProxyLogger::start_request(
             method.clone(),
             uri.clone(),
             remote_addr.to_string(),
         );
+
+        // 添加请求头信息到日志构建器
+        if let Some(headers) = request_headers_json {
+            log_builder = log_builder.with_request_headers(headers);
+        }
+        if let Some(ua) = user_agent {
+            log_builder = log_builder.with_user_agent(ua);
+        }
+        if let Some(ct) = content_type {
+            log_builder = log_builder.with_content_type(ct);
+        }
 
         // Get active config ID and group ID
         let cfg = config.read().await;
@@ -358,6 +390,14 @@ impl ProxyServer {
                         "No active configuration".to_string(),
                     );
                 ProxyLogger::log_request(&log_entry);
+
+                // Save to database
+                let db = db_pool.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
+                        log::warn!("Failed to save proxy request log: {}", e);
+                    }
+                });
 
                 return Ok(response);
             }
@@ -387,18 +427,94 @@ impl ProxyServer {
         };
 
         match router.forward_request(req, config_id, group_id).await {
-            Ok(response) => {
-                // Log successful request
-                let log_entry = log_builder.finish(response.status());
-                ProxyLogger::log_request(&log_entry);
+            Ok((response, forward_details, stream_rx)) => {
+                // 使用详细信息构建日志
+                let mut log_builder = log_builder;
 
-                // Save to database (async, don't block response)
-                let db = db_pool.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
-                        log::warn!("Failed to save proxy request log: {}", e);
-                    }
-                });
+                // 添加请求体信息
+                if let Some(body) = forward_details.request_body.clone() {
+                    log_builder = log_builder.with_request_body(body, forward_details.request_body_size);
+                }
+
+                // 添加模型信息
+                if let Some(model) = forward_details.model.clone() {
+                    log_builder = log_builder.with_model(model);
+                }
+
+                // 标记响应开始
+                log_builder.mark_response_start();
+
+                // 检查是否有流式响应接收器
+                if let Some(mut rx) = stream_rx {
+                    // 流式响应 - 先保存初始日志，然后在流结束后更新
+                    let initial_log_entry = log_builder.finish_with_details(
+                        response.status(),
+                        forward_details.response_headers.clone(),
+                        Some("[streaming...]".to_string()),
+                        0,
+                        true,
+                        0,
+                    );
+
+                    ProxyLogger::log_request(&initial_log_entry);
+
+                    // 保存初始日志并获取 ID
+                    let db = db_pool.clone();
+                    let log_id = match ProxyRequestLogService::save_log(&db, &initial_log_entry) {
+                        Ok(id) => id,
+                        Err(e) => {
+                            log::warn!("Failed to save initial proxy request log: {}", e);
+                            return Ok(response);
+                        }
+                    };
+
+                    // 启动后台任务等待流结束并更新日志
+                    let db_for_update = db_pool.clone();
+                    let response_headers = forward_details.response_headers;
+                    tokio::spawn(async move {
+                        // 等待流式响应完成
+                        if let Some(completion_data) = rx.recv().await {
+                            log::info!(
+                                "Stream completed: {} bytes, {} chunks",
+                                completion_data.response_body_size,
+                                completion_data.chunk_count
+                            );
+
+                            // 更新日志记录
+                            if let Err(e) = ProxyRequestLogService::update_streaming_log(
+                                &db_for_update,
+                                log_id,
+                                response_headers,
+                                Some(completion_data.response_body),
+                                completion_data.response_body_size as i64,
+                                completion_data.chunk_count as i32,
+                            ) {
+                                log::warn!("Failed to update streaming log: {}", e);
+                            }
+                        } else {
+                            log::warn!("Stream receiver closed without completion data");
+                        }
+                    });
+                } else {
+                    // 非流式响应 - 直接保存完整日志
+                    let log_entry = log_builder.finish_with_details(
+                        response.status(),
+                        forward_details.response_headers,
+                        forward_details.response_body,
+                        forward_details.response_body_size,
+                        forward_details.is_streaming,
+                        forward_details.stream_chunk_count as u32,
+                    );
+                    ProxyLogger::log_request(&log_entry);
+
+                    // Save to database (async, don't block response)
+                    let db = db_pool.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
+                            log::warn!("Failed to save proxy request log: {}", e);
+                        }
+                    });
+                }
 
                 Ok(response)
             }

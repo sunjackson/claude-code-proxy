@@ -62,10 +62,13 @@ pub use env_var::{
 
 pub use proxy_log::{
     cleanup_proxy_request_logs, get_all_proxy_request_logs, get_proxy_request_log_count,
-    get_proxy_request_logs,
+    get_proxy_request_log_detail, get_proxy_request_log_stats, get_proxy_request_logs,
 };
 
-pub use health_check::{run_health_check_now, start_health_check, stop_health_check};
+pub use health_check::{
+    get_health_check_status, get_health_check_summaries, run_health_check_now,
+    start_health_check, stop_health_check, toggle_auto_health_check, HealthCheckState,
+};
 
 pub use setup::{
     check_can_install, check_for_updates, check_system_configured, detect_environment, generate_environment_report, get_claude_version,

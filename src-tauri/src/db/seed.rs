@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::models::error::{AppError, AppResult};
+use crate::utils::constants::default_proxy_port;
 use rusqlite::Connection;
 
 /// 插入默认数据
@@ -28,6 +29,7 @@ fn seed_app_settings(conn: &Connection) -> AppResult<()> {
         })?;
 
     if !exists {
+        let port = default_proxy_port();
         conn.execute(
             r#"
             INSERT INTO AppSettings (
@@ -36,15 +38,15 @@ fn seed_app_settings(conn: &Connection) -> AppResult<()> {
                 default_latency_threshold_ms,
                 default_proxy_port,
                 recommendation_cache_ttl_sec
-            ) VALUES (1, 'zh-CN', 3000, 25341, 3600)
+            ) VALUES (1, 'zh-CN', 3000, ?1, 3600)
             "#,
-            [],
+            [port as i32],
         )
         .map_err(|e| AppError::DatabaseError {
             message: format!("插入默认 AppSettings 失败: {}", e),
         })?;
 
-        log::info!("已插入默认应用设置: language=zh-CN, proxy_port=25341");
+        log::info!("已插入默认应用设置: language=zh-CN, proxy_port={}", port);
     }
 
     Ok(())
@@ -96,21 +98,22 @@ fn seed_proxy_service(conn: &Connection) -> AppResult<()> {
         })?;
 
     if !exists {
+        let port = default_proxy_port();
         conn.execute(
             r#"
             INSERT INTO ProxyService (
                 id,
                 listen_port,
                 status
-            ) VALUES (1, 25341, 'stopped')
+            ) VALUES (1, ?1, 'stopped')
             "#,
-            [],
+            [port as i32],
         )
         .map_err(|e| AppError::DatabaseError {
             message: format!("插入默认 ProxyService 失败: {}", e),
         })?;
 
-        log::info!("已插入代理服务实例: id=1, port=25341, status=stopped");
+        log::info!("已插入代理服务实例: id=1, port={}, status=stopped", port);
     }
 
     Ok(())

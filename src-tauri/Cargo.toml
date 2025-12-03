@@ -1,6 +1,6 @@
 [package]
 name = "claude-code-proxy"
-version = "1.0.6"
+version = "1.0.7"
 description = "Claude Code 代理服务"
 authors = ["Your Name"]
 license = ""
@@ -33,6 +33,7 @@ tokio = { version = "1.35", features = ["full"] }
 # HTTP 代理服务器
 hyper = { version = "1.5", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
+http-body = "1.0"
 http-body-util = "0.1"
 hyper-rustls = "0.27"
 tokio-rustls = { version = "0.26", features = ["ring"] }

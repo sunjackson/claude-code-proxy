@@ -283,20 +283,102 @@ impl ClaudeInstaller {
         }
     }
 
-    /// 运行 claude doctor
+    /// 运行 claude doctor (带超时处理)
+    /// 注意: claude doctor 是交互式命令，程序化调用可能无法正常工作
+    /// 这里使用 --version 作为替代来验证 claude 是否可用
     pub async fn run_doctor() -> Result<String, String> {
-        let output = AsyncCommand::new("claude")
-            .arg("doctor")
-            .output()
-            .await
-            .map_err(|e| format!("执行 claude doctor 失败: {}", e))?;
+        use std::time::Duration;
+        use tokio::time::timeout;
 
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
-        } else {
-            let error = String::from_utf8_lossy(&output.stderr);
-            Err(format!("claude doctor 执行失败: {}", error))
+        // claude doctor 是交互式命令，不适合程序化调用
+        // 改为执行一系列检查来模拟 doctor 功能
+        let mut results: Vec<String> = Vec::new();
+
+        // 检查 1: claude --version
+        results.push("🔍 检查 Claude Code 版本...".to_string());
+        match timeout(Duration::from_secs(10),
+            AsyncCommand::new("claude")
+                .arg("--version")
+                .output()
+        ).await {
+            Ok(Ok(output)) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                results.push(format!("✅ Claude Code 版本: {}", version));
+            }
+            Ok(Ok(output)) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                results.push(format!("⚠️ 版本检查返回错误: {}", stderr.trim()));
+            }
+            Ok(Err(e)) => {
+                results.push(format!("❌ 无法执行 claude 命令: {}", e));
+            }
+            Err(_) => {
+                results.push("❌ 版本检查超时".to_string());
+            }
         }
+
+        // 检查 2: Node.js 版本
+        results.push("\n🔍 检查 Node.js...".to_string());
+        match timeout(Duration::from_secs(5),
+            AsyncCommand::new("node")
+                .arg("--version")
+                .output()
+        ).await {
+            Ok(Ok(output)) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                results.push(format!("✅ Node.js 版本: {}", version));
+            }
+            Ok(_) => {
+                results.push("⚠️ Node.js 检查失败".to_string());
+            }
+            Err(_) => {
+                results.push("❌ Node.js 检查超时".to_string());
+            }
+        }
+
+        // 检查 3: npm 版本
+        results.push("\n🔍 检查 npm...".to_string());
+        match timeout(Duration::from_secs(5),
+            AsyncCommand::new("npm")
+                .arg("--version")
+                .output()
+        ).await {
+            Ok(Ok(output)) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                results.push(format!("✅ npm 版本: {}", version));
+            }
+            Ok(_) => {
+                results.push("⚠️ npm 检查失败".to_string());
+            }
+            Err(_) => {
+                results.push("❌ npm 检查超时".to_string());
+            }
+        }
+
+        // 检查 4: ripgrep
+        results.push("\n🔍 检查 ripgrep...".to_string());
+        match timeout(Duration::from_secs(5),
+            AsyncCommand::new("rg")
+                .arg("--version")
+                .output()
+        ).await {
+            Ok(Ok(output)) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout);
+                let first_line = version.lines().next().unwrap_or("").trim();
+                results.push(format!("✅ {}", first_line));
+            }
+            Ok(_) => {
+                results.push("⚠️ ripgrep 未安装或无法访问".to_string());
+            }
+            Err(_) => {
+                results.push("❌ ripgrep 检查超时".to_string());
+            }
+        }
+
+        results.push("\n📋 诊断完成".to_string());
+        results.push("💡 提示: 如需完整诊断，请在终端中运行 `claude doctor`".to_string());
+
+        Ok(results.join("\n"))
     }
 
     /// 获取 Claude Code 版本

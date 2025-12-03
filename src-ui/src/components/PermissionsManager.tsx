@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import type { PermissionsConfig, McpServerInfo } from '../types/tauri';
 import * as permissionsApi from '../api/permissions';
 import * as mcpApi from '../api/mcp';
+import { ConfirmDialog } from './ui/Dialog';
 
 // Claude Code 内置工具列表
 const BUILTIN_TOOLS = [
@@ -47,6 +48,9 @@ export const PermissionsManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
   const [selectedMcpServer, setSelectedMcpServer] = useState<string>('');
+
+  // 重置确认弹窗状态
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   const loadConfig = async () => {
     try {
@@ -97,9 +101,10 @@ export const PermissionsManager: React.FC = () => {
   };
 
   const handleReset = async () => {
-    if (!window.confirm('确定要重置权限配置吗？这将清除所有自定义权限设置。')) {
-      return;
-    }
+    setResetConfirmOpen(true);
+  };
+
+  const confirmReset = async () => {
     try {
       setError(null);
       await permissionsApi.clearPermissionsConfig();
@@ -108,6 +113,8 @@ export const PermissionsManager: React.FC = () => {
       setHasChanges(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : '重置权限配置失败');
+    } finally {
+      setResetConfirmOpen(false);
     }
   };
 
@@ -511,6 +518,23 @@ export const PermissionsManager: React.FC = () => {
           <li><span className="text-gray-400">默认</span> - 工具执行时会请求用户确认</li>
         </ul>
       </div>
+
+      {/* 重置确认弹窗 */}
+      <ConfirmDialog
+        isOpen={resetConfirmOpen}
+        type="warning"
+        title="重置权限配置"
+        subtitle="此操作不可撤销"
+        content={
+          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/50">
+            <p className="text-gray-300">确定要重置权限配置吗？</p>
+            <p className="text-gray-500 text-sm mt-2">这将清除所有自定义权限设置，恢复为默认状态。</p>
+          </div>
+        }
+        confirmText="确认重置"
+        onConfirm={confirmReset}
+        onCancel={() => setResetConfirmOpen(false)}
+      />
     </div>
   );
 };

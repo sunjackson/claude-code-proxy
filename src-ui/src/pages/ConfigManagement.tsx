@@ -11,6 +11,7 @@ import * as balanceApi from '../api/balance';
 import { ConfigEditor } from '../components/ConfigEditor';
 import { GroupEditor } from '../components/GroupEditor';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { MessageDialog } from '../components/ui/Dialog';
 import { TestResultPanel } from '../components/TestResultPanel';
 import { CompactLayout } from '../components/CompactLayout';
 import { categoryLabels, categoryColors, type ProviderCategory } from '../config/providerPresets';
@@ -45,6 +46,20 @@ export const ConfigManagement: React.FC = () => {
     variant: 'default',
     onConfirm: () => {},
   });
+
+  // 消息弹窗状态
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const [messageDialogType, setMessageDialogType] = useState<'success' | 'error' | 'info'>('info');
+  const [messageDialogTitle, setMessageDialogTitle] = useState('');
+  const [messageDialogContent, setMessageDialogContent] = useState<React.ReactNode>(null);
+
+  // 显示消息弹窗
+  const showMessage = (type: 'success' | 'error' | 'info', title: string, content: React.ReactNode) => {
+    setMessageDialogType(type);
+    setMessageDialogTitle(title);
+    setMessageDialogContent(content);
+    setMessageDialogOpen(true);
+  };
 
   // 加载数据
   useEffect(() => {
@@ -163,7 +178,7 @@ export const ConfigManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('保存配置失败:', err);
-      alert(`保存配置失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      showMessage('error', '保存配置失败', err instanceof Error ? err.message : '未知错误');
     }
   };
 
@@ -180,7 +195,7 @@ export const ConfigManagement: React.FC = () => {
           await loadData();
         } catch (err) {
           console.error('删除配置失败:', err);
-          alert(`删除配置失败: ${err instanceof Error ? err.message : '未知错误'}`);
+          showMessage('error', '删除配置失败', err instanceof Error ? err.message : '未知错误');
         }
       },
     });
@@ -193,27 +208,59 @@ export const ConfigManagement: React.FC = () => {
 
       const result = await testApi.testApiConfig(config.id);
 
-      // 使用 is_available 判断可用性（而不是 is_success）
-      // is_available: 服务器可连接（即使401、403、429等错误）
-      // is_success: API调用完全成功（200-299）
+      // 使用 is_available 判断可用性（与后端 TestResult::is_available() 保持一致）
+      // 可用：成功响应，或客户端错误（认证、权限、限流等可修复问题）
+      // 不可用：服务器错误（5xx）、server_error、负载过高、超时、连接失败等
+      const errorMsg = result.error_message || '';
+      const errorLower = errorMsg.toLowerCase();
+
       const isAvailable = result.status === 'success' || (
         result.status === 'failed' &&
         result.error_message &&
+        // 服务器错误（5xx）
         !result.error_message.includes('HTTP 5') &&
         !result.error_message.includes('服务器错误') &&
+        !result.error_message.includes('服务商错误') &&
+        // server_error 类型错误
+        !errorLower.includes('server_error') &&
+        // 负载过高、过载
+        !result.error_message.includes('负载过高') &&
+        !result.error_message.includes('过载') &&
+        !errorLower.includes('overloaded') &&
+        !errorLower.includes('overload') &&
+        // 连接问题
         !result.error_message.includes('连接失败') &&
         !result.error_message.includes('DNS解析失败') &&
         !result.error_message.includes('连接被拒绝') &&
         !result.error_message.includes('连接重置')
       );
 
-      alert(
-        `测试结果:\n状态: ${isAvailable ? '✅ 可用' : '❌ 不可用'}\n延迟: ${result.latency_ms ? result.latency_ms + ' ms' : '-'}`
+      showMessage(
+        isAvailable ? 'success' : 'error',
+        '测试结果',
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">状态:</span>
+            <span className={isAvailable ? 'text-green-400' : 'text-red-400'}>
+              {isAvailable ? '✅ 可用' : '❌ 不可用'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">延迟:</span>
+            <span className="text-gray-300">{result.latency_ms ? `${result.latency_ms} ms` : '-'}</span>
+          </div>
+          {result.error_message && (
+            <div className="flex items-start gap-2">
+              <span className="text-gray-400 shrink-0">原因:</span>
+              <span className="text-red-400 break-all">{result.error_message}</span>
+            </div>
+          )}
+        </div>
       );
       await loadData();
     } catch (err) {
       console.error('测试配置失败:', err);
-      alert(`测试失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      showMessage('error', '测试失败', err instanceof Error ? err.message : '未知错误');
     } finally {
       // 清除测试中状态
       setTestingConfigId(null);
@@ -227,19 +274,37 @@ export const ConfigManagement: React.FC = () => {
 
       const result = await balanceApi.queryBalance(config.id);
 
-      const statusText = result.status === 'success' ? '✅ 成功' : '❌ 失败';
+      const isSuccess = result.status === 'success';
       const balanceText = result.balance !== null
         ? `${result.currency === 'CNY' ? '¥' : result.currency === 'USD' ? '$' : result.currency || ''}${result.balance.toFixed(2)}`
         : '-';
-      const errorText = result.error_message ? `\n错误: ${result.error_message}` : '';
 
-      alert(
-        `余额查询结果:\n状态: ${statusText}\n余额: ${balanceText}${errorText}`
+      showMessage(
+        isSuccess ? 'success' : 'error',
+        '余额查询结果',
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">状态:</span>
+            <span className={isSuccess ? 'text-green-400' : 'text-red-400'}>
+              {isSuccess ? '✅ 成功' : '❌ 失败'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">余额:</span>
+            <span className="text-amber-400 font-medium">{balanceText}</span>
+          </div>
+          {result.error_message && (
+            <div className="flex items-start gap-2">
+              <span className="text-gray-400">错误:</span>
+              <span className="text-red-400">{result.error_message}</span>
+            </div>
+          )}
+        </div>
       );
       await loadData();
     } catch (err) {
       console.error('查询余额失败:', err);
-      alert(`查询余额失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      showMessage('error', '查询余额失败', err instanceof Error ? err.message : '未知错误');
     } finally {
       // 清除查询中状态
       setQueryingBalanceId(null);
@@ -288,7 +353,7 @@ export const ConfigManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('保存分组失败:', err);
-      alert(`保存分组失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      showMessage('error', '保存分组失败', err instanceof Error ? err.message : '未知错误');
     }
   };
 
@@ -305,7 +370,7 @@ export const ConfigManagement: React.FC = () => {
           await loadData();
         } catch (err) {
           console.error('删除分组失败:', err);
-          alert(`删除分组失败: ${err instanceof Error ? err.message : '未知错误'}`);
+          showMessage('error', '删除分组失败', err instanceof Error ? err.message : '未知错误');
         }
       },
     });
@@ -847,6 +912,14 @@ export const ConfigManagement: React.FC = () => {
         variant={confirmDialog.variant}
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      <MessageDialog
+        isOpen={messageDialogOpen}
+        type={messageDialogType}
+        title={messageDialogTitle}
+        content={messageDialogContent}
+        onClose={() => setMessageDialogOpen(false)}
       />
     </CompactLayout>
   );

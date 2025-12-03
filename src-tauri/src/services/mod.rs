@@ -6,11 +6,13 @@ pub mod balance_scheduler;
 pub mod balance_service;
 pub mod claude_config;
 pub mod claude_installer;
+pub mod claude_test_request;
 pub mod config_manager;
 pub mod env_detection;
 pub mod env_var;
 pub mod error_classifier;
 pub mod health_check_scheduler;
+pub mod health_check_service;
 pub mod keychain;
 pub mod latency_test;
 pub mod mcp_config;
@@ -36,3 +38,4 @@ pub use permissions_config::PermissionsConfigService;
 pub use provider_preset::ProviderPresetService;
 pub use skills_config::SkillsConfigService;
 // ProxyRequestLog 和 ProxyRequestLogService 在 commands/proxy_log.rs 中直接导入使用
+// HealthCheckService 在 commands/health_check.rs 和 health_check_scheduler.rs 中直接导入使用

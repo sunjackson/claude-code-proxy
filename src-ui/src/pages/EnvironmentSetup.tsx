@@ -297,6 +297,12 @@ export const EnvironmentSetup: React.FC = () => {
                       <span className="text-white">{envStatus.claude_version}</span>
                     </div>
                   )}
+                  {envStatus.claude_path && (
+                    <div className="flex items-start justify-between">
+                      <span className="text-gray-400 flex-shrink-0">路径:</span>
+                      <span className="text-white text-xs font-mono break-all ml-2 text-right">{envStatus.claude_path}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -310,6 +316,12 @@ export const EnvironmentSetup: React.FC = () => {
                       {getStatusIcon(envStatus.node_installed)} {envStatus.node_version || '未安装'}
                     </span>
                   </div>
+                  {envStatus.node_path && (
+                    <div className="flex items-start justify-between">
+                      <span className="text-gray-400 flex-shrink-0">Node 路径:</span>
+                      <span className="text-white text-xs font-mono break-all ml-2 text-right">{envStatus.node_path}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400">ripgrep:</span>
                     <span className="text-white">

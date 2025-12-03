@@ -8,6 +8,7 @@ pub mod environment_variable;
 pub mod error;
 pub mod error_classifier;
 pub mod failure_counter;
+pub mod health_check;
 pub mod mcp;
 pub mod provider_preset;
 pub mod proxy_status;

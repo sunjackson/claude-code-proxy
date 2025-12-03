@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::utils::constants::default_proxy_port_i32;
 use serde::{Deserialize, Serialize};
 
 /// AppSettings (应用设置) 数据模型
@@ -26,6 +27,12 @@ pub struct AppSettings {
 
     /// 推荐服务缓存时间(秒)
     pub recommendation_cache_ttl_sec: i32,
+
+    /// 是否启用自动健康检查
+    pub auto_health_check_enabled: bool,
+
+    /// 健康检查间隔(秒)，默认300秒(5分钟)
+    pub health_check_interval_secs: i32,
 
     /// 最后更新时间
     pub updated_at: String,
@@ -78,6 +85,8 @@ pub struct UpdateAppSettingsInput {
     pub remote_recommendation_url: Option<String>,
     pub local_recommendation_path: Option<String>,
     pub recommendation_cache_ttl_sec: Option<i32>,
+    pub auto_health_check_enabled: Option<bool>,
+    pub health_check_interval_secs: Option<i32>,
 }
 
 impl AppSettings {
@@ -158,10 +167,12 @@ impl Default for AppSettings {
             id: Self::SINGLETON_ID,
             language: Language::ZhCn,
             default_latency_threshold_ms: 30000,
-            default_proxy_port: 25341,
+            default_proxy_port: default_proxy_port_i32(),
             remote_recommendation_url: None,
             local_recommendation_path: None,
             recommendation_cache_ttl_sec: 3600,
+            auto_health_check_enabled: false,
+            health_check_interval_secs: 300,
             updated_at: String::new(),
         }
     }

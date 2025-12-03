@@ -2,151 +2,67 @@
 
 <div align="center">
 
-<img src="./ccr.png" alt="Claude Code Proxy" width="200"/>
+<img src="./ccr.png" alt="ClaudeCodeProxy" width="180"/>
 
-**一个功能强大的跨平台桌面应用，用于管理 Claude Code 的本地代理服务**
+**跨平台桌面应用 - 管理 Claude Code 的本地代理服务**
 
 [![Build](https://github.com/sunjackson/claude-code-proxy/actions/workflows/build.yml/badge.svg)](https://github.com/sunjackson/claude-code-proxy/actions/workflows/build.yml)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://tauri.app/)
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-[功能特性](#功能特性) • [快速开始](#快速开始) • [使用指南](#使用指南) • [开发文档](#开发文档) • [常见问题](#常见问题)
+[English](./README_EN.md) | 简体中文
 
 </div>
 
 ---
 
-## 📖 简介
+## 简介
 
-ClaudeCodeProxy 是一个专为 Claude Code 设计的本地代理管理工具，帮助您轻松管理多个 API 中转服务，实现智能路由、自动故障切换和负载均衡。通过简洁优雅的黑金主题界面，您可以一键配置、测试和切换不同的 API 服务。
+ClaudeCodeProxy 是专为 Claude Code 设计的本地代理管理工具，帮助您轻松管理多个 API 中转服务，实现智能路由、自动故障切换和负载均衡。通过简洁优雅的黑金主题界面，一键配置、测试和切换不同的 API 服务。
 
-### 🆕 v1.0.4 新增功能
+### 核心优势
 
-- **🚀 Zero-Config 首次启动向导** - 自动检测并安装 Claude Code CLI，一键完成所有配置
-- **🔍 增强环境检测** - 支持多种安装路径检测(Homebrew Intel/Apple Silicon、用户目录等)，大幅提高检测成功率
-- **⚙️ 高级配置管理** - 新增 MCP 服务器、权限配置、Skills 技能管理功能
-- **🔧 Doctor 诊断工具** - 集成 `claude doctor` 命令，快速诊断配置问题
-- **📛 统一品牌名称** - 应用名称统一为 ClaudeCodeProxy，提升品牌一致性
-
-### 为什么选择 ClaudeCodeProxy？
-
-- 🎯 **专为 Claude Code 优化** - 自动检测并配置 Claude Code，无需手动修改配置文件
-- 🚀 **智能路由** - 支持多配置分组管理，自动负载均衡和故障切换
-- 🔒 **安全可靠** - API 密钥加密存储在系统密钥链中，数据安全有保障
-- 🎨 **美观易用** - 黑金主题 UI，操作简单直观
-- 🌍 **国际化支持** - 内置中英文界面切换
-- 📦 **跨平台** - 支持 Windows、macOS 和 Linux
+- **专为 Claude Code 优化** - 自动检测并配置，无需手动修改配置文件
+- **智能路由** - 多配置分组管理，自动负载均衡和故障切换
+- **安全可靠** - API 密钥加密存储在系统密钥链中
+- **美观易用** - 黑金主题 UI，操作简单直观
+- **跨平台** - 支持 Windows、macOS 和 Linux
 
 ---
 
-## ✨ 功能特性
+## 功能特性
 
-### 核心功能
-
-- **🚀 Zero-Config 首次启动向导**（v1.0.4 新增）
-  - 自动检测系统环境和依赖
-  - 一键安装 Claude Code CLI
-  - 智能选择最佳安装方式(Homebrew/NPM/Native)
-  - 自动配置代理服务
-
-- **⚙️ 高级配置管理**（v1.0.4 新增）
-  - **MCP 服务器管理** - 配置和管理 Model Context Protocol 服务器
-  - **权限配置** - 精细化控制 Claude Code 访问权限
-  - **Skills 管理** - 自定义 Claude Code 技能和工作流
-
-- **🔧 环境诊断工具**（v1.0.4 新增）
-  - 集成 `claude doctor` 诊断命令
-  - 增强环境检测(支持多种安装路径)
-  - 实时显示诊断输出和错误信息
-
-- **🔌 一键配置 Claude Code**
-  - 自动检测 Claude Code 配置文件
-  - 一键启用/禁用本地代理
-  - 自动备份和恢复配置
-
-- **🗂️ 分组管理**
-  - 创建多个配置分组（工作、个人等）
-  - 分组内独立管理多个 API 配置
-  - 支持批量导入和导出
-
-- **⚡ 智能切换**
-  - 配置内自动负载均衡
-  - 故障自动切换到备用配置
-  - 自定义延迟阈值和切换策略
-
-- **🧪 连接测试**
-  - 实时测试 API 连接性
-  - 延迟测试和性能评估
-  - 批量测试所有配置
-
-- **💰 余额查询**
-  - 自动查询 API 余额
-  - 余额不足自动提醒
-  - 支持多种币种显示
-
-- **📊 使用统计与监控**
-  - 切换历史记录
-  - 延迟统计图表
-  - 使用时长追踪
-  - 服务商监控大屏（实时热力图）
-  - 双数据源监控：连通性测试与实际请求
-
-- **🏥 健康检查**
-  - 定时 API 连通性检测
-  - 自动记录请求延迟
-  - 代理请求日志追踪
-  - 实时健康状态监控
-
-- **🌟 服务导航**
-  - 内置推荐服务列表
-  - 快速访问常用服务
-  - 服务详情和优惠信息
+| 功能 | 描述 |
+|------|------|
+| **Zero-Config 启动向导** | 自动检测环境、安装 Claude Code CLI、配置代理服务 |
+| **一键配置 Claude Code** | 自动检测配置文件，一键启用/禁用代理 |
+| **分组管理** | 创建多个配置分组，独立管理 API 配置 |
+| **智能切换** | 配置内负载均衡，故障自动切换 |
+| **连接测试** | 实时测试 API 连接性和延迟 |
+| **余额查询** | 自动查询 API 余额，余额不足提醒 |
+| **健康检查** | 定时检测 API 连通性，实时监控状态 |
+| **高级配置** | MCP 服务器、权限配置、Skills 技能管理 |
 
 ---
 
-## 📸 界面预览
+## 界面预览
 
-### 1. 仪表盘
-主界面展示代理服务状态、Claude Code 配置、分组管理和配置切换功能。
-
-![仪表盘](./png/ScreenShot_2025-11-18_214914_990.png)
-
-### 2. 配置管理
-管理 API 配置和分组，支持余额查询、连接测试、模型配置等功能。
-
-![配置管理](./png/ScreenShot_2025-11-18_214933_748.png)
-
-### 3. Claude Code 配置
-自动检测 Claude Code 配置文件，一键启用代理，支持配置备份和恢复。
-
-![Claude Code 配置](./png/ScreenShot_2025-11-18_214940_011.png)
-
-### 4. 系统设置
-管理应用设置和环境变量，支持从配置应用导入和清除 Anthropic 变量。
-
-![系统设置](./png/ScreenShot_2025-11-18_214951_359.png)
-
-### 6. 环境设置向导（v1.0.4 新增）
-首次启动向导，自动检测并安装 Claude Code，配置开发环境。
-
-![环境设置向导](./png/ScreenShot_2025-11-28_214031_899.png)
-
-### 7. 高级配置（v1.0.4 新增）
-MCP 服务器、权限配置和 Skills 技能管理。
-
-![高级配置](./png/ScreenShot_2025-11-28_214141_387.png)
-
-### 5. 新建配置
-快速开始向导和预设模板，支持官方、国内官方、第三方和聚合平台等多种配置。
-
-![新建配置](./png/ScreenShot_2025-11-18_214959_339.png)
+<table>
+<tr>
+<td width="50%"><img src="./png/ScreenShot_2025-11-18_214914_990.png" alt="仪表盘"/><br/><em>仪表盘 - 代理状态与配置管理</em></td>
+<td width="50%"><img src="./png/ScreenShot_2025-11-18_214933_748.png" alt="配置管理"/><br/><em>配置管理 - API 配置与测试</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="./png/ScreenShot_2025-11-28_214031_899.png" alt="环境设置"/><br/><em>环境设置向导 - 自动检测安装</em></td>
+<td width="50%"><img src="./png/ScreenShot_2025-11-28_214141_387.png" alt="高级配置"/><br/><em>高级配置 - MCP/权限/Skills</em></td>
+</tr>
+</table>
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 系统要求
 
@@ -156,549 +72,195 @@ MCP 服务器、权限配置和 Skills 技能管理。
 | macOS | 11 Big Sur | 14 Sonoma |
 | Linux | Ubuntu 20.04 | Ubuntu 22.04+ |
 
-### 快速安装
+### 下载安装
 
-#### 方式 1: 下载预构建版本（推荐）
+访问 [Releases](https://github.com/sunjackson/claude-code-proxy/releases) 下载对应平台安装包：
 
-1. 访问 [Releases 页面](https://github.com/sunjackson/claude-code-proxy/releases)
-2. 下载对应平台的安装包：
-   - **Windows**: `ClaudeCodeProxy_x.x.x_x64.msi` 或 `.exe`
-   - **macOS**: `ClaudeCodeProxy_x.x.x_aarch64.dmg` (Apple Silicon) 或 `x86_64.dmg` (Intel)
-   - **Linux**: `ClaudeCodeProxy_x.x.x_amd64.deb` 或 `.AppImage`
+| 平台 | 安装包 |
+|------|--------|
+| **Windows** | `ClaudeCodeProxy_x.x.x_x64.msi` |
+| **macOS (Apple Silicon)** | `ClaudeCodeProxy_x.x.x_aarch64.dmg` |
+| **macOS (Intel)** | `ClaudeCodeProxy_x.x.x_x86_64.dmg` |
+| **Linux** | `ClaudeCodeProxy_x.x.x_amd64.deb` 或 `.AppImage` |
 
-#### 方式 2: 从源码构建
-
-详见 [开发文档](#开发文档) 部分。
-
-### 安装说明
-
-#### macOS 安装步骤
-
-1. **下载并打开 DMG 文件**
-   - 双击 `ClaudeCodeProxy_x.x.x_macOS_Installer.dmg` 打开安装镜像
-   - 等待镜像挂载完成
-
-2. **安装应用**
-   - 在打开的窗口中，将 `ClaudeCodeProxy` 图标拖拽到 `Applications` 文件夹图标
-   - 等待复制完成
-
-3. **移除隔离属性（推荐方式）**
-
-   **方式 1: 使用终端命令（最快捷）**
-   ```bash
-   xattr -d com.apple.quarantine /Applications/ClaudeCodeProxy.app
-   ```
-
-   执行此命令后，即可正常双击打开应用，无需其他操作。
-
-   **方式 2: 右键打开（传统方式）**
-   - 打开「应用程序」文件夹，找到 ClaudeCodeProxy
-   - **重要**：右键点击应用图标，选择「打开」（不要双击）
-   - 在弹出的安全提示中，点击「打开」按钮
-   - 后续使用可以正常双击打开
-
-> **💡 关于 macOS 安全限制**
->
-> 由于应用未经过 Apple 公证，macOS Gatekeeper 会阻止直接运行。推荐使用 `xattr` 命令移除隔离属性，这是最快捷的方式。
->
-> 如果右键打开仍然被阻止，请前往「系统设置 > 隐私与安全性」，在底部找到相关提示并点击「仍要打开」。
-
-#### Windows 安装步骤
-
-1. 双击 `.msi` 安装包
-2. 按照安装向导提示完成安装
-3. 如遇到 Windows Defender 提示，点击"更多信息"然后"仍要运行"
-
-#### Linux 安装步骤
+### macOS 安装说明
 
 ```bash
-# Ubuntu/Debian
-sudo dpkg -i ClaudeCodeProxy_x.x.x_amd64.deb
-sudo apt-get install -f  # 安装依赖
+# 方法一：移除隔离属性（推荐）
+xattr -d com.apple.quarantine /Applications/ClaudeCodeProxy.app
 
-# 运行
-claude-code-proxy
+# 方法二：右键点击应用 → 选择"打开"
 ```
 
-### 首次启动
+### 首次使用
 
-1. **启动应用**
-   - Windows: 从开始菜单或桌面快捷方式启动
-   - macOS: 从应用程序文件夹启动（首次使用右键打开）
-   - Linux: 从应用菜单或终端运行 `claude-code-proxy`
-
-2. **添加 API 配置**
-   - 点击"配置管理"进入配置页面
-   - 选择"新建配置"
-   - 从预设模板中选择服务提供商，或手动填写配置
-
-3. **启动代理服务**
-   - 返回仪表盘
-   - 点击"启动代理"按钮
-   - 应用会自动配置 Claude Code
-
-4. **开始使用**
-   - 打开 Claude Code
-   - 所有 API 请求将自动通过本地代理转发
+1. 启动应用，完成环境设置向导
+2. 进入「配置管理」添加 API 配置
+3. 在「仪表盘」启动代理服务
+4. 打开 Claude Code，所有请求将自动通过代理转发
 
 ---
 
-## 📚 使用指南
+## 从源码构建
 
-### 基本操作
+### 前置要求
 
-#### 1. 管理配置
+- **Rust** 1.70+ ([安装指南](https://rustup.rs/))
+- **Node.js** 18+ ([安装指南](https://nodejs.org/))
+- **系统依赖**：
+  - macOS: `xcode-select --install`
+  - Linux: `sudo apt install libwebkit2gtk-4.0-dev build-essential libssl-dev libgtk-3-dev`
+  - Windows: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
-**创建新配置：**
-
-```
-仪表盘 → 配置管理 → 新建配置
-```
-
-- **使用预设模板**（推荐）：从官方/第三方服务列表中选择
-- **手动配置**：自定义服务器地址和参数
-
-**编辑配置：**
-
-```
-配置管理 → 选择配置 → 点击编辑图标
-```
-
-**测试配置：**
-
-```
-配置管理 → 选择配置 → 点击测试按钮
-```
-
-#### 2. 分组管理
-
-**创建分组：**
-
-```
-配置管理 → 分组管理 → 新建分组
-```
-
-- 设置分组名称和描述
-- 配置自动切换规则
-- 设置延迟阈值
-
-**管理分组配置：**
-
-```
-配置管理 → 选择分组 → 添加/移动配置
-```
-
-#### 3. 代理服务
-
-**启动代理：**
-
-```
-仪表盘 → 启动代理
-```
-
-应用会自动：
-- 启动本地代理服务器（默认端口 25341）
-- 配置 Claude Code 使用代理
-- 创建配置备份
-
-**停止代理：**
-
-```
-仪表盘 → 停止代理
-```
-
-应用会自动：
-- 停止代理服务器
-- 恢复 Claude Code 原始配置
-
-#### 4. 自动切换
-
-**启用自动切换：**
-
-```
-配置管理 → 编辑分组 → 启用自动切换
-```
-
-配置选项：
-- **延迟阈值**：超过此延迟自动切换（默认 30000ms）
-- **切换策略**：顺序/随机/负载均衡
-
-**监控切换历史：**
-
-```
-仪表盘 → 切换历史
-```
-
-### 高级功能
-
-#### 余额查询
-
-```
-配置管理 → 选择配置 → 余额面板
-```
-
-- 自动查询并显示余额
-- 支持定时自动刷新
-- 余额不足时自动禁用配置
-
-#### 批量操作
-
-```
-配置管理 → 选择多个配置 → 批量操作
-```
-
-- 批量测试
-- 批量启用/禁用
-- 批量移动到分组
-
-#### 配置导入导出
-
-```
-配置管理 → 更多操作 → 导入/导出
-```
-
-- 导出配置到 JSON 文件
-- 导入配置从文件
-- 分享配置给他人
-
----
-
-## 🛠️ 开发文档
-
-### 从源码构建
-
-#### 前置要求
-
-1. **安装 Rust**（1.70+）
+### 构建步骤
 
 ```bash
-# macOS / Linux
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Windows
-# 下载并运行 https://rustup.rs/
-```
-
-2. **安装 Node.js**（18+）
-
-```bash
-# 使用 nvm（推荐）
-nvm install 18
-nvm use 18
-```
-
-3. **安装系统依赖**
-
-**macOS:**
-```bash
-# Xcode Command Line Tools
-xcode-select --install
-```
-
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt update
-sudo apt install -y libwebkit2gtk-4.0-dev \
-  build-essential curl wget file \
-  libssl-dev libgtk-3-dev \
-  libayatana-appindicator3-dev librsvg2-dev \
-  libsqlite3-dev
-```
-
-**Windows:**
-- 安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-- 选择 "Desktop development with C++"
-
-#### 构建步骤
-
-1. **克隆仓库**
-
-```bash
+# 克隆仓库
 git clone https://github.com/sunjackson/claude-code-proxy.git
 cd claude-code-proxy
-```
 
-2. **安装依赖**
+# 安装前端依赖
+cd src-ui && npm install && cd ..
 
-```bash
-# 前端依赖
-cd src-ui
-npm install
-cd ..
-```
-
-3. **开发模式运行**
-
-```bash
-# 一键启动（推荐）
+# 开发模式
 ./start-dev.sh
 
-# 或手动启动
-cd src-tauri
-cargo tauri dev
+# 构建生产版本
+./build.sh
 ```
 
-4. **构建生产版本**
+构建产物位置：`src-tauri/target/release/bundle/`
+
+---
+
+## 发布新版本
+
+### 1. 更新版本号
+
+需要在以下三个文件中同步更新版本号：
 
 ```bash
-# 一键构建
-./build.sh
+# src-tauri/tauri.conf.json
+"version": "x.x.x"
 
-# 或手动构建
-cd src-ui
-npm run build
-cd ../src-tauri
-cargo tauri build
+# src-tauri/Cargo.toml
+version = "x.x.x"
+
+# src-ui/package.json
+"version": "x.x.x"
 ```
 
-构建产物位置：
-- **macOS**: `src-tauri/target/release/bundle/dmg/`
-- **Windows**: `src-tauri/target/release/bundle/msi/`
-- **Linux**: `src-tauri/target/release/bundle/deb/`
+### 2. 更新 CHANGELOG.md
 
-### CI/CD 自动构建
+### 3. 创建 Tag 触发自动构建
 
-项目使用 GitHub Actions 自动构建多平台版本：
+```bash
+git add .
+git commit -m "chore: release vX.X.X"
+git tag -a vX.X.X -m "Release vX.X.X"
+git push origin master --tags
+```
 
-- **触发条件**:
-  - 推送到 `master`/`main` 分支
-  - 创建 tag (格式: `v*`)
-  - 手动触发
+GitHub Actions 将自动：
+- 构建 macOS (Apple Silicon + Intel)、Windows、Linux 版本
+- 创建 GitHub Release
+- 上传所有安装包
 
-- **构建平台**:
-  - macOS (Apple Silicon + Intel)
-  - Windows (x64)
-  - Linux (x64)
+---
 
-- **自动发布**:
-  - 创建 tag 时自动创建 GitHub Release
-  - 自动上传所有平台的安装包
-  - 生成 Release Notes
-
-**查看构建状态**: [GitHub Actions](https://github.com/sunjackson/claude-code-proxy/actions)
-
-### 项目结构
+## 项目结构
 
 ```
 claude-code-proxy/
 ├── src-tauri/              # Rust 后端
 │   ├── src/
-│   │   ├── main.rs         # 应用入口
 │   │   ├── commands/       # Tauri Commands (IPC)
 │   │   ├── services/       # 业务逻辑
 │   │   ├── models/         # 数据模型
 │   │   ├── db/             # 数据库操作
 │   │   ├── proxy/          # HTTP 代理服务器
 │   │   └── utils/          # 工具函数
-│   ├── Cargo.toml
 │   └── tauri.conf.json
 │
 ├── src-ui/                 # React 前端
 │   ├── src/
-│   │   ├── App.tsx
 │   │   ├── pages/          # 页面组件
 │   │   ├── components/     # UI 组件
 │   │   ├── hooks/          # React Hooks
 │   │   ├── api/            # API 调用
 │   │   └── locales/        # 国际化
-│   ├── package.json
-│   └── vite.config.ts
+│   └── package.json
 │
-├── config/                 # 配置文件
-│   ├── providers.json      # 服务提供商预设
-│   └── recommendations.json # 推荐服务
-│
-├── scripts/                # 工具脚本
-│   ├── start-dev.sh        # 开发启动
-│   ├── build.sh            # 构建脚本
-│   └── replace-logo.sh     # Logo 替换
-│
-└── specs/                  # 设计文档
-    └── 001-claude-code-proxy/
+├── config/                 # 服务商配置
+└── build.sh               # 构建脚本
 ```
-
-### 开发指南
-
-详细开发文档请参阅 [DEVELOP.md](./DEVELOP.md)
-
-内容包括：
-- 开发环境配置
-- 代码规范和最佳实践
-- API 文档
-- 测试指南
-- 调试技巧
-- 发布流程
 
 ---
 
-## ❓ 常见问题
-
-### 安装和启动
+## 常见问题
 
 <details>
-<summary><b>Q: macOS 提示"无法打开应用，因为它来自身份不明的开发者"</b></summary>
+<summary><b>macOS 提示"无法打开应用"</b></summary>
 
-**A:** 这是 macOS Gatekeeper 的安全限制。解决方法：
-
-1. 右键点击应用图标
-2. 选择"打开"
-3. 在弹出的对话框中点击"打开"
-
-或通过命令行：
-```bash
-sudo xattr -rd com.apple.quarantine /Applications/Claude\ Code\ Router.app
-```
+运行 `xattr -d com.apple.quarantine /Applications/ClaudeCodeProxy.app` 或右键选择"打开"。
 </details>
 
 <details>
-<summary><b>Q: Windows 提示"Windows 已保护你的电脑"</b></summary>
+<summary><b>启动代理后 Claude Code 无法连接</b></summary>
 
-**A:** 这是 Windows SmartScreen 的保护提示。解决方法：
-
-1. 点击"更多信息"
-2. 点击"仍要运行"
+检查：代理服务是否运行 → API 配置是否有效 → 防火墙是否阻止端口 25341
 </details>
 
 <details>
-<summary><b>Q: Linux 下无法启动应用</b></summary>
+<summary><b>API 密钥安全吗？</b></summary>
 
-**A:** 确保已安装所有必需的系统依赖：
-
-```bash
-sudo apt install -y libwebkit2gtk-4.0-37 \
-  libayatana-appindicator3-1 \
-  libsqlite3-0
-```
-</details>
-
-### 使用问题
-
-<details>
-<summary><b>Q: 启动代理后 Claude Code 仍然无法连接</b></summary>
-
-**A:** 请检查：
-
-1. 代理服务是否正常运行（查看仪表盘状态指示器）
-2. Claude Code 配置是否正确（查看"Claude Code 集成"页面）
-3. API 配置是否有效（运行连接测试）
-4. 防火墙是否阻止了代理端口（默认 25341）
-</details>
-
-<details>
-<summary><b>Q: 如何备份我的配置？</b></summary>
-
-**A:** 配置会自动保存在本地数据库中。手动备份方法：
-
-1. 进入"配置管理"页面
-2. 点击"导出配置"
-3. 保存 JSON 文件
-
-数据库文件位置：
-- **Windows**: `%APPDATA%/com.claude-code-proxy/`
-- **macOS**: `~/Library/Application Support/com.claude-code-proxy/`
-- **Linux**: `~/.config/claude-code-proxy/`
-</details>
-
-<details>
-<summary><b>Q: API 密钥安全吗？</b></summary>
-
-**A:** 是的。API 密钥使用系统密钥链加密存储：
-
-- **Windows**: Windows Credential Manager (DPAPI)
-- **macOS**: macOS Keychain
-- **Linux**: Secret Service API (libsecret)
-
-密钥永远不会以明文形式保存在磁盘上。
-</details>
-
-<details>
-<summary><b>Q: 自动切换不生效</b></summary>
-
-**A:** 请确认：
-
-1. 分组已启用自动切换功能
-2. 延迟阈值设置合理（建议 10000-60000ms）
-3. 分组内至少有 2 个可用配置
-4. 代理服务正在运行
-</details>
-
-### 开发问题
-
-<details>
-<summary><b>Q: 编译时出现 "failed to compile" 错误</b></summary>
-
-**A:** 常见原因：
-
-1. Rust 版本过低：`rustup update`
-2. 系统依赖缺失：参考[构建步骤](#构建步骤)
-3. 缓存问题：`cargo clean && cargo build`
-</details>
-
-<details>
-<summary><b>Q: 前端开发服务器启动失败</b></summary>
-
-**A:** 检查：
-
-1. Node.js 版本：`node --version`（需要 18+）
-2. 端口占用：`lsof -i :5173`（macOS/Linux）或 `netstat -ano | findstr :5173`（Windows）
-3. 依赖安装：重新运行 `npm install`
+密钥使用系统密钥链加密存储（Windows: DPAPI / macOS: Keychain / Linux: libsecret），永不明文保存。
 </details>
 
 ---
 
-## 📄 许可证
+## 技术栈
 
-本项目采用 [MIT 许可证](./LICENSE)。
+| 层级 | 技术 |
+|------|------|
+| 后端 | Rust, Tauri 2.0, Tokio, Hyper, SQLite |
+| 前端 | React 18, TypeScript, Tailwind CSS, Vite |
+| 安全 | 系统密钥链 (Keyring) |
 
 ---
 
-## 🤝 贡献
+## 许可证
+
+[MIT License](./LICENSE)
+
+---
+
+## 贡献
 
 欢迎贡献代码、报告问题或提出建议！
 
-1. Fork 本仓库
+1. Fork 仓库
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-详细贡献指南请参阅 [CONTRIBUTING.md](./CONTRIBUTING.md)（如有）。
+3. 提交更改 (`git commit -m 'Add AmazingFeature'`)
+4. 推送分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
 
 ---
 
-## 📞 联系方式
+## 联系方式
 
 - **问题反馈**: [GitHub Issues](https://github.com/sunjackson/claude-code-proxy/issues)
 - **讨论交流**: [GitHub Discussions](https://github.com/sunjackson/claude-code-proxy/discussions)
-- **安全问题**: jacksonsunjj@gmail.com
-
----
-
-## 🙏 致谢
-
-感谢以下开源项目：
-
-- [Tauri](https://tauri.app/) - 跨平台桌面应用框架
-- [React](https://reactjs.org/) - UI 框架
-- [Tailwind CSS](https://tailwindcss.com/) - CSS 框架
-- [Hyper](https://hyper.rs/) - Rust HTTP 库
-- [SQLite](https://www.sqlite.org/) - 数据库引擎
-
----
-
-## 📊 项目状态
-
-- **版本**: 1.0.6
-- **状态**: 生产就绪
-- **最后更新**: 2025-11-28
-- **CI/CD**: GitHub Actions 自动化构建多平台版本
+- **邮箱**: jacksonsunjj@gmail.com
 
 ---
 
 <div align="center">
 
-**⭐ 如果这个项目对您有帮助，请给我们一个 Star！**
+**版本**: 1.0.7 | **状态**: 生产就绪
 
-Made with ❤️ by the ClaudeCodeProxy Team
+Made with ❤️ by ClaudeCodeProxy Team
+
+**⭐ 如果这个项目对您有帮助，请给我们一个 Star！**
 
 </div>

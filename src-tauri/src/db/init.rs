@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::models::error::{AppError, AppResult};
+use crate::utils::constants::default_proxy_port;
 use crate::utils::paths;
 use rusqlite::Connection;
 use std::path::PathBuf;
@@ -69,15 +70,16 @@ fn insert_default_data(conn: &Connection) -> AppResult<()> {
         })?;
 
     if !settings_exists {
+        let port = default_proxy_port();
         conn.execute(
-            "INSERT INTO AppSettings (id, language, default_proxy_port) VALUES (1, 'zh-CN', 25341)",
-            [],
+            "INSERT INTO AppSettings (id, language, default_proxy_port) VALUES (1, 'zh-CN', ?1)",
+            [port as i32],
         )
         .map_err(|e| AppError::DatabaseError {
             message: format!("插入默认设置失败: {}", e),
         })?;
 
-        log::info!("已插入默认应用设置");
+        log::info!("已插入默认应用设置 (port={})", port);
     }
 
     // 2. 只在没有任何分组时才创建默认的"未分组" (id=0)
@@ -191,15 +193,16 @@ fn insert_default_data(conn: &Connection) -> AppResult<()> {
         })?;
 
     if !proxy_exists {
+        let port = default_proxy_port();
         conn.execute(
-            "INSERT INTO ProxyService (id, listen_port, status) VALUES (1, 25341, 'stopped')",
-            [],
+            "INSERT INTO ProxyService (id, listen_port, status) VALUES (1, ?1, 'stopped')",
+            [port as i32],
         )
         .map_err(|e| AppError::DatabaseError {
             message: format!("插入代理服务实例失败: {}", e),
         })?;
 
-        log::info!("已插入代理服务实例");
+        log::info!("已插入代理服务实例 (port={})", port);
     }
 
     Ok(())

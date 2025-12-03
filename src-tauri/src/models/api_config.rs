@@ -240,7 +240,8 @@ pub struct CreateApiConfigInput {
 }
 
 /// 更新 API 配置的输入参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[allow(deprecated)]
 pub struct UpdateApiConfigInput {
     pub id: i64,
     pub name: Option<String>,

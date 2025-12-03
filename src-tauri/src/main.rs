@@ -21,8 +21,10 @@ use commands::{
     get_api_config, get_api_key, get_claude_code_proxy, get_claude_code_settings,
     get_claude_version, get_config_group, get_environment_variable, get_mcp_templates,
     get_permissions_config, get_provider_categories, get_provider_preset,
-    get_provider_presets_by_category, get_proxy_request_log_count, get_proxy_request_logs,
+    get_provider_presets_by_category, get_proxy_request_log_count, get_proxy_request_log_detail,
+    get_proxy_request_log_stats, get_proxy_request_logs,
     get_proxy_status, get_recommended_provider_presets, get_switch_logs, get_test_results,
+    get_health_check_status, get_health_check_summaries, toggle_auto_health_check,
     import_mcp_servers, import_skills, install_claude_code, list_api_configs,
     list_claude_code_backups, list_config_groups, list_environment_variables, list_mcp_servers,
     list_provider_presets, list_skills, load_recommended_services, preview_claude_code_backup,
@@ -35,7 +37,7 @@ use commands::{
     test_group_configs, test_mcp_server, toggle_auto_switch, uninstall_claude_code,
     unset_environment_variable, update_api_config, update_claude_code, update_config_group, update_mcp_server,
     update_permissions_config, update_skill, verify_claude_installation, check_system_configured, EnvironmentVariableState,
-    ProxyServiceState, RecommendationServiceState,
+    HealthCheckState, ProxyServiceState, RecommendationServiceState,
 };
 use db::{initialize_database, DbPool};
 use services::balance_scheduler::BalanceScheduler;
@@ -79,6 +81,11 @@ fn main() {
 
     log::info!("环境变量服务已初始化");
 
+    // 初始化健康检查状态
+    let health_check_state = HealthCheckState::new();
+
+    log::info!("健康检查服务已初始化");
+
     // 初始化余额查询调度器
     let balance_scheduler = Arc::new(BalanceScheduler::new(db_pool.clone()));
 
@@ -93,6 +100,7 @@ fn main() {
         .manage(proxy_state.clone())
         .manage(recommendation_state)
         .manage(env_var_state)
+        .manage(health_check_state)
         .setup(move |app| {
             let handle = app.handle().clone();
             // Set app handle for proxy service (for event emission)
@@ -187,10 +195,15 @@ fn main() {
             get_all_proxy_request_logs,
             cleanup_proxy_request_logs,
             get_proxy_request_log_count,
+            get_proxy_request_log_detail,
+            get_proxy_request_log_stats,
             // 健康检查
             start_health_check,
             stop_health_check,
             run_health_check_now,
+            get_health_check_status,
+            get_health_check_summaries,
+            toggle_auto_health_check,
             // 环境设置和 Claude Code 安装
             detect_environment,
             install_claude_code,

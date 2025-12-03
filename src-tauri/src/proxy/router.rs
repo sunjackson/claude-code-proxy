@@ -34,6 +34,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use futures_util::stream::Stream;
 use std::pin::Pin;
 use std::convert::Infallible;
+use std::task::{Context, Poll};
+use tokio::sync::mpsc;
 
 /// Request timeout in seconds (FR-012)
 /// Increased to 120s for streaming responses
@@ -41,6 +43,125 @@ const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 /// High latency threshold in milliseconds
 const HIGH_LATENCY_THRESHOLD_MS: u128 = 3000;
+
+/// 流式响应完成后的数据
+#[derive(Debug, Clone)]
+pub struct StreamCompletionData {
+    /// 响应体内容（截取前 8KB）
+    pub response_body: String,
+    /// 响应体总大小
+    pub response_body_size: u64,
+    /// 流式 chunk 数量
+    pub chunk_count: u32,
+}
+
+/// 转发请求的详细信息
+#[derive(Debug, Clone, Default)]
+pub struct ForwardDetails {
+    /// 请求体 (用于日志，可能被截断)
+    pub request_body: Option<String>,
+    /// 请求体大小
+    pub request_body_size: u64,
+    /// 响应头 (JSON 格式)
+    pub response_headers: Option<String>,
+    /// 响应体 (用于日志，可能被截断)
+    pub response_body: Option<String>,
+    /// 响应体大小
+    pub response_body_size: u64,
+    /// 是否是流式响应
+    pub is_streaming: bool,
+    /// 流式 chunk 数量
+    pub stream_chunk_count: u32,
+    /// 提取的模型名称
+    pub model: Option<String>,
+    /// 目标 URL
+    pub target_url: Option<String>,
+}
+
+/// 流式响应捕获包装器
+/// 在传输数据的同时收集数据，流结束后通过通道发送完整数据
+struct StreamingBodyWrapper<B> {
+    inner: B,
+    buffer: Vec<u8>,
+    chunk_count: u32,
+    completion_tx: Option<mpsc::Sender<StreamCompletionData>>,
+}
+
+impl<B> StreamingBodyWrapper<B> {
+    fn new(inner: B, completion_tx: mpsc::Sender<StreamCompletionData>) -> Self {
+        Self {
+            inner,
+            buffer: Vec::new(),
+            chunk_count: 0,
+            completion_tx: Some(completion_tx),
+        }
+    }
+
+    fn send_completion(&mut self) {
+        if let Some(tx) = self.completion_tx.take() {
+            let body_str = String::from_utf8_lossy(&self.buffer);
+            let response_body = if body_str.len() > 8192 {
+                format!("{}...(truncated)", &body_str[..8192])
+            } else {
+                body_str.to_string()
+            };
+
+            let data = StreamCompletionData {
+                response_body,
+                response_body_size: self.buffer.len() as u64,
+                chunk_count: self.chunk_count,
+            };
+
+            // 使用 try_send 避免阻塞
+            let _ = tx.try_send(data);
+        }
+    }
+}
+
+impl<B> http_body::Body for StreamingBodyWrapper<B>
+where
+    B: http_body::Body<Data = Bytes> + Unpin,
+    B::Error: std::fmt::Debug,
+{
+    type Data = Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let inner = Pin::new(&mut self.inner);
+        match inner.poll_frame(cx) {
+            Poll::Ready(Some(Ok(frame))) => {
+                if let Some(data) = frame.data_ref() {
+                    // 收集数据到缓冲区
+                    self.buffer.extend_from_slice(data);
+                    self.chunk_count += 1;
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            Poll::Ready(Some(Err(e))) => {
+                // 发生错误时也发送已收集的数据
+                self.send_completion();
+                Poll::Ready(Some(Err(e)))
+            }
+            Poll::Ready(None) => {
+                // 流结束，发送完整数据
+                self.send_completion();
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        false
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+}
 
 /// Stream wrapper to support both HTTP and HTTPS connections
 enum MaybeHttpsStream {
@@ -144,18 +265,18 @@ impl RequestRouter {
     /// - `group_id`: Current group ID (for auto-switch)
     ///
     /// # Returns
-    /// - Forwarded response or error
+    /// - Tuple of (forwarded response, forward details, optional stream completion receiver) or error
     pub async fn forward_request(
         &self,
         req: Request<Incoming>,
         config_id: i64,
         group_id: i64,
-    ) -> AppResult<Response<BoxBody<Bytes, hyper::Error>>> {
+    ) -> AppResult<(Response<BoxBody<Bytes, hyper::Error>>, ForwardDetails, Option<mpsc::Receiver<StreamCompletionData>>)> {
         let start_time = Instant::now();
 
         // Try forwarding with current config
         match self.try_forward(req, config_id, group_id).await {
-            Ok(response) => {
+            Ok((response, details, stream_rx)) => {
                 let latency = start_time.elapsed().as_millis();
 
                 // Get group's latency threshold from database
@@ -192,7 +313,7 @@ impl RequestRouter {
                     self.auto_switch.reset_failure_counter(config_id);
                 }
 
-                Ok(response)
+                Ok((response, details, stream_rx))
             }
             Err(e) => {
                 // T045: 使用智能重试机制处理失败
@@ -249,13 +370,19 @@ impl RequestRouter {
         mut req: Request<Incoming>,
         config_id: i64,
         _group_id: i64,
-    ) -> AppResult<Response<BoxBody<Bytes, hyper::Error>>> {
+    ) -> AppResult<(Response<BoxBody<Bytes, hyper::Error>>, ForwardDetails, Option<mpsc::Receiver<StreamCompletionData>>)> {
+        // 初始化详情收集器
+        let mut details = ForwardDetails::default();
+
         // 1. Get configuration and API key
         let (config, api_key) = self.db_pool.with_connection(|conn| {
             let config = ApiConfigService::get_config_by_id(conn, config_id)?;
             let api_key = ApiConfigService::get_api_key(conn, config_id)?;
             Ok((config, api_key))
         })?;
+
+        // 记录目标 URL
+        details.target_url = Some(config.server_url.clone());
 
         log::info!(
             "Forwarding request to config: {} ({})",
@@ -448,6 +575,20 @@ impl RequestRouter {
                 })?
                 .to_bytes();
 
+            // 记录请求体大小
+            details.request_body_size = body_bytes.len() as u64;
+
+            // 记录完整请求体
+            let body_str = String::from_utf8_lossy(&body_bytes);
+            details.request_body = Some(body_str.to_string());
+
+            // 尝试从请求体提取模型名称
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                if let Some(model) = json.get("model").and_then(|m| m.as_str()) {
+                    details.model = Some(model.to_string());
+                }
+            }
+
             // Check provider type and perform conversion if needed
             let processed_bytes = match config.provider_type {
                 ProviderType::Gemini => {
@@ -581,6 +722,20 @@ impl RequestRouter {
         let status = response.status();
         let headers = response.headers().clone();
 
+        // 记录响应头（JSON 格式）
+        let headers_map: std::collections::HashMap<String, String> = headers
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        details.response_headers = serde_json::to_string(&headers_map).ok();
+
+        // 判断是否是流式响应
+        details.is_streaming = headers
+            .get(hyper::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
+            .unwrap_or(false);
+
         // 10. Check for error status codes and inspect response body for critical errors
         if status.is_client_error() || status.is_server_error() {
             log::warn!("Received error status: {}", status);
@@ -596,6 +751,14 @@ impl RequestRouter {
 
             let body_text = String::from_utf8_lossy(&body_bytes);
             log::error!("Error response body: {}", body_text);
+
+            // 记录错误响应体
+            details.response_body_size = body_bytes.len() as u64;
+            details.response_body = Some(if body_text.len() > 8192 {
+                format!("{}...(truncated)", &body_text[..8192])
+            } else {
+                body_text.to_string()
+            });
 
             // Check for critical errors that should trigger auto-switch
             let lower_text = body_text.to_lowercase();
@@ -650,7 +813,7 @@ impl RequestRouter {
                 let mut resp = Response::new(body);
                 *resp.status_mut() = status;
                 *resp.headers_mut() = headers;
-                return Ok(resp);
+                return Ok((resp, details, None));
             }
 
             // 服务器错误 - 触发切换
@@ -705,7 +868,8 @@ impl RequestRouter {
                     );
 
                     log::info!("Streaming Gemini response conversion started");
-                    Ok(resp)
+                    // Gemini 流式响应暂时不捕获响应体（需要单独处理转换逻辑）
+                    Ok((resp, details, None))
                 } else {
                     // Non-streaming response: collect, convert, and return
                     let body_bytes = response.into_body()
@@ -735,6 +899,15 @@ impl RequestRouter {
 
                     log::info!("Successfully converted Gemini response to Claude format");
 
+                    // 记录非流式响应体
+                    details.response_body_size = claude_bytes.len() as u64;
+                    let response_str = String::from_utf8_lossy(&claude_bytes);
+                    details.response_body = Some(if response_str.len() > 8192 {
+                        format!("{}...(truncated)", &response_str[..8192])
+                    } else {
+                        response_str.to_string()
+                    });
+
                     // Save length before moving claude_bytes
                     let content_length = claude_bytes.len();
 
@@ -753,24 +926,63 @@ impl RequestRouter {
                         content_length.to_string().parse().unwrap()
                     );
 
-                    Ok(resp)
+                    Ok((resp, details, None))
                 }
             },
             ProviderType::Claude => {
-                // Claude API response - Stream response body directly (DO NOT collect)
-                // This is critical for SSE (Server-Sent Events) responses from Claude API
-                // which stream data over a long period of time
+                // Claude API response - 使用包装器捕获流式响应数据
                 let body = response.into_body();
-                let boxed_body = body.boxed();
 
-                // 12. Construct streaming response
+                // 为流式响应创建通道
+                let stream_rx = if details.is_streaming {
+                    let (tx, rx) = mpsc::channel::<StreamCompletionData>(1);
+
+                    // 使用包装器包装响应体
+                    let wrapped_body = StreamingBodyWrapper::new(body, tx);
+                    let boxed_body = wrapped_body.boxed();
+
+                    // 12. Construct streaming response
+                    let mut resp = Response::new(boxed_body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+
+                    log::info!("Streaming response with capture wrapper (status: {})", status);
+
+                    return Ok((resp, details, Some(rx)));
+                } else {
+                    None
+                };
+
+                // 非流式响应 - 读取完整响应体后返回
+                let body_bytes = body
+                    .collect()
+                    .await
+                    .map_err(|e| AppError::ServiceError {
+                        message: format!("Failed to read response body: {}", e),
+                    })?
+                    .to_bytes();
+
+                // 记录响应体
+                details.response_body_size = body_bytes.len() as u64;
+                let response_str = String::from_utf8_lossy(&body_bytes);
+                details.response_body = Some(if response_str.len() > 8192 {
+                    format!("{}...(truncated)", &response_str[..8192])
+                } else {
+                    response_str.to_string()
+                });
+
+                use http_body_util::Full;
+                let boxed_body = Full::new(body_bytes)
+                    .map_err(|e| match e {})
+                    .boxed();
+
                 let mut resp = Response::new(boxed_body);
                 *resp.status_mut() = status;
                 *resp.headers_mut() = headers;
 
-                log::info!("Streaming successful response back to client (status: {})", status);
+                log::info!("Non-streaming Claude response (status: {}, size: {} bytes)", status, details.response_body_size);
 
-                Ok(resp)
+                Ok((resp, details, stream_rx))
             }
         }
     }

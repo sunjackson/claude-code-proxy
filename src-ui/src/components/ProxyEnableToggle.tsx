@@ -9,12 +9,13 @@ import {
   getClaudeCodeProxy,
 } from '../api/claude-code';
 import * as proxyApi from '../api/proxy';
+import { DEFAULT_PROXY_HOST, DEFAULT_PROXY_PORT } from '../config/ports';
 import type { ProxyConfig, ProxyService } from '../types/tauri';
 
 interface ProxyEnableToggleProps {
   /** 代理服务器地址 (默认: 127.0.0.1) */
   defaultHost?: string;
-  /** 代理服务器端口 (默认: 25341) */
+  /** 代理服务器端口 (开发环境: 15341, 生产环境: 25341) */
   defaultPort?: number;
   /** 启用成功回调 */
   onEnabled?: () => void;
@@ -25,8 +26,8 @@ interface ProxyEnableToggleProps {
 }
 
 export const ProxyEnableToggle: React.FC<ProxyEnableToggleProps> = ({
-  defaultHost = '127.0.0.1',
-  defaultPort = 25341,
+  defaultHost = DEFAULT_PROXY_HOST,
+  defaultPort = DEFAULT_PROXY_PORT,
   onEnabled,
   onDisabled,
   onShowConfirm,

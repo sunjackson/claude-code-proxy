@@ -13,6 +13,7 @@ use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::models::test_result::{TestResult, TestStatus};
 use crate::services::api_config::ApiConfigService;
+use crate::services::claude_test_request::{add_claude_code_headers, build_test_request_body, TEST_REQUEST_TIMEOUT_SECS};
 use chrono::Utc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,8 +21,8 @@ use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 
-/// API 测试超时时间(秒) - 增加到30秒以支持较慢的API
-const TEST_TIMEOUT_SECS: u64 = 30;
+/// API 测试超时时间(秒)
+const TEST_TIMEOUT_SECS: u64 = TEST_REQUEST_TIMEOUT_SECS;
 
 /// API 测试响应结构
 struct ApiTestResponse {
@@ -50,13 +51,145 @@ fn classify_error(error: &reqwest::Error) -> String {
     }
 }
 
+/// 解析 API 错误响应，提取错误信息
+fn parse_api_error(response_text: &str, status_code: u16) -> String {
+    // 尝试解析 JSON 错误响应
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(response_text) {
+        if let Some(error) = json.get("error") {
+            if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                // 检查是否有嵌套的错误代码
+                if let Some(code) = error.get("code").and_then(|c| c.as_i64()) {
+                    return format!("HTTP {} (内部错误 {}): {}", status_code, code, message);
+                }
+                return format!("HTTP {}: {}", status_code, message);
+            }
+        }
+    }
+    // 如果无法解析，返回原始响应
+    if response_text.len() > 200 {
+        format!("HTTP {}: {}...", status_code, &response_text[..200])
+    } else if response_text.is_empty() {
+        format!("HTTP {} 错误", status_code)
+    } else {
+        format!("HTTP {}: {}", status_code, response_text)
+    }
+}
+
+/// 检查错误是否不应该重试
+/// 认证错误、配额错误等不会因为换模型而解决，不应重试
+fn is_non_retryable_error(error: &str) -> bool {
+    let error_lower = error.to_lowercase();
+
+    // 认证相关错误
+    if error_lower.contains("authentication")
+        || error_lower.contains("auth")
+        || error_lower.contains("api key")
+        || error_lower.contains("apikey")
+        || error_lower.contains("api_key")
+        || error_lower.contains("认证")
+        || error_lower.contains("密钥")
+        || error_lower.contains("401")
+        || error_lower.contains("403")
+        || error_lower.contains("invalid_api_key")
+        || error_lower.contains("unauthorized")
+    {
+        return true;
+    }
+
+    // 配额/账户相关错误
+    if error_lower.contains("quota")
+        || error_lower.contains("余额")
+        || error_lower.contains("balance")
+        || error_lower.contains("credit")
+        || error_lower.contains("billing")
+        || error_lower.contains("payment")
+        || error_lower.contains("账户")
+    {
+        return true;
+    }
+
+    // 账户被禁用
+    if error_lower.contains("disabled")
+        || error_lower.contains("suspended")
+        || error_lower.contains("banned")
+        || error_lower.contains("blocked")
+        || error_lower.contains("禁用")
+        || error_lower.contains("停用")
+    {
+        return true;
+    }
+
+    false
+}
+
+/// 检查响应体是否包含错误信息（即使 HTTP 状态码是 200）
+/// 一些代理服务商会返回 HTTP 200 但在响应体中包含错误
+fn check_response_body_error(response_text: &str) -> Option<String> {
+    // 尝试解析 JSON 错误响应
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(response_text) {
+        // 检查 error 字段
+        if let Some(error) = json.get("error") {
+            // 提取错误信息
+            let mut error_msg = String::new();
+
+            // 提取错误代码
+            if let Some(code) = error.get("code") {
+                if let Some(code_num) = code.as_i64() {
+                    error_msg.push_str(&format!("错误代码 {}", code_num));
+                } else if let Some(code_str) = code.as_str() {
+                    error_msg.push_str(&format!("错误代码 {}", code_str));
+                }
+            }
+
+            // 提取错误类型
+            if let Some(error_type) = error.get("type").and_then(|t| t.as_str()) {
+                if !error_msg.is_empty() {
+                    error_msg.push_str(" - ");
+                }
+                error_msg.push_str(error_type);
+            }
+
+            // 提取错误消息
+            if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                if !error_msg.is_empty() {
+                    error_msg.push_str(": ");
+                }
+                error_msg.push_str(message);
+            }
+
+            if !error_msg.is_empty() {
+                return Some(error_msg);
+            }
+
+            // 如果有 error 字段但无法提取详细信息，返回通用错误
+            return Some("服务商返回错误响应".to_string());
+        }
+
+        // 检查顶级 type 字段是否为 "error"
+        if let Some(type_field) = json.get("type").and_then(|t| t.as_str()) {
+            if type_field == "error" {
+                return Some("服务商返回错误类型响应".to_string());
+            }
+        }
+    }
+
+    // 检查响应是否包含明显的错误关键词（非 JSON 情况）
+    let response_lower = response_text.to_lowercase();
+    if response_lower.contains("\"error\"") && response_lower.contains("\"message\"") {
+        return Some("响应包含错误信息".to_string());
+    }
+
+    None
+}
+
 /// 提取 URL 的基础部分（scheme://host:port），移除路径
+#[allow(dead_code)]
 fn extract_base_url(url: &str) -> String {
     // 查找 :// 分隔符
     if let Some(scheme_pos) = url.find("://") {
         let scheme_end = scheme_pos + 3;
         let after_scheme = &url[scheme_end..];
-        
+
         // 在主机部分查找第一个 / (路径开始)
         if let Some(path_pos) = after_scheme.find('/') {
             // 截取 scheme + host:port
@@ -121,9 +254,25 @@ impl ApiTestService {
             ApiConfigService::get_config_by_id(conn, config_id)
         })?;
 
+        log::info!("📋 配置详情 - 名称: {}, 服务器: {}", config.name, config.server_url);
+
         // 从配置中获取 API 密钥和用户指定的模型
         let api_key = &config.api_key;
         let user_model = config.default_model.as_deref();
+
+        // 检查 API Key 是否为空
+        if api_key.is_empty() {
+            log::error!("❌ 配置 {} 的 API Key 为空!", config.name);
+            return Ok(self.create_failed_result(
+                config_id,
+                0,
+                "API Key 为空，请检查配置",
+                None,
+                1,
+            ));
+        }
+
+        log::debug!("🔑 API Key 长度: {} 字符", api_key.len());
 
         // 第一次尝试：使用 haiku（最快最便宜）
         let start_time = Instant::now();
@@ -150,10 +299,11 @@ impl ApiTestService {
                     1,
                 )
             }
-            // 第一次失败，且用户指定了不同的模型，进行重试
+            // 第一次失败，且用户指定了不同的模型，且错误不是认证/配额等不可重试错误，进行重试
             Ok(Err(e))
                 if user_model.is_some()
-                    && user_model != Some("claude-haiku-4-5-20251001") =>
+                    && user_model != Some("claude-haiku-4-5-20251001")
+                    && !is_non_retryable_error(&e) =>
             {
                 log::info!(
                     "Config {} haiku test failed: {}, trying user model: {:?}",
@@ -218,15 +368,27 @@ impl ApiTestService {
                     }
                 }
             }
-            // 第一次失败，不进行重试
+            // 第一次失败，不进行重试（用户未指定模型、模型相同、或错误不可重试）
             Ok(Err(e)) => {
                 let latency_ms = start_time.elapsed().as_millis() as i64;
-                log::warn!(
-                    "Config {} test failed: {}, latency: {}ms",
-                    config_id,
-                    e,
-                    latency_ms
-                );
+
+                // 记录跳过重试的原因
+                if is_non_retryable_error(&e) {
+                    log::warn!(
+                        "Config {} test failed (non-retryable error): {}, latency: {}ms",
+                        config_id,
+                        e,
+                        latency_ms
+                    );
+                } else {
+                    log::warn!(
+                        "Config {} test failed: {}, latency: {}ms",
+                        config_id,
+                        e,
+                        latency_ms
+                    );
+                }
+
                 self.create_failed_result(
                     config_id,
                     latency_ms,
@@ -314,73 +476,180 @@ impl ApiTestService {
         Ok(results)
     }
 
-    /// 执行服务器连接测试
+    /// 执行真实的 Claude Code API 测试
     ///
-    /// 简化版测速：仅测试服务器主域名是否可访问（HTTP HEAD 请求）
-    /// 参考常规网站测速工具的实现
+    /// 使用与真实 Claude Code 完全相同的请求格式，包含：
+    /// - system prompt（包含 Claude Code 标识）
+    /// - tools 定义
+    /// - 正确格式的 metadata.user_id
+    /// - 所有必要的 Claude Code 请求头
     async fn perform_api_test(
         &self,
         server_url: &str,
-        _api_key: &str,
+        api_key: &str,
         _model: Option<&str>,
     ) -> Result<ApiTestResponse, String> {
-        log::debug!("========================================");
-        log::debug!("服务器连接测试开始");
-        log::debug!("服务器: {}", server_url);
-        log::debug!("========================================");
+        log::info!("╔══════════════════════════════════════════════════════════════╗");
+        log::info!("║             📋 配置连通性测试开始                              ║");
+        log::info!("╚══════════════════════════════════════════════════════════════╝");
+        log::info!("🔗 服务器地址: {}", server_url);
+        log::info!("🔑 API Key: {}...{}", &api_key[..8.min(api_key.len())], &api_key[api_key.len().saturating_sub(4)..]);
 
-        // 提取主域名（移除路径部分）
-        let base_url = server_url.trim_end_matches('/');
-        
-        // 安全地解析 URL，只保留 scheme://host:port
-        let test_url = extract_base_url(base_url);
+        // 构建 API 端点 URL
+        let url = format!("{}/v1/messages", server_url.trim_end_matches('/'));
+        log::info!("📤 测试 API 端点: {}", url);
 
-        log::info!("📤 测试服务器连接: {}", test_url);
-
-        // 创建 HTTP 客户端，设置较短的超时时间
+        // 创建 HTTP 客户端
+        log::info!("⏱️  超时配置: 请求超时 {}s, 连接超时 10s", TEST_TIMEOUT_SECS);
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
-            .connect_timeout(std::time::Duration::from_secs(3))
+            .timeout(std::time::Duration::from_secs(TEST_TIMEOUT_SECS))
+            .connect_timeout(std::time::Duration::from_secs(10))
             .build()
-            .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
+            .map_err(|e| {
+                log::error!("❌ 创建 HTTP 客户端失败: {}", e);
+                format!("创建HTTP客户端失败: {}", e)
+            })?;
 
-        // 发送 HEAD 请求测试主域名连接性
-        let response = client
-            .head(&test_url)
-            .header("User-Agent", "ClaudeCodeProxy/1.0")
+        // 构建与真实 Claude Code 相同的请求体
+        let request_body = build_test_request_body();
+        log::info!("📦 请求体已构建 (Claude Code 标准格式)");
+        log::debug!("请求体内容: {}", serde_json::to_string_pretty(&request_body).unwrap_or_default());
+
+        // 发送请求（添加所有 Claude Code 特有的请求头）
+        log::info!("🚀 正在发送请求...");
+        let request_start = std::time::Instant::now();
+        let request_builder = client.post(&url);
+        let request_builder = add_claude_code_headers(request_builder, api_key);
+
+        let response = request_builder
+            .json(&request_body)
             .send()
             .await
             .map_err(|e| {
+                let elapsed = request_start.elapsed();
                 let err_msg = classify_error(&e);
-                log::error!("❌ 连接失败: {}", err_msg);
+                log::error!("❌ 请求失败 (耗时 {:.2}s): {}", elapsed.as_secs_f64(), err_msg);
                 err_msg
             })?;
 
+        let elapsed = request_start.elapsed();
         let status = response.status();
         let status_code = status.as_u16();
 
-        log::info!("📥 响应状态: HTTP {}", status_code);
+        log::info!("📥 收到响应 (耗时 {:.2}s)", elapsed.as_secs_f64());
+        log::info!("📥 HTTP 状态码: {}", status_code);
 
-        // 判断服务器是否可访问
-        // 200 OK: 服务正常
-        // 401 Unauthorized: 服务可访问，但需要认证
-        // 405 Method Not Allowed: 服务可访问，但不支持 HEAD 方法
-        // 这些都表示服务器正常对外提供服务
-        if status.is_success() || status_code == 401 || status_code == 405 {
-            let response_text = format!("服务器可访问 (HTTP {})", status_code);
-            log::info!("✅ {}", response_text);
+        // 读取响应体
+        let response_text = response.text().await.unwrap_or_default();
+        log::info!("📥 响应体大小: {} 字节", response_text.len());
+        log::debug!("响应体内容: {}", if response_text.len() > 500 { format!("{}...(截断)", &response_text[..500]) } else { response_text.clone() });
+
+        // 首先检查响应体是否包含错误信息（即使 HTTP 状态码是 200）
+        // 一些代理服务商会返回 HTTP 200/500 但在响应体中包含实际的错误
+        if let Some(body_error) = check_response_body_error(&response_text) {
+            log::error!("❌ 响应体包含错误: {}", body_error);
+            log::info!("╚══════════════════════════════════════════════════════════════╝");
+            return Err(format!("服务商错误: {}", body_error));
+        }
+
+        if status.is_success() {
+            log::info!("📊 解析响应内容...");
+            // 解析流式响应，提取实际内容
+            let mut content = String::new();
+            let mut has_valid_content = false;
+            let mut chunk_count = 0;
+
+            for line in response_text.lines() {
+                if line.starts_with("data: ") {
+                    chunk_count += 1;
+                    let data = &line[6..];
+                    // 跳过 [DONE] 标记
+                    if data.trim() == "[DONE]" {
+                        continue;
+                    }
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                        // 检查流式响应中是否包含错误
+                        if let Some(error) = json.get("error") {
+                            let error_msg = if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
+                                msg.to_string()
+                            } else {
+                                "流式响应包含错误".to_string()
+                            };
+                            log::error!("❌ 流式响应错误: {}", error_msg);
+                            log::info!("╚══════════════════════════════════════════════════════════════╝");
+                            return Err(format!("服务商错误: {}", error_msg));
+                        }
+
+                        // 提取 content_block_delta 中的文本
+                        if let Some(delta) = json.get("delta") {
+                            if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
+                                content.push_str(text);
+                                has_valid_content = true;
+                            }
+                        }
+
+                        // 检查是否有有效的消息类型
+                        if json.get("type").is_some() {
+                            has_valid_content = true;
+                        }
+                    }
+                }
+            }
+
+            if chunk_count > 0 {
+                log::info!("📊 流式响应: 共 {} 个数据块", chunk_count);
+            }
+
+            // 如果响应没有有效内容且不是流式响应格式，再次检查是否为错误
+            if !has_valid_content && !response_text.contains("data: ") {
+                log::info!("📊 非流式响应格式，检查 JSON 内容...");
+                // 可能是非流式 JSON 响应
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                    if json.get("error").is_some() {
+                        let error_msg = check_response_body_error(&response_text)
+                            .unwrap_or_else(|| "未知错误".to_string());
+                        log::error!("❌ 非流式响应包含错误: {}", error_msg);
+                        log::info!("╚══════════════════════════════════════════════════════════════╝");
+                        return Err(format!("服务商错误: {}", error_msg));
+                    }
+                }
+            }
+
+            let result_text = if content.is_empty() {
+                "API 响应成功".to_string()
+            } else {
+                format!("API 响应: {}", content.chars().take(100).collect::<String>())
+            };
+
+            log::info!("✅ 测试成功: {}", result_text);
+            log::info!("╚══════════════════════════════════════════════════════════════╝");
             Ok(ApiTestResponse {
-                response_text,
-                model: "connectivity-test".to_string(),
+                response_text: result_text,
+                model: "claude-sonnet-4-5-20250929".to_string(),
             })
+        } else if status_code == 401 || status_code == 403 {
+            // 认证问题
+            let error_msg = parse_api_error(&response_text, status_code);
+            log::error!("❌ 认证失败: {}", error_msg);
+            log::info!("╚══════════════════════════════════════════════════════════════╝");
+            Err(error_msg)
+        } else if status_code == 429 {
+            // 限流
+            log::warn!("⚠️ API 限流: HTTP {}", status_code);
+            log::info!("╚══════════════════════════════════════════════════════════════╝");
+            Err(format!("API 限流 (HTTP {})", status_code))
         } else if status_code >= 500 && status_code < 600 {
-            // 5xx 服务器错误
-            log::error!("❌ 服务器错误: HTTP {}", status_code);
-            Err(format!("服务器错误 (HTTP {})", status_code))
+            // 服务器错误
+            let error_msg = parse_api_error(&response_text, status_code);
+            log::error!("❌ 服务器错误: {}", error_msg);
+            log::info!("╚══════════════════════════════════════════════════════════════╝");
+            Err(error_msg)
         } else {
-            // 其他错误状态
-            log::error!("❌ 服务不可用: HTTP {}", status_code);
-            Err(format!("服务不可用 (HTTP {})", status_code))
+            // 其他错误
+            let error_msg = parse_api_error(&response_text, status_code);
+            log::error!("❌ API 错误: {}", error_msg);
+            log::info!("╚══════════════════════════════════════════════════════════════╝");
+            Err(error_msg)
         }
     }
 
@@ -463,16 +732,17 @@ impl ApiTestService {
 
             // 使用 is_available() 判断服务是否可用
             // 注意：is_available() 与 is_success() 不同
-            // - is_available()：服务器可连接（即使401、403、429等错误）
+            // - is_available()：服务器可连接且能正常处理请求
             // - is_success()：API调用完全成功（200-299）
             let is_available = if result.is_available() { 1 } else { 0 };
 
-            log::debug!(
-                "更新配置 {} 测试结果: is_available={}, is_success={}, status={:?}",
+            // 详细日志：显示判断结果和依据
+            log::info!(
+                "📊 配置 {} 测试结果更新: status={:?}, is_available={}, error_message={:?}",
                 config_id,
+                result.status,
                 is_available,
-                result.is_success() as i32,
-                result.status
+                result.error_message.as_ref().map(|s| if s.len() > 100 { format!("{}...", &s[..100]) } else { s.clone() })
             );
 
             conn.execute(

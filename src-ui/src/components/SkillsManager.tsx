@@ -4,8 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import type { SkillInfo } from '../types/tauri';
 import * as skillsApi from '../api/skills';
+import { ConfirmDialog } from './ui/Dialog';
 
 interface SkillEditorProps {
   isOpen: boolean;
@@ -168,6 +171,10 @@ export const SkillsManager: React.FC = () => {
   const [previewSkill, setPreviewSkill] = useState<SkillInfo | null>(null);
   const [previewContent, setPreviewContent] = useState('');
 
+  // 删除确认弹窗状态
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [skillToDelete, setSkillToDelete] = useState<string | null>(null);
+
   const loadSkills = async () => {
     try {
       setLoading(true);
@@ -240,18 +247,24 @@ export const SkillsManager: React.FC = () => {
   };
 
   const handleRemoveSkill = async (name: string) => {
-    if (!window.confirm(`确定要删除技能 "${name}" 吗?`)) {
-      return;
-    }
+    setSkillToDelete(name);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteSkill = async () => {
+    if (!skillToDelete) return;
 
     try {
       setError(null);
-      await skillsApi.removeSkill(name);
+      await skillsApi.removeSkill(skillToDelete);
       showSuccess('技能已删除');
       await loadSkills();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除技能失败');
       console.error('Failed to remove skill:', err);
+    } finally {
+      setDeleteConfirmOpen(false);
+      setSkillToDelete(null);
     }
   };
 
@@ -268,16 +281,26 @@ export const SkillsManager: React.FC = () => {
 
   const handleExport = async () => {
     try {
+      // 使用 Tauri 对话框让用户选择保存位置
+      const filePath = await save({
+        title: '导出技能配置',
+        defaultPath: 'skills-export.json',
+        filters: [
+          { name: 'JSON', extensions: ['json'] }
+        ]
+      });
+
+      if (!filePath) {
+        // 用户取消了保存
+        return;
+      }
+
       const configs = await skillsApi.exportSkills();
       const json = JSON.stringify(configs, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'skills-export.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      showSuccess('技能配置已导出');
+
+      // 写入文件
+      await writeTextFile(filePath, json);
+      showSuccess(`技能配置已导出到: ${filePath}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '导出配置失败');
       console.error('Failed to export skills:', err);
@@ -441,6 +464,27 @@ export const SkillsManager: React.FC = () => {
         onClose={() => setIsPreviewOpen(false)}
         skill={previewSkill}
         content={previewContent}
+      />
+
+      {/* 删除确认弹窗 */}
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        type="danger"
+        title="删除技能"
+        subtitle="此操作不可撤销"
+        content={
+          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/50">
+            <p className="text-gray-300">
+              确定要删除技能 <span className="text-amber-400 font-medium">"{skillToDelete}"</span> 吗？
+            </p>
+          </div>
+        }
+        confirmText="确认删除"
+        onConfirm={confirmDeleteSkill}
+        onCancel={() => {
+          setDeleteConfirmOpen(false);
+          setSkillToDelete(null);
+        }}
       />
     </div>
   );

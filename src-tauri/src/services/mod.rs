@@ -1,5 +1,6 @@
 pub mod api_config;
 pub mod api_test;
+pub mod app_updater;
 pub mod auto_switch;
 pub mod backup;
 pub mod balance_scheduler;
@@ -26,6 +27,7 @@ pub mod skills_config;
 
 // 重新导出常用类型
 pub use api_config::ApiConfigService;
+pub use app_updater::{AppUpdater, AppVersionInfo};
 pub use backup::BackupService;
 pub use balance_service::BalanceService;
 pub use claude_config::{ClaudeConfigService, ProxyConfig};

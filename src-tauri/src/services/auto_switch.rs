@@ -160,7 +160,14 @@ impl AutoSwitchService {
                     log_id
                 );
 
-                // 推送切换事件
+                // 🔧 修复：先更新数据库，确保回调读取到最新配置
+                if let Err(e) = self.update_proxy_service_config(next_config_id).await {
+                    log::error!("Failed to update ProxyService config before event: {}", e);
+                } else {
+                    log::info!("✅ ProxyService 已更新为新配置 {}", next_config_id);
+                }
+
+                // 推送切换事件（现在回调可以读取到最新的数据库状态）
                 self.emit_switch_triggered(log_id).await;
 
                 Ok(Some(next_config_id))
@@ -402,7 +409,15 @@ impl AutoSwitchService {
                     log_id
                 );
 
-                // 推送切换事件
+                // 🔧 修复：先更新数据库，确保回调读取到最新配置
+                // 这样在 emit_switch_triggered 触发回调时，数据库已经是最新的
+                if let Err(e) = self.update_proxy_service_config(next_config_id).await {
+                    log::error!("Failed to update ProxyService config before event: {}", e);
+                } else {
+                    log::info!("✅ ProxyService 已更新为新配置 {}", next_config_id);
+                }
+
+                // 推送切换事件（现在回调可以读取到最新的数据库状态）
                 self.emit_switch_triggered(log_id).await;
 
                 Ok(Some(next_config_id))
@@ -658,6 +673,26 @@ impl AutoSwitchService {
                 }
             }
         }
+    }
+
+    /// 更新 ProxyService 的当前配置 ID
+    ///
+    /// # Arguments
+    /// - `new_config_id`: 新的配置 ID
+    async fn update_proxy_service_config(&self, new_config_id: i64) -> AppResult<()> {
+        self.db_pool.with_connection(|conn| {
+            use rusqlite::params;
+
+            conn.execute(
+                "UPDATE ProxyService SET current_config_id = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
+                params![new_config_id],
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("更新 ProxyService 配置失败: {}", e),
+            })?;
+
+            Ok(())
+        })
     }
 
     /// 从日志中获取目标配置 ID

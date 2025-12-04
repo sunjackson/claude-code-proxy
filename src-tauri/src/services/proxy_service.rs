@@ -59,6 +59,7 @@ impl ProxyService {
         // 注册切换完成回调：自动刷新状态
         let db_pool = self.db_pool.clone();
         let app_handle_for_callback = self.app_handle.clone();
+        let server_for_callback = self.server.clone();  // 添加：克隆 server 用于更新内存配置
         auto_switch.set_switch_callback(move |new_config_id| {
             log::info!(
                 "\n┌─────────────────────────────────────────────────────────┐\n\
@@ -72,8 +73,31 @@ impl ProxyService {
             // 异步刷新状态（使用 tokio::spawn 避免阻塞）
             let db_pool_clone = db_pool.clone();
             let app_handle_clone = app_handle_for_callback.clone();
+            let server_clone = server_for_callback.clone();  // 添加：克隆到异步任务
 
             tokio::spawn(async move {
+                // 🔧 关键修复：更新 ProxyServer 的内存配置
+                // 从数据库读取当前分组ID
+                let group_id = db_pool_clone.with_connection(|conn| {
+                    use rusqlite::params;
+                    conn.query_row(
+                        "SELECT current_group_id FROM ProxyService WHERE id = 1",
+                        params![],
+                        |row| row.get::<_, Option<i64>>(0),
+                    )
+                    .map_err(|e| crate::models::error::AppError::DatabaseError {
+                        message: format!("查询 ProxyService 分组ID失败: {}", e),
+                    })
+                }).ok().flatten();
+
+                // 更新 ProxyServer 内存配置
+                server_clone.update_active_config_id(new_config_id, group_id).await;
+                log::info!(
+                    "✅ ProxyServer 内存配置已更新: config_id={}, group_id={:?}",
+                    new_config_id,
+                    group_id
+                );
+
                 // 获取最新状态
                 // 注意：这里不能直接调用 ProxyService 的方法，因为会造成循环引用
                 // 我们手动查询数据库并发送事件

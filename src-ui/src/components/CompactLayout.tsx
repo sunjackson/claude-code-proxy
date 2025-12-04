@@ -3,8 +3,9 @@
  * 无侧边栏，顶部导航 + 状态栏
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { NavLink, Link } from 'react-router-dom';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useLanguage } from '../hooks/useLanguage';
 import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import * as proxyApi from '../api/proxy';
@@ -18,27 +19,49 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
   const { currentLanguage, toggleLanguage } = useLanguage();
   const [proxyStatus, setProxyStatus] = useState<ProxyService | null>(null);
 
-  // 监听自动切换事件，实时更新状态
-  useAutoSwitch(() => {
-    loadStatus();
-  });
-
-  // 加载代理状态
-  useEffect(() => {
-    loadStatus();
-    // 减少轮询间隔到3秒，确保状态及时更新
-    const interval = setInterval(loadStatus, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     try {
       const status = await proxyApi.getProxyStatus();
       setProxyStatus(status);
     } catch (err) {
       console.error('Failed to load status:', err);
     }
-  };
+  }, []);
+
+  // 监听自动切换事件，实时更新状态
+  useAutoSwitch(() => {
+    // 延迟200ms后刷新，确保后端状态已更新
+    setTimeout(loadStatus, 200);
+  });
+
+  // 监听 proxy-status-changed 事件实时更新
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+
+    const setupListener = async () => {
+      try {
+        unlisten = await listen<ProxyService>('proxy-status-changed', (event) => {
+          console.log('[CompactLayout] Received proxy-status-changed:', event.payload);
+          setProxyStatus(event.payload);
+        });
+      } catch (err) {
+        console.error('Failed to setup proxy-status-changed listener:', err);
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
+
+  // 初始加载
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

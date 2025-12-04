@@ -107,6 +107,16 @@ impl ProxyServer {
         *cfg = config;
     }
 
+    /// Update active config ID only (for auto-switch)
+    pub async fn update_active_config_id(&self, config_id: i64, group_id: Option<i64>) {
+        let mut cfg = self.config.write().await;
+        cfg.active_config_id = Some(config_id);
+        if let Some(gid) = group_id {
+            cfg.active_group_id = Some(gid);
+        }
+        log::debug!("ProxyServer config updated: active_config_id={}, active_group_id={:?}", config_id, cfg.active_group_id);
+    }
+
     /// Start proxy server
     pub async fn start(&self) -> AppResult<()> {
         let mut status = self.status.write().await;

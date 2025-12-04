@@ -100,7 +100,7 @@ impl RecommendationService {
     /// 加载推荐服务列表
     ///
     /// # Arguments
-    /// - `force_refresh`: 是否强制刷新，忽略缓存
+    /// - `force_refresh`: 是否强制刷新,忽略缓存
     ///
     /// # Returns
     /// - 推荐服务列表
@@ -116,7 +116,7 @@ impl RecommendationService {
             }
         }
 
-        // 尝试从远程加载
+        // 优先尝试从远程加载
         let result = if let Some(url) = &self.remote_url {
             log::info!("尝试从远程加载推荐服务: {}", url);
             match self.load_remote(url).await {
@@ -126,13 +126,13 @@ impl RecommendationService {
                     Ok(services)
                 }
                 Err(e) => {
-                    log::error!("从远程加载失败: {}, 回退到本地", e);
+                    log::warn!("从远程加载失败: {}, 回退到本地配置", e);
                     // 回退到本地
                     self.load_local()
                 }
             }
         } else {
-            log::info!("未配置远程 URL，直接从本地加载");
+            log::info!("未配置远程 URL,直接从本地加载");
             self.load_local()
         };
 
@@ -152,14 +152,33 @@ impl RecommendationService {
             });
         }
 
-        let list: RecommendedServiceList = response.json().await.map_err(|e| {
+        let content = response.text().await.map_err(|e| AppError::ServiceError {
+            message: format!("读取响应内容失败: {}", e),
+        })?;
+
+        let loaded_at = chrono::Utc::now().to_rfc3339();
+
+        // 优先尝试解析为 ProviderConfig (新格式,与 config/providers.json 一致)
+        if let Ok(provider_config) = serde_json::from_str::<ProviderConfig>(&content) {
+            let services: Vec<RecommendedService> = provider_config
+                .providers
+                .iter()
+                .filter(|provider| provider.show_in_recommendations)
+                .map(|provider| provider_to_recommended(provider, loaded_at.clone(), ServiceSource::Remote))
+                .collect();
+
+            log::info!("成功从远程加载 {} 个推荐服务 (ProviderConfig 格式)", services.len());
+            return Ok(services);
+        }
+
+        // 回退到旧格式 (RecommendedServiceList)
+        let list: RecommendedServiceList = serde_json::from_str(&content).map_err(|e| {
             AppError::ServiceError {
                 message: format!("解析 JSON 失败: {}", e),
             }
         })?;
 
-        let loaded_at = chrono::Utc::now().to_rfc3339();
-        let services = list
+        let services: Vec<RecommendedService> = list
             .services
             .into_iter()
             .enumerate()
@@ -176,6 +195,7 @@ impl RecommendationService {
             })
             .collect();
 
+        log::info!("成功从远程加载 {} 个推荐服务 (旧格式)", services.len());
         Ok(services)
     }
 

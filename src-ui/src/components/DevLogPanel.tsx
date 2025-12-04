@@ -13,6 +13,7 @@ import {
 } from '../api/proxy';
 import type { ProxyRequestLog, ProxyRequestLogDetail, LogStats } from '../types/tauri';
 import { showError } from '../services/toast';
+import { useAutoRefreshStore } from '../store/autoRefreshStore';
 
 /** 格式化字节大小 */
 function formatBytes(bytes: number): string {
@@ -413,7 +414,8 @@ export default function DevLogPanel() {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedLogDetail, setSelectedLogDetail] = useState<ProxyRequestLogDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  // 使用全局状态管理自动刷新，切换页面后不会丢失
+  const { devLogAutoRefresh: autoRefresh, setDevLogAutoRefresh: setAutoRefresh } = useAutoRefreshStore();
   const [page, setPage] = useState(0);
   const pageSize = 50;
 

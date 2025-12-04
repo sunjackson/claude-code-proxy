@@ -19,7 +19,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import type { ProxyService, ConfigGroup, ApiConfig, SwitchLog, ProxyConfig, HealthCheckStatusResponse } from '../types/tauri';
+import type { ProxyService, ConfigGroup, ApiConfig, SwitchLog, ProxyConfig } from '../types/tauri';
 import * as proxyApi from '../api/proxy';
 import * as configApi from '../api/config';
 import * as claudeCodeApi from '../api/claude-code';
@@ -37,6 +37,7 @@ import { HealthMonitorPanel } from '../components/HealthMonitorPanel';
 import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import { showSuccess, showError } from '../services/toast';
 import { needsAutoConfig, markAutoConfigDone } from '../utils/setupState';
+import { useAutoRefreshStore } from '../store/autoRefreshStore';
 
 const Dashboard: React.FC = () => {
   // 状态管理
@@ -57,10 +58,14 @@ const Dashboard: React.FC = () => {
   // Claude Code 配置状态
   const [claudeCodeProxyConfig, setClaudeCodeProxyConfig] = useState<ProxyConfig | null>(null);
 
-  // 健康检查状态
-  const [healthCheckStatus, setHealthCheckStatus] = useState<HealthCheckStatusResponse | null>(null);
+  // 健康检查状态 - 使用全局 store，切换页面后不会丢失
+  const {
+    healthCheckStatus,
+    setHealthCheckStatus,
+    healthCheckInterval,
+    setHealthCheckInterval,
+  } = useAutoRefreshStore();
   const [healthCheckLoading, setHealthCheckLoading] = useState(false);
-  const [healthCheckInterval, setHealthCheckInterval] = useState<number>(300); // 默认5分钟
 
   // 对话框状态
   const [configEditorOpen, setConfigEditorOpen] = useState(false);
@@ -129,6 +134,10 @@ const Dashboard: React.FC = () => {
     loadClaudeCodeConfig();
   }, []);
 
+  // 注意：不再在组件卸载时停止健康检查
+  // 健康检查状态已移至全局 store，切换页面不应该停止健康检查
+  // 只有用户手动关闭或应用退出时才停止
+
   // 首次进入时自动配置代理
   useEffect(() => {
     const performAutoConfig = async () => {
@@ -171,16 +180,22 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [status, groupsList, configsList, logs] = await Promise.all([
+      const [status, groupsList, configsList, logs, healthStatus] = await Promise.all([
         proxyApi.getProxyStatus(),
         configApi.listConfigGroups(),
         configApi.listApiConfigs(null),
         proxyApi.getSwitchLogs(undefined, 5, 0),
+        proxyApi.getHealthCheckStatus().catch(() => null), // 获取健康检查状态，失败时返回 null
       ]);
 
       setProxyStatus(status);
       setGroups(groupsList);
       setConfigs(configsList);
+
+      // 同步健康检查状态到全局 store
+      if (healthStatus) {
+        setHealthCheckStatus(healthStatus);
+      }
 
       if (logs.length === 0 && configsList.length >= 2) {
         const now = new Date();

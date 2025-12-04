@@ -1,6 +1,7 @@
 // Commands 模块
 pub mod api_config;
 pub mod api_test;
+pub mod app_update;
 pub mod auto_switch;
 pub mod balance;
 pub mod claude_code;
@@ -23,6 +24,10 @@ pub use api_config::{
 };
 
 pub use api_test::{get_test_results, test_api_config, test_group_configs};
+
+pub use app_update::{
+    check_app_updates, download_app_update, get_app_version, open_release_page,
+};
 
 pub use auto_switch::{clear_switch_logs, get_switch_logs, toggle_auto_switch};
 

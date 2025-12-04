@@ -11,6 +11,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { ApiConfig, ConfigGroup, TestResult, ProxyRequestLog } from '../types/tauri';
 import * as testApi from '../api/test';
 import * as proxyApi from '../api/proxy';
+import { useAutoRefreshStore } from '../store/autoRefreshStore';
 
 interface ProviderMonitorProps {
   isOpen: boolean;
@@ -47,7 +48,8 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
   const [configStats, setConfigStats] = useState<ConfigStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  // 使用全局状态管理自动刷新，切换页面后不会丢失
+  const { monitorAutoRefresh: autoRefresh, setMonitorAutoRefresh: setAutoRefresh } = useAutoRefreshStore();
   const [testingAll, setTestingAll] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'latency' | 'stability' | 'successRate'>('latency');
 
@@ -193,16 +195,17 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
     loadTestHistory();
   }, [loadTestHistory]);
 
-  // 自动刷新
+  // 自动刷新（使用全局状态，不再在组件关闭时重置）
+  // 只有组件打开且自动刷新开启时才运行定时器
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!autoRefresh || !isOpen) return;
 
     const interval = setInterval(() => {
       loadTestHistory();
     }, 30000); // 30秒刷新一次
 
     return () => clearInterval(interval);
-  }, [autoRefresh, loadTestHistory]);
+  }, [autoRefresh, isOpen, loadTestHistory]);
 
   // 排序配置
   const sortedStats = useMemo(() => {

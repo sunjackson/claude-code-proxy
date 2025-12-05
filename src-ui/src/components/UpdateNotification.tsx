@@ -19,12 +19,10 @@ interface UpdateNotificationProps {
 export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose }) => {
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [isChecking, setIsChecking] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   // 检查更新
   const checkForUpdates = async () => {
-    setIsChecking(true);
     try {
       const info = await invoke<AppVersionInfo>('check_app_updates');
       setVersionInfo(info);
@@ -38,8 +36,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
       }
     } catch (error) {
       console.error('检查更新失败:', error);
-    } finally {
-      setIsChecking(false);
     }
   };
 

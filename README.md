@@ -257,7 +257,7 @@ claude-code-proxy/
 
 <div align="center">
 
-**版本**: 1.0.7 | **状态**: 生产就绪
+**版本**: 1.1.0 | **状态**: 生产就绪
 
 Made with ❤️ by ClaudeCodeProxy Team
 

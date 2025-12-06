@@ -66,6 +66,7 @@ impl ConfigManager {
         conn.query_row(
             "SELECT id, name, description, auto_switch_enabled, latency_threshold_ms,
                     retry_count, retry_base_delay_ms, retry_max_delay_ms, rate_limit_delay_ms,
+                    health_check_enabled, health_check_interval_sec,
                     created_at, updated_at
              FROM ConfigGroup WHERE id = ?1",
             [id],
@@ -80,8 +81,10 @@ impl ConfigManager {
                     retry_base_delay_ms: row.get(6)?,
                     retry_max_delay_ms: row.get(7)?,
                     rate_limit_delay_ms: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    health_check_enabled: row.get(9)?,
+                    health_check_interval_sec: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         )
@@ -102,6 +105,7 @@ impl ConfigManager {
             .prepare(
                 "SELECT id, name, description, auto_switch_enabled, latency_threshold_ms,
                         retry_count, retry_base_delay_ms, retry_max_delay_ms, rate_limit_delay_ms,
+                        health_check_enabled, health_check_interval_sec,
                         created_at, updated_at
                  FROM ConfigGroup ORDER BY id ASC",
             )
@@ -121,8 +125,10 @@ impl ConfigManager {
                     retry_base_delay_ms: row.get(6)?,
                     retry_max_delay_ms: row.get(7)?,
                     rate_limit_delay_ms: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    health_check_enabled: row.get(9)?,
+                    health_check_interval_sec: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             })
             .map_err(|e| AppError::DatabaseError {
@@ -191,13 +197,16 @@ impl ConfigManager {
         // 更新分组
         conn.execute(
             "UPDATE ConfigGroup
-             SET name = ?1, description = ?2, auto_switch_enabled = ?3, latency_threshold_ms = ?4, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?5",
+             SET name = ?1, description = ?2, auto_switch_enabled = ?3, latency_threshold_ms = ?4,
+                 health_check_enabled = ?5, health_check_interval_sec = ?6, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?7",
             (
                 &group.name,
                 &group.description,
                 &group.auto_switch_enabled,
                 &group.latency_threshold_ms,
+                &group.health_check_enabled,
+                &group.health_check_interval_sec,
                 group.id,
             ),
         )

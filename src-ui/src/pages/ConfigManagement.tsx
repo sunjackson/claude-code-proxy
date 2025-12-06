@@ -328,6 +328,8 @@ export const ConfigManagement: React.FC = () => {
     description: string | null;
     autoSwitchEnabled: boolean;
     latencyThresholdMs: number;
+    healthCheckEnabled: boolean;
+    healthCheckIntervalSec: number;
   }) => {
     try {
       if (editingGroup) {
@@ -337,7 +339,9 @@ export const ConfigManagement: React.FC = () => {
           data.name,
           data.description,
           data.autoSwitchEnabled,
-          data.latencyThresholdMs
+          data.latencyThresholdMs,
+          data.healthCheckEnabled,
+          data.healthCheckIntervalSec
         );
       } else {
         // 创建分组
@@ -345,7 +349,9 @@ export const ConfigManagement: React.FC = () => {
           data.name,
           data.description,
           data.autoSwitchEnabled,
-          data.latencyThresholdMs
+          data.latencyThresholdMs,
+          data.healthCheckEnabled,
+          data.healthCheckIntervalSec
         );
       }
 

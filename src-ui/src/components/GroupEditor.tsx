@@ -17,6 +17,8 @@ interface GroupEditorProps {
     description: string | null;
     autoSwitchEnabled: boolean;
     latencyThresholdMs: number;
+    healthCheckEnabled: boolean;
+    healthCheckIntervalSec: number;
   }) => void;
   /** 取消回调 */
   onCancel: () => void;
@@ -33,6 +35,8 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
   const [description, setDescription] = useState('');
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
   const [latencyThresholdMs, setLatencyThresholdMs] = useState(30000);
+  const [healthCheckEnabled, setHealthCheckEnabled] = useState(false);
+  const [healthCheckIntervalSec, setHealthCheckIntervalSec] = useState(300);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // 编辑模式时加载分组数据
@@ -42,12 +46,16 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
       setDescription(group.description || '');
       setAutoSwitchEnabled(group.auto_switch_enabled);
       setLatencyThresholdMs(group.latency_threshold_ms);
+      setHealthCheckEnabled(group.health_check_enabled || false);
+      setHealthCheckIntervalSec(group.health_check_interval_sec || 300);
     } else {
       // 新建模式重置表单
       setName('');
       setDescription('');
       setAutoSwitchEnabled(false);
       setLatencyThresholdMs(30000);
+      setHealthCheckEnabled(false);
+      setHealthCheckIntervalSec(300);
     }
     setErrors({});
   }, [group, isOpen]);
@@ -64,6 +72,10 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
 
     if (latencyThresholdMs < 100 || latencyThresholdMs > 60000) {
       newErrors.latencyThresholdMs = '延迟阈值必须在 100-60000 毫秒范围内';
+    }
+
+    if (healthCheckIntervalSec < 60 || healthCheckIntervalSec > 3600) {
+      newErrors.healthCheckIntervalSec = '健康检查间隔必须在 60-3600 秒范围内';
     }
 
     setErrors(newErrors);
@@ -83,6 +95,8 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
       description: description.trim() || null,
       autoSwitchEnabled,
       latencyThresholdMs,
+      healthCheckEnabled,
+      healthCheckIntervalSec,
     });
   };
 
@@ -226,6 +240,85 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
               )}
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
                 当配置延迟超过此值时,将触发自动切换。推荐范围: 10000-60000ms
+              </p>
+            </div>
+          </div>
+
+          {/* 健康检查设置 */}
+          <div className="bg-gradient-to-br from-gray-900 via-gray-900 to-black border border-yellow-500/30 rounded-lg p-5 space-y-4 shadow-lg">
+            <div className="flex items-center gap-2 pb-3 border-b border-gray-800">
+              <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-sm font-bold text-yellow-400 tracking-wide">
+                自动健康检查
+              </h3>
+            </div>
+
+            {/* 启用健康检查 */}
+            <div className="flex items-start justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-800">
+              <div className="flex-1">
+                <label
+                  htmlFor="healthCheckEnabled"
+                  className="text-sm font-semibold text-gray-200 cursor-pointer block mb-1"
+                >
+                  启用自动检测
+                </label>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  定期检查此分组中所有配置的健康状态，自动标记不可用的配置
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  id="healthCheckEnabled"
+                  checked={healthCheckEnabled}
+                  onChange={(e) => setHealthCheckEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-yellow-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+              </label>
+            </div>
+
+            {/* 检查间隔 */}
+            <div className={`p-4 rounded-lg border transition-all ${
+              healthCheckEnabled
+                ? 'bg-gray-900/50 border-gray-800'
+                : 'bg-gray-900/30 border-gray-800/50 opacity-60'
+            }`}>
+              <label
+                htmlFor="healthCheckIntervalSec"
+                className="block text-sm font-semibold text-gray-200 mb-2"
+              >
+                检查间隔 (秒) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                id="healthCheckIntervalSec"
+                value={healthCheckIntervalSec}
+                onChange={(e) =>
+                  setHealthCheckIntervalSec(parseInt(e.target.value) || 300)
+                }
+                min="60"
+                max="3600"
+                step="60"
+                className={`w-full px-4 py-2.5 bg-black border ${
+                  errors.healthCheckIntervalSec
+                    ? 'border-red-500'
+                    : 'border-gray-700'
+                } rounded-lg text-white focus:outline-none focus:border-yellow-500 transition-colors font-mono disabled:opacity-50 disabled:cursor-not-allowed`}
+                disabled={!healthCheckEnabled}
+              />
+              {errors.healthCheckIntervalSec && (
+                <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {errors.healthCheckIntervalSec}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                每隔指定时间自动检查配置健康状态。推荐范围: 300-600秒 (5-10分钟)
               </p>
             </div>
           </div>

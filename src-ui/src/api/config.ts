@@ -20,13 +20,17 @@ export async function createConfigGroup(
   name: string,
   description: string | null,
   autoSwitchEnabled: boolean,
-  latencyThresholdMs: number
+  latencyThresholdMs: number,
+  healthCheckEnabled?: boolean,
+  healthCheckIntervalSec?: number
 ): Promise<ConfigGroup> {
   return await invoke('create_config_group', {
     name,
     description,
     autoSwitchEnabled,
     latencyThresholdMs,
+    healthCheckEnabled,
+    healthCheckIntervalSec,
   });
 }
 
@@ -52,7 +56,9 @@ export async function updateConfigGroup(
   name: string,
   description: string | null,
   autoSwitchEnabled: boolean,
-  latencyThresholdMs: number
+  latencyThresholdMs: number,
+  healthCheckEnabled?: boolean,
+  healthCheckIntervalSec?: number
 ): Promise<ConfigGroup> {
   return await invoke('update_config_group', {
     id,
@@ -60,6 +66,8 @@ export async function updateConfigGroup(
     description,
     autoSwitchEnabled,
     latencyThresholdMs,
+    healthCheckEnabled,
+    healthCheckIntervalSec,
   });
 }
 

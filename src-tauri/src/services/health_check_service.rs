@@ -232,7 +232,7 @@ impl HealthCheckService {
                 r#"
             SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
+                COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) as success,
                 AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END) as avg_latency
             FROM HealthCheckRecord
             WHERE config_id = ?1

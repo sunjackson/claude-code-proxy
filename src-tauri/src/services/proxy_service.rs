@@ -576,16 +576,6 @@ impl ProxyService {
             ApiConfigService::get_config_by_id(conn, config_id)
         })?;
 
-        // If there's an active group, verify config belongs to it
-        if let Some(current_group_id) = current_config.active_group_id {
-            if target_config.group_id != Some(current_group_id) {
-                return Err(AppError::ConfigNotInGroup {
-                    config_id,
-                    group_id: current_group_id,
-                });
-            }
-        }
-
         // Check if configuration is available
         if !target_config.is_available {
             return Err(AppError::ConfigUnavailable { config_id });
@@ -594,6 +584,31 @@ impl ProxyService {
         // Update server configuration
         let mut config = current_config;
         config.active_config_id = Some(config_id);
+
+        // If switching to a config in a different group, update the active group as well
+        // This enables cross-group switching
+        if let Some(target_group_id) = target_config.group_id {
+            if Some(target_group_id) != config.active_group_id {
+                log::info!(
+                    "Cross-group switch detected: {:?} -> {}",
+                    config.active_group_id,
+                    target_group_id
+                );
+                config.active_group_id = Some(target_group_id);
+
+                // Update database to persist the group change
+                self.db_pool.with_connection(|conn| {
+                    conn.execute(
+                        "UPDATE ProxyService SET current_group_id = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
+                        rusqlite::params![target_group_id],
+                    )
+                    .map_err(|e| AppError::DatabaseError {
+                        message: format!("Failed to update active group: {}", e),
+                    })
+                })?;
+            }
+        }
+
         self.server.update_config(config).await;
 
         log::info!("Switched to config: {}", target_config.name);

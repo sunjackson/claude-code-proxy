@@ -59,11 +59,10 @@ const Dashboard: React.FC = () => {
   const [claudeCodeProxyConfig, setClaudeCodeProxyConfig] = useState<ProxyConfig | null>(null);
 
   // 健康检查状态 - 使用全局 store，切换页面后不会丢失
+  // 注意：现在健康检查是分组级别的，不再使用全局的 healthCheckStatus
   const {
     healthCheckStatus,
     setHealthCheckStatus,
-    healthCheckInterval,
-    setHealthCheckInterval,
   } = useAutoRefreshStore();
   const [healthCheckLoading, setHealthCheckLoading] = useState(false);
 
@@ -349,21 +348,38 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // 切换健康检查
+  // 切换健康检查（分组级别）
   const handleToggleHealthCheck = async () => {
+    if (!currentGroup) {
+      showError('请先选择一个分组');
+      return;
+    }
+
     try {
       setHealthCheckLoading(true);
-      if (healthCheckStatus?.running) {
-        const status = await proxyApi.toggleAutoHealthCheck(false);
-        setHealthCheckStatus(status);
-        showSuccess('自动检测已关闭');
+      const newEnabled = !currentGroup.health_check_enabled;
+
+      // 更新分组配置
+      await configApi.updateConfigGroup(
+        currentGroup.id,
+        currentGroup.name,
+        currentGroup.description,
+        currentGroup.auto_switch_enabled,
+        currentGroup.latency_threshold_ms,
+        newEnabled,
+        currentGroup.health_check_interval_sec
+      );
+
+      // 重新加载数据
+      await loadData();
+
+      if (newEnabled) {
+        const intervalText = currentGroup.health_check_interval_sec >= 60
+          ? `${Math.floor(currentGroup.health_check_interval_sec / 60)}分钟`
+          : `${currentGroup.health_check_interval_sec}秒`;
+        showSuccess(`已为「${currentGroup.name}」启用自动检测，每${intervalText}检测一次`);
       } else {
-        const status = await proxyApi.toggleAutoHealthCheck(true, healthCheckInterval);
-        setHealthCheckStatus(status);
-        const intervalText = healthCheckInterval >= 60
-          ? `${Math.floor(healthCheckInterval / 60)}分钟`
-          : `${healthCheckInterval}秒`;
-        showSuccess(`自动检测已启动，每${intervalText}检测一次`);
+        showSuccess(`已为「${currentGroup.name}」关闭自动检测`);
       }
     } catch (err) {
       console.error('Failed to toggle health check:', err);
@@ -373,25 +389,39 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // 修改检测频率
+  // 修改检测频率（分组级别）
   const handleIntervalChange = async (newInterval: number) => {
-    setHealthCheckInterval(newInterval);
-    // 如果正在运行，重新启动以应用新间隔
-    if (healthCheckStatus?.running) {
-      try {
-        setHealthCheckLoading(true);
-        const status = await proxyApi.toggleAutoHealthCheck(true, newInterval);
-        setHealthCheckStatus(status);
-        const intervalText = newInterval >= 60
-          ? `${Math.floor(newInterval / 60)}分钟`
-          : `${newInterval}秒`;
-        showSuccess(`检测频率已更新为每${intervalText}`);
-      } catch (err) {
-        console.error('Failed to update interval:', err);
-        showError('更新检测频率失败');
-      } finally {
-        setHealthCheckLoading(false);
-      }
+    if (!currentGroup) {
+      showError('请先选择一个分组');
+      return;
+    }
+
+    try {
+      setHealthCheckLoading(true);
+
+      // 更新分组配置
+      await configApi.updateConfigGroup(
+        currentGroup.id,
+        currentGroup.name,
+        currentGroup.description,
+        currentGroup.auto_switch_enabled,
+        currentGroup.latency_threshold_ms,
+        currentGroup.health_check_enabled,
+        newInterval
+      );
+
+      // 重新加载数据
+      await loadData();
+
+      const intervalText = newInterval >= 60
+        ? `${Math.floor(newInterval / 60)}分钟`
+        : `${newInterval}秒`;
+      showSuccess(`已将「${currentGroup.name}」的检测频率更新为每${intervalText}`);
+    } catch (err) {
+      console.error('Failed to update interval:', err);
+      showError('更新检测频率失败');
+    } finally {
+      setHealthCheckLoading(false);
     }
   };
 
@@ -683,6 +713,8 @@ const Dashboard: React.FC = () => {
     description: string | null;
     autoSwitchEnabled: boolean;
     latencyThresholdMs: number;
+    healthCheckEnabled: boolean;
+    healthCheckIntervalSec: number;
   }) => {
     try {
       if (editingGroup) {
@@ -691,14 +723,18 @@ const Dashboard: React.FC = () => {
           data.name,
           data.description,
           data.autoSwitchEnabled,
-          data.latencyThresholdMs
+          data.latencyThresholdMs,
+          data.healthCheckEnabled,
+          data.healthCheckIntervalSec
         );
       } else {
         await configApi.createConfigGroup(
           data.name,
           data.description,
           data.autoSwitchEnabled,
-          data.latencyThresholdMs
+          data.latencyThresholdMs,
+          data.healthCheckEnabled,
+          data.healthCheckIntervalSec
         );
       }
 
@@ -743,6 +779,12 @@ const Dashboard: React.FC = () => {
     // 不同分组按 group_id 排序
     return (a.group_id || 0) - (b.group_id || 0);
   });
+
+  // 获取当前选中的分组（用于显示该分组的健康检查配置）
+  const currentGroup = useMemo(() => {
+    if (selectedGroupId === null) return null;
+    return groups.find(g => g.id === selectedGroupId) || null;
+  }, [selectedGroupId, groups]);
 
   // 拖拽排序传感器配置
   const sensors = useSensors(
@@ -1345,55 +1387,65 @@ const Dashboard: React.FC = () => {
 
               {/* 右侧操作区 */}
               <div className="flex items-center gap-3">
-                {/* 自动检测开关和频率选择 */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleToggleHealthCheck}
-                    disabled={healthCheckLoading}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      healthCheckStatus?.running
-                        ? 'bg-cyan-500'
-                        : 'bg-gray-700'
-                    } ${healthCheckLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    title={healthCheckStatus?.running ? '自动检测运行中' : '点击启用自动检测'}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        healthCheckStatus?.running ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                  <span className="text-xs text-gray-400">自动检测</span>
+                {/* 自动检测开关和频率选择（分组级别） */}
+                {currentGroup && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleToggleHealthCheck}
+                      disabled={healthCheckLoading}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        currentGroup.health_check_enabled
+                          ? 'bg-cyan-500'
+                          : 'bg-gray-700'
+                      } ${healthCheckLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      title={currentGroup.health_check_enabled ? `「${currentGroup.name}」自动检测运行中` : `点击为「${currentGroup.name}」启用自动检测`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          currentGroup.health_check_enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <span className="text-xs text-gray-400">自动检测</span>
 
-                  {/* 频率选择下拉框 */}
-                  <select
-                    value={healthCheckInterval}
-                    onChange={(e) => handleIntervalChange(Number(e.target.value))}
-                    disabled={healthCheckLoading}
-                    className="px-2 py-1 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded focus:border-cyan-500 focus:outline-none disabled:opacity-50"
-                  >
-                    <option value={60}>1分钟</option>
-                    <option value={180}>3分钟</option>
-                    <option value={300}>5分钟</option>
-                    <option value={600}>10分钟</option>
-                    <option value={900}>15分钟</option>
-                    <option value={1800}>30分钟</option>
-                  </select>
+                    {/* 频率选择下拉框 */}
+                    <select
+                      value={currentGroup.health_check_interval_sec}
+                      onChange={(e) => handleIntervalChange(Number(e.target.value))}
+                      disabled={healthCheckLoading}
+                      className="px-2 py-1 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+                    >
+                      <option value={60}>1分钟</option>
+                      <option value={180}>3分钟</option>
+                      <option value={300}>5分钟</option>
+                      <option value={600}>10分钟</option>
+                      <option value={900}>15分钟</option>
+                      <option value={1800}>30分钟</option>
+                    </select>
 
-                  {/* 问号提示 */}
-                  <div className="relative group">
-                    <svg className="w-4 h-4 text-gray-500 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div className="absolute z-20 invisible w-64 px-3 py-2 mb-2 text-xs text-gray-300 transition-all transform -translate-x-1/2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl opacity-0 bottom-full left-1/2 group-hover:opacity-100 group-hover:visible">
-                      <div className="mb-1 font-medium text-cyan-400">自动检测说明</div>
-                      <p>定时向服务商发送模拟 Claude Code 的请求，检查服务是否正常。</p>
-                      <p className="mt-1 text-gray-500">如果服务异常，系统会按照列表顺序自动切换到下一个可用的服务商。</p>
-                      {/* 小箭头 */}
-                      <div className="absolute transform -translate-x-1/2 border-4 border-transparent top-full left-1/2 border-t-gray-700" />
+                    {/* 问号提示 */}
+                    <div className="relative group">
+                      <svg className="w-4 h-4 text-gray-500 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="absolute z-20 invisible w-64 px-3 py-2 mb-2 text-xs text-gray-300 transition-all transform -translate-x-1/2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl opacity-0 bottom-full left-1/2 group-hover:opacity-100 group-hover:visible">
+                        <div className="mb-1 font-medium text-cyan-400">分组级别自动检测</div>
+                        <p>为当前分组「{currentGroup.name}」配置独立的健康检查。</p>
+                        <p className="mt-1 text-gray-500">每个分组可以独立启用/禁用自动检测，并设置不同的检测频率。</p>
+                        {/* 小箭头 */}
+                        <div className="absolute transform -translate-x-1/2 border-4 border-transparent top-full left-1/2 border-t-gray-700" />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+                {!currentGroup && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-xs text-gray-500 bg-gray-800/50 border border-gray-700 rounded-lg">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    请选择一个分组以配置自动检测
+                  </div>
+                )}
 
                 {/* 分隔线 */}
                 <div className="w-px h-6 bg-gray-700" />
@@ -1414,7 +1466,7 @@ const Dashboard: React.FC = () => {
                 configs={sortedConfigs}
                 groupId={selectedGroupId}
                 onRefresh={loadData}
-                checkIntervalSecs={healthCheckInterval}
+                checkIntervalSecs={currentGroup?.health_check_interval_sec || 300}
               />
             ) : sortedConfigs.length === 0 ? (
               <div className="py-16 text-center">

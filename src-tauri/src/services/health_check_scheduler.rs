@@ -35,6 +35,9 @@ pub enum HealthCheckSchedulerStatus {
     Running,
 }
 
+/// 切换完成回调类型
+pub type SwitchCallback = Arc<dyn Fn(i64) + Send + Sync>;
+
 /// 健康检查调度器
 pub struct HealthCheckScheduler {
     db_pool: Arc<DbPool>,
@@ -47,6 +50,8 @@ pub struct HealthCheckScheduler {
     /// 代理服务器端口
     #[allow(dead_code)]
     proxy_port: Arc<RwLock<u16>>,
+    /// 切换完成回调（用于通知 ProxyServer 更新内存配置）
+    on_switch_callback: Arc<RwLock<Option<SwitchCallback>>>,
 }
 
 impl HealthCheckScheduler {
@@ -59,7 +64,21 @@ impl HealthCheckScheduler {
             interval_secs: Arc::new(RwLock::new(DEFAULT_HEALTH_CHECK_INTERVAL_SECS)),
             proxy_host: Arc::new(RwLock::new("127.0.0.1".to_string())),
             proxy_port: Arc::new(RwLock::new(25341)),
+            on_switch_callback: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// 设置切换完成回调
+    ///
+    /// # Arguments
+    /// - `callback`: 切换完成时调用的回调函数，参数为新配置 ID
+    pub async fn set_switch_callback<F>(&self, callback: F)
+    where
+        F: Fn(i64) + Send + Sync + 'static,
+    {
+        let mut cb = self.on_switch_callback.write().await;
+        *cb = Some(Arc::new(callback));
+        log::debug!("HealthCheckScheduler switch callback registered");
     }
 
     /// 获取调度器状态
@@ -106,6 +125,7 @@ impl HealthCheckScheduler {
         );
 
         let db_pool = self.db_pool.clone();
+        let switch_callback = self.on_switch_callback.clone();
 
         // 启动后台任务
         let handle = tokio::spawn(async move {
@@ -122,7 +142,8 @@ impl HealthCheckScheduler {
                 log::info!("开始执行健康检查...");
 
                 // 执行健康检查
-                if let Err(e) = Self::perform_all_health_checks(&db_pool).await {
+                let callback_clone = switch_callback.clone();
+                if let Err(e) = Self::perform_all_health_checks(&db_pool, callback_clone).await {
                     log::error!("健康检查执行失败: {}", e);
                 }
 
@@ -166,28 +187,69 @@ impl HealthCheckScheduler {
 
     /// 对所有配置执行健康检查
     /// 根据检查结果更新配置可用状态，并在需要时切换到最高优先级的可用服务商
-    async fn perform_all_health_checks(db_pool: &Arc<DbPool>) -> AppResult<()> {
+    /// 只检查启用了健康检查的分组中的配置
+    async fn perform_all_health_checks(
+        db_pool: &Arc<DbPool>,
+        switch_callback: Arc<RwLock<Option<SwitchCallback>>>,
+    ) -> AppResult<()> {
         use rusqlite::params;
 
         log::info!("╔══════════════════════════════════════════════════════════════╗");
         log::info!("║           🏥 批量健康检查开始                                  ║");
         log::info!("╚══════════════════════════════════════════════════════════════╝");
 
-        // 获取所有配置 (group_id=None 表示所有分组)
-        let configs = db_pool.with_connection(|conn| {
-            ApiConfigService::list_configs(conn, None)
+        // 获取所有启用了健康检查的分组
+        let enabled_groups = db_pool.with_connection(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, health_check_interval_sec FROM ConfigGroup
+                 WHERE health_check_enabled = 1"
+            ).map_err(|e| AppError::DatabaseError {
+                message: format!("查询启用健康检查的分组失败: {}", e),
+            })?;
+
+            let groups: Vec<(i64, String, i32)> = stmt
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })
+                .map_err(|e| AppError::DatabaseError {
+                    message: format!("读取分组数据失败: {}", e),
+                })?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AppError::DatabaseError {
+                    message: format!("解析分组数据失败: {}", e),
+                })?;
+
+            Ok(groups)
         })?;
 
-        log::info!("📋 共有 {} 个配置需要检查", configs.len());
+        if enabled_groups.is_empty() {
+            log::info!("📋 没有启用健康检查的分组，跳过检查");
+            return Ok(());
+        }
+
+        log::info!("📋 共有 {} 个分组启用了健康检查", enabled_groups.len());
+
+        // 收集所有需要检查的配置
+        let mut all_configs = Vec::new();
+        for (group_id, group_name, _interval) in &enabled_groups {
+            let group_configs = db_pool.with_connection(|conn| {
+                ApiConfigService::list_configs(conn, Some(*group_id))
+            })?;
+
+            log::info!("📦 分组 \"{}\" (ID: {}) 有 {} 个配置", group_name, group_id, group_configs.len());
+            all_configs.extend(group_configs);
+        }
+
+        log::info!("📋 共有 {} 个配置需要检查", all_configs.len());
 
         // 记录状态变化的配置
         let mut recovered_configs: Vec<(i64, i64)> = Vec::new(); // (config_id, group_id)
         let mut success_count = 0;
         let mut failed_count = 0;
 
-        for (index, config) in configs.iter().enumerate() {
+        for (index, config) in all_configs.iter().enumerate() {
             log::info!("────────────────────────────────────────────────────────────────");
-            log::info!("📌 正在检查配置 [{}/{}]: {} (ID: {})", index + 1, configs.len(), config.name, config.id);
+            log::info!("📌 正在检查配置 [{}/{}]: {} (ID: {})", index + 1, all_configs.len(), config.name, config.id);
 
             // 对每个配置执行健康检查
             let result = Self::check_single_config(&config.server_url, &config.api_key).await;
@@ -264,7 +326,7 @@ impl HealthCheckScheduler {
 
         // 输出统计信息
         log::info!("════════════════════════════════════════════════════════════════");
-        log::info!("📊 健康检查统计: 成功 {} 个, 失败 {} 个, 共 {} 个", success_count, failed_count, configs.len());
+        log::info!("📊 健康检查统计: 成功 {} 个, 失败 {} 个, 共 {} 个", success_count, failed_count, all_configs.len());
 
         // 如果有配置恢复可用，检查是否需要切换到更高优先级的服务商
         if !recovered_configs.is_empty() {
@@ -360,6 +422,20 @@ impl HealthCheckScheduler {
                                                 highest_priority.1,
                                                 highest_priority_id
                                             );
+
+                                            // 🔧 关键修复：调用回调通知 ProxyServer 更新内存配置
+                                            let callback = switch_callback.read().await;
+                                            if let Some(cb) = callback.as_ref() {
+                                                log::info!(
+                                                    "📡 调用切换回调，通知 ProxyServer 更新内存配置: {}",
+                                                    highest_priority_id
+                                                );
+                                                cb(highest_priority_id);
+                                            } else {
+                                                log::warn!(
+                                                    "⚠️ 健康检查切换回调未设置，ProxyServer 内存配置可能未更新"
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -595,7 +671,7 @@ impl HealthCheckScheduler {
 
     /// 手动执行一次健康检查
     pub async fn check_now(&self) -> AppResult<()> {
-        Self::perform_all_health_checks(&self.db_pool).await
+        Self::perform_all_health_checks(&self.db_pool, self.on_switch_callback.clone()).await
     }
 }
 

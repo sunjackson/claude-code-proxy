@@ -80,6 +80,10 @@ export interface ConfigGroup {
   auto_switch_enabled: boolean;
   /** 延迟阈值(毫秒) */
   latency_threshold_ms: number;
+  /** 是否启用健康检查 */
+  health_check_enabled: boolean;
+  /** 健康检查间隔(秒) */
+  health_check_interval_sec: number;
   /** 创建时间 */
   created_at: string;
   /** 更新时间 */

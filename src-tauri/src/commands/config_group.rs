@@ -13,12 +13,16 @@ use tauri::State;
 /// - `description`: 分组描述
 /// - `auto_switch_enabled`: 是否启用自动切换
 /// - `latency_threshold_ms`: 延迟阈值(毫秒)
+/// - `health_check_enabled`: 是否启用健康检查
+/// - `health_check_interval_sec`: 健康检查间隔(秒)
 #[tauri::command]
 pub fn create_config_group(
     name: String,
     description: Option<String>,
     auto_switch_enabled: bool,
     latency_threshold_ms: i32,
+    health_check_enabled: Option<bool>,
+    health_check_interval_sec: Option<i32>,
     pool: State<'_, Arc<DbPool>>,
 ) -> AppResult<ConfigGroup> {
     log::info!("创建配置分组: {}", name);
@@ -33,6 +37,8 @@ pub fn create_config_group(
         retry_base_delay_ms: 2000,
         retry_max_delay_ms: 8000,
         rate_limit_delay_ms: 30000,
+        health_check_enabled: health_check_enabled.unwrap_or(false),
+        health_check_interval_sec: health_check_interval_sec.unwrap_or(300),
         created_at: chrono::Local::now().naive_local().to_string(),
         updated_at: chrono::Local::now().naive_local().to_string(),
     };
@@ -57,6 +63,8 @@ pub fn list_config_groups(pool: State<'_, Arc<DbPool>>) -> AppResult<Vec<ConfigG
 /// - `description`: 分组描述
 /// - `auto_switch_enabled`: 是否启用自动切换
 /// - `latency_threshold_ms`: 延迟阈值(毫秒)
+/// - `health_check_enabled`: 是否启用健康检查
+/// - `health_check_interval_sec`: 健康检查间隔(秒)
 #[tauri::command]
 pub fn update_config_group(
     id: i64,
@@ -64,9 +72,14 @@ pub fn update_config_group(
     description: Option<String>,
     auto_switch_enabled: bool,
     latency_threshold_ms: i32,
+    health_check_enabled: Option<bool>,
+    health_check_interval_sec: Option<i32>,
     pool: State<'_, Arc<DbPool>>,
 ) -> AppResult<ConfigGroup> {
     log::info!("更新配置分组: ID {}", id);
+
+    // 先获取现有分组数据
+    let existing_group = pool.with_connection(|conn| ConfigManager::get_group_by_id(conn, id))?;
 
     let group = ConfigGroup {
         id,
@@ -74,11 +87,13 @@ pub fn update_config_group(
         description,
         auto_switch_enabled,
         latency_threshold_ms,
-        retry_count: 3,
-        retry_base_delay_ms: 2000,
-        retry_max_delay_ms: 8000,
-        rate_limit_delay_ms: 30000,
-        created_at: chrono::Local::now().naive_local().to_string(), // 实际值会从数据库获取
+        retry_count: existing_group.retry_count,
+        retry_base_delay_ms: existing_group.retry_base_delay_ms,
+        retry_max_delay_ms: existing_group.retry_max_delay_ms,
+        rate_limit_delay_ms: existing_group.rate_limit_delay_ms,
+        health_check_enabled: health_check_enabled.unwrap_or(existing_group.health_check_enabled),
+        health_check_interval_sec: health_check_interval_sec.unwrap_or(existing_group.health_check_interval_sec),
+        created_at: existing_group.created_at,
         updated_at: chrono::Local::now().naive_local().to_string(),
     };
 

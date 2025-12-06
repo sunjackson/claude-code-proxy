@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 10;
+const CURRENT_DB_VERSION: i32 = 11;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -100,6 +100,10 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             10 => {
                 // v9 -> v10: 扩展代理请求日志表，添加详细请求/响应信息
                 migrate_v9_to_v10(conn)?;
+            }
+            11 => {
+                // v10 -> v11: 添加分组级别的健康检查控制
+                migrate_v10_to_v11(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -457,6 +461,56 @@ fn migrate_v9_to_v10(conn: &Connection) -> AppResult<()> {
         })?;
 
     log::info!("v9 -> v10 迁移完成: 已添加详细请求日志字段");
+    Ok(())
+}
+
+/// 迁移: v10 -> v11 - 添加分组级别的健康检查控制
+/// 为 ConfigGroup 表添加健康检查相关字段，支持每个分组独立控制自动检测
+fn migrate_v10_to_v11(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v10 -> v11 迁移: 添加分组级别的健康检查控制");
+
+    // 检查 health_check_enabled 列是否已存在
+    let column_exists: bool = conn
+        .prepare("PRAGMA table_info(ConfigGroup)")
+        .and_then(|mut stmt| {
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            Ok(columns.contains(&"health_check_enabled".to_string()))
+        })
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查列是否存在失败: {}", e),
+        })?;
+
+    if column_exists {
+        log::info!("v10 -> v11 迁移: health_check_enabled 列已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 添加健康检查相关字段
+    log::info!("正在为 ConfigGroup 表添加健康检查字段...");
+
+    // 1. 添加 health_check_enabled 字段（是否启用健康检查）
+    conn.execute(
+        "ALTER TABLE ConfigGroup ADD COLUMN health_check_enabled BOOLEAN NOT NULL DEFAULT 0",
+        [],
+    )
+    .map_err(|e| AppError::DatabaseError {
+        message: format!("添加 health_check_enabled 字段失败: {}", e),
+    })?;
+
+    // 2. 添加 health_check_interval_sec 字段（健康检查间隔，秒）
+    conn.execute(
+        "ALTER TABLE ConfigGroup ADD COLUMN health_check_interval_sec INTEGER NOT NULL DEFAULT 300 CHECK(health_check_interval_sec >= 60 AND health_check_interval_sec <= 3600)",
+        [],
+    )
+    .map_err(|e| AppError::DatabaseError {
+        message: format!("添加 health_check_interval_sec 字段失败: {}", e),
+    })?;
+
+    log::info!("v10 -> v11 迁移完成: 已添加分组级别的健康检查控制字段");
     Ok(())
 }
 

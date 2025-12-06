@@ -33,6 +33,12 @@ pub struct ConfigGroup {
     /// 限流错误延迟 (毫秒)
     pub rate_limit_delay_ms: i32,
 
+    /// 是否启用健康检查
+    pub health_check_enabled: bool,
+
+    /// 健康检查间隔 (秒, 60-3600)
+    pub health_check_interval_sec: i32,
+
     /// 创建时间
     pub created_at: String,
 
@@ -47,6 +53,8 @@ pub struct CreateConfigGroupInput {
     pub description: Option<String>,
     pub auto_switch_enabled: Option<bool>,
     pub latency_threshold_ms: Option<i32>,
+    pub health_check_enabled: Option<bool>,
+    pub health_check_interval_sec: Option<i32>,
 }
 
 /// 更新配置分组的输入参数
@@ -57,6 +65,8 @@ pub struct UpdateConfigGroupInput {
     pub description: Option<String>,
     pub auto_switch_enabled: Option<bool>,
     pub latency_threshold_ms: Option<i32>,
+    pub health_check_enabled: Option<bool>,
+    pub health_check_interval_sec: Option<i32>,
 }
 
 /// 更新分组重试策略的输入参数

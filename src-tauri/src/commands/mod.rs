@@ -20,7 +20,8 @@ pub mod skills;
 // 重新导出常用命令
 pub use api_config::{
     create_api_config, delete_api_config, get_api_config, get_api_key, list_api_configs,
-    quick_test_config_url, reorder_api_config, test_api_endpoints, update_api_config,
+    quick_test_config_url, reorder_api_config, set_config_enabled, test_api_endpoints,
+    update_api_config,
 };
 
 pub use api_test::{get_test_results, test_api_config, test_group_configs};

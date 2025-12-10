@@ -9,21 +9,24 @@ pub struct ApiConfigService;
 ///
 /// 此函数期望行包含所有 ApiConfig 字段，按以下顺序：
 /// id, name, api_key, server_url, server_port, group_id, sort_order,
-/// is_available, last_test_at, last_latency_ms, provider_type,
+/// is_available, is_enabled, weight_score, last_success_time, consecutive_failures,
+/// last_test_at, last_latency_ms, provider_type,
 /// category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
 /// default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
-/// api_timeout_ms, max_output_tokens, created_at, updated_at
+/// api_timeout_ms, max_output_tokens, balance_query_url, last_balance, balance_currency,
+/// last_balance_check_at, balance_query_status, balance_query_error, auto_balance_check,
+/// balance_check_interval_sec, created_at, updated_at
 #[allow(deprecated)]
 fn map_row_to_config(row: &Row) -> rusqlite::Result<ApiConfig> {
     // 解析 provider_type 字段
-    let provider_type_str: String = row.get(10)?;
+    let provider_type_str: String = row.get(14)?;
     let provider_type = match provider_type_str.as_str() {
         "gemini" => ProviderType::Gemini,
         _ => ProviderType::Claude,
     };
 
     // 解析 category 字段
-    let category_str: String = row.get(11)?;
+    let category_str: String = row.get(15)?;
     let category = match category_str.as_str() {
         "official" => VendorCategory::Official,
         "cn_official" => VendorCategory::CnOfficial,
@@ -41,32 +44,36 @@ fn map_row_to_config(row: &Row) -> rusqlite::Result<ApiConfig> {
         group_id: row.get(5)?,
         sort_order: row.get(6)?,
         is_available: row.get(7)?,
-        last_test_at: row.get(8)?,
-        last_latency_ms: row.get(9)?,
+        is_enabled: row.get(8)?,
+        weight_score: row.get(9)?,
+        last_success_time: row.get(10)?,
+        consecutive_failures: row.get(11)?,
+        last_test_at: row.get(12)?,
+        last_latency_ms: row.get(13)?,
         provider_type,
         category,
-        is_partner: row.get::<_, i32>(12)? != 0,
-        theme_icon: row.get(13)?,
-        theme_bg_color: row.get(14)?,
-        theme_text_color: row.get(15)?,
-        meta: row.get(16)?,
-        default_model: row.get(17)?,
-        haiku_model: row.get(18)?,
-        sonnet_model: row.get(19)?,
-        opus_model: row.get(20)?,
-        small_fast_model: row.get(21)?,
-        api_timeout_ms: row.get(22)?,
-        max_output_tokens: row.get(23)?,
-        balance_query_url: row.get(24)?,
-        last_balance: row.get(25)?,
-        balance_currency: row.get(26)?,
-        last_balance_check_at: row.get(27)?,
-        balance_query_status: row.get(28)?,
-        balance_query_error: row.get(29)?,
-        auto_balance_check: row.get::<_, i32>(30)? != 0,
-        balance_check_interval_sec: row.get(31)?,
-        created_at: row.get(32)?,
-        updated_at: row.get(33)?,
+        is_partner: row.get::<_, i32>(16)? != 0,
+        theme_icon: row.get(17)?,
+        theme_bg_color: row.get(18)?,
+        theme_text_color: row.get(19)?,
+        meta: row.get(20)?,
+        default_model: row.get(21)?,
+        haiku_model: row.get(22)?,
+        sonnet_model: row.get(23)?,
+        opus_model: row.get(24)?,
+        small_fast_model: row.get(25)?,
+        api_timeout_ms: row.get(26)?,
+        max_output_tokens: row.get(27)?,
+        balance_query_url: row.get(28)?,
+        last_balance: row.get(29)?,
+        balance_currency: row.get(30)?,
+        last_balance_check_at: row.get(31)?,
+        balance_query_status: row.get(32)?,
+        balance_query_error: row.get(33)?,
+        auto_balance_check: row.get::<_, i32>(34)? != 0,
+        balance_check_interval_sec: row.get(35)?,
+        created_at: row.get(36)?,
+        updated_at: row.get(37)?,
     })
 }
 
@@ -219,7 +226,8 @@ impl ApiConfigService {
     pub fn get_config_by_id(conn: &Connection, id: i64) -> AppResult<ApiConfig> {
         conn.query_row(
             "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
-                    is_available, last_test_at, last_latency_ms, provider_type,
+                    is_available, is_enabled, weight_score, last_success_time, consecutive_failures,
+                    last_test_at, last_latency_ms, provider_type,
                     category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                     default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                     api_timeout_ms, max_output_tokens,
@@ -253,7 +261,8 @@ impl ApiConfigService {
         let (sql, params): (String, Vec<Option<i64>>) = if let Some(gid) = group_id {
             (
                 "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
-                        is_available, last_test_at, last_latency_ms, provider_type,
+                        is_available, is_enabled, weight_score, last_success_time, consecutive_failures,
+                        last_test_at, last_latency_ms, provider_type,
                         category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                         default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                         api_timeout_ms, max_output_tokens,
@@ -266,7 +275,8 @@ impl ApiConfigService {
         } else {
             (
                 "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
-                        is_available, last_test_at, last_latency_ms, provider_type,
+                        is_available, is_enabled, weight_score, last_success_time, consecutive_failures,
+                        last_test_at, last_latency_ms, provider_type,
                         category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                         default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                         api_timeout_ms, max_output_tokens,
@@ -730,6 +740,198 @@ impl ApiConfigService {
         );
 
         Ok(())
+    }
+
+    /// 设置配置的启用状态
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `config_id`: 配置ID
+    /// - `enabled`: 是否启用
+    ///
+    /// # 返回
+    /// - `Ok(ApiConfig)`: 更新后的配置
+    /// - `Err(AppError)`: 更新失败
+    pub fn set_config_enabled(conn: &Connection, config_id: i64, enabled: bool) -> AppResult<ApiConfig> {
+        log::info!("设置配置启用状态: ID {} -> {}", config_id, enabled);
+
+        // 检查配置是否存在
+        let exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM ApiConfig WHERE id = ?1)",
+                [config_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("检查配置是否存在失败: {}", e),
+            })?;
+
+        if !exists {
+            return Err(AppError::NotFound {
+                resource: "ApiConfig".to_string(),
+                id: config_id.to_string(),
+            });
+        }
+
+        // 更新启用状态
+        conn.execute(
+            "UPDATE ApiConfig SET is_enabled = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            (enabled, config_id),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("更新配置启用状态失败: {}", e),
+        })?;
+
+        log::info!("配置启用状态已更新: ID {} = {}", config_id, enabled);
+
+        Self::get_config_by_id(conn, config_id)
+    }
+
+    /// 更新配置的权重分数
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `config_id`: 配置ID
+    /// - `weight_score`: 权重分数 (0.0 - 1.0)
+    ///
+    /// # 返回
+    /// - `Ok(())`: 更新成功
+    /// - `Err(AppError)`: 更新失败
+    pub fn update_weight_score(conn: &Connection, config_id: i64, weight_score: f64) -> AppResult<()> {
+        // 验证权重范围
+        if !(0.0..=1.0).contains(&weight_score) {
+            return Err(AppError::ValidationError {
+                field: "weight_score".to_string(),
+                message: "权重分数必须在 0.0 到 1.0 之间".to_string(),
+            });
+        }
+
+        conn.execute(
+            "UPDATE ApiConfig SET weight_score = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            (weight_score, config_id),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("更新权重分数失败: {}", e),
+        })?;
+
+        log::debug!("已更新配置权重: config_id={}, weight_score={:.3}", config_id, weight_score);
+
+        Ok(())
+    }
+
+    /// 更新配置的成功状态（请求成功时调用）
+    ///
+    /// 重置连续失败次数，更新最后成功时间
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `config_id`: 配置ID
+    ///
+    /// # 返回
+    /// - `Ok(())`: 更新成功
+    /// - `Err(AppError)`: 更新失败
+    pub fn record_success(conn: &Connection, config_id: i64) -> AppResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        conn.execute(
+            "UPDATE ApiConfig SET
+                consecutive_failures = 0,
+                last_success_time = ?1,
+                is_available = 1,
+                updated_at = ?1
+             WHERE id = ?2",
+            (&now, config_id),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("记录成功状态失败: {}", e),
+        })?;
+
+        log::debug!("已记录配置成功状态: config_id={}", config_id);
+
+        Ok(())
+    }
+
+    /// 增加配置的连续失败次数
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `config_id`: 配置ID
+    ///
+    /// # 返回
+    /// - `Ok(i32)`: 更新后的连续失败次数
+    /// - `Err(AppError)`: 更新失败
+    pub fn increment_failure_count(conn: &Connection, config_id: i64) -> AppResult<i32> {
+        conn.execute(
+            "UPDATE ApiConfig SET
+                consecutive_failures = consecutive_failures + 1,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?1",
+            [config_id],
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("增加失败次数失败: {}", e),
+        })?;
+
+        // 获取更新后的失败次数
+        let count: i32 = conn
+            .query_row(
+                "SELECT consecutive_failures FROM ApiConfig WHERE id = ?1",
+                [config_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("获取失败次数失败: {}", e),
+            })?;
+
+        log::debug!("配置连续失败次数: config_id={}, count={}", config_id, count);
+
+        Ok(count)
+    }
+
+    /// 列出所有启用且可用的配置
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `group_id`: 分组ID
+    ///
+    /// # 返回
+    /// - `Ok(Vec<ApiConfig>)`: 启用且可用的配置列表
+    /// - `Err(AppError)`: 查询失败
+    pub fn list_enabled_available_configs(
+        conn: &Connection,
+        group_id: i64,
+    ) -> AppResult<Vec<ApiConfig>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, api_key, server_url, server_port, group_id, sort_order,
+                        is_available, is_enabled, weight_score, last_success_time, consecutive_failures,
+                        last_test_at, last_latency_ms, provider_type,
+                        category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
+                        default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
+                        api_timeout_ms, max_output_tokens,
+                        balance_query_url, last_balance, balance_currency, last_balance_check_at,
+                        balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
+                        created_at, updated_at
+                 FROM ApiConfig
+                 WHERE group_id = ?1 AND is_enabled = 1 AND is_available = 1
+                 ORDER BY weight_score DESC, sort_order ASC",
+            )
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("准备查询失败: {}", e),
+            })?;
+
+        let configs = stmt
+            .query_map([group_id], map_row_to_config)
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("查询配置列表失败: {}", e),
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("解析配置数据失败: {}", e),
+            })?;
+
+        log::debug!("找到 {} 个启用且可用的配置 (group_id={})", configs.len(), group_id);
+        Ok(configs)
     }
 }
 

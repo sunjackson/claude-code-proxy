@@ -68,8 +68,10 @@ pub struct ProxyRequestLogService;
 
 impl ProxyRequestLogService {
     /// 保存请求日志到数据库（包含所有详细信息）
-    /// 自动清理：当日志数量超过120条时，只保留最近100条
+    /// 自动清理：每个服务商(config_id)只保留最近100条记录
     pub fn save_log(pool: &DbPool, entry: &RequestLogEntry) -> AppResult<i64> {
+        let config_id = entry.config_id;
+
         let id = pool.with_connection(|conn| {
             conn.execute(
                 r#"
@@ -118,29 +120,41 @@ impl ProxyRequestLogService {
             Ok(id)
         })?;
 
-        // 自动清理：每次保存后检查总数，如果超过120条就清理到100条
-        // 使用单独的连接避免阻塞主事务
-        pool.with_connection(|conn| {
-            let count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM ProxyRequestLog", [], |row| row.get(0))
-                .unwrap_or(0);
-
-            if count > 120 {
-                let _ = conn.execute(
-                    r#"
-                    DELETE FROM ProxyRequestLog
-                    WHERE id NOT IN (
-                        SELECT id FROM ProxyRequestLog
-                        ORDER BY request_at DESC
-                        LIMIT 100
+        // 自动清理：每个服务商(config_id)只保留最近100条记录
+        if let Some(cid) = config_id {
+            pool.with_connection(|conn| {
+                let count: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM ProxyRequestLog WHERE config_id = ?",
+                        params![cid],
+                        |row| row.get(0),
                     )
-                    "#,
-                    [],
-                );
-                log::info!("自动清理代理请求日志: 保留最近100条，删除了 {} 条旧记录", count - 100);
-            }
-            Ok(())
-        })?;
+                    .unwrap_or(0);
+
+                if count > 110 {
+                    let deleted = conn.execute(
+                        r#"
+                        DELETE FROM ProxyRequestLog
+                        WHERE config_id = ? AND id NOT IN (
+                            SELECT id FROM ProxyRequestLog
+                            WHERE config_id = ?
+                            ORDER BY request_at DESC
+                            LIMIT 100
+                        )
+                        "#,
+                        params![cid, cid],
+                    ).unwrap_or(0);
+
+                    if deleted > 0 {
+                        log::info!(
+                            "自动清理代理请求日志: config_id={}, 保留最近100条，删除了 {} 条旧记录",
+                            cid, deleted
+                        );
+                    }
+                }
+                Ok(())
+            })?;
+        }
 
         Ok(id)
     }

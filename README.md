@@ -203,6 +203,7 @@ claude-code-proxy/
 <summary><b>macOS 提示"无法打开应用"</b></summary>
 
 运行 `xattr -d com.apple.quarantine /Applications/ClaudeCodeProxy.app` 或右键选择"打开"。
+
 </details>
 
 <details>
@@ -259,8 +260,11 @@ claude-code-proxy/
 
 **版本**: 1.1.0 | **状态**: 生产就绪
 
-Made with ❤️ by ClaudeCodeProxy Team
+Made with ❤️ by sunjackson
 
-**⭐ 如果这个项目对您有帮助，请给我们一个 Star！**
+**⭐ 如果这个项目对您有帮助，请给我们一个 Star！欢迎咨询**
+
+
+<img src="./png/weixin.jpg" alt="weixin" width="180"/>
 
 </div>

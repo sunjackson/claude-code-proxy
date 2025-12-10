@@ -17,6 +17,7 @@ pub struct HealthCheckService;
 
 impl HealthCheckService {
     /// 创建健康检查记录
+    /// 自动清理：只保留每个配置24小时内的记录
     pub fn create_record(
         conn: &Connection,
         input: CreateHealthCheckRecordInput,
@@ -40,6 +41,26 @@ impl HealthCheckService {
         })?;
 
         let id = conn.last_insert_rowid();
+
+        // 自动清理：删除该配置24小时前的记录
+        let deleted = conn
+            .execute(
+                r#"
+                DELETE FROM HealthCheckRecord
+                WHERE config_id = ?1
+                  AND check_at < datetime('now', '-24 hours')
+                "#,
+                rusqlite::params![input.config_id],
+            )
+            .unwrap_or(0);
+
+        if deleted > 0 {
+            log::info!(
+                "自动清理健康检查记录: config_id={}, 删除了 {} 条24小时前的记录",
+                input.config_id, deleted
+            );
+        }
+
         Self::get_record_by_id(conn, id)
     }
 

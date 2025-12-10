@@ -438,8 +438,8 @@ impl AutoSwitchService {
     /// 查找下一个可用配置
     ///
     /// 策略:
-    /// 1. 获取分组内所有可用配置(is_available = true)
-    /// 2. 按 sort_order 排序
+    /// 1. 获取分组内所有启用且可用的配置(is_enabled = true AND is_available = true)
+    /// 2. 按权重分数排序（优先）或 sort_order 排序（兜底）
     /// 3. 找到当前配置的位置
     /// 4. 返回下一个配置(循环到第一个)
     ///
@@ -453,12 +453,12 @@ impl AutoSwitchService {
         self.db_pool.with_connection(|conn| {
             use rusqlite::params;
 
-            // 获取所有可用配置(按优先级排序)
+            // 获取所有启用且可用的配置(按权重分数降序排序，权重相同时按 sort_order 升序)
             let mut stmt = conn
                 .prepare(
                     "SELECT id FROM ApiConfig
-                     WHERE group_id = ?1 AND is_available = 1
-                     ORDER BY sort_order ASC",
+                     WHERE group_id = ?1 AND is_enabled = 1 AND is_available = 1
+                     ORDER BY weight_score DESC, sort_order ASC",
                 )
                 .map_err(|e| AppError::DatabaseError {
                     message: format!("准备查询失败: {}", e),
@@ -496,6 +496,38 @@ impl AutoSwitchService {
             };
 
             Ok(Some(config_ids[next_index]))
+        })
+    }
+
+    /// 查找最佳可用配置（基于权重分数）
+    ///
+    /// 策略:
+    /// 1. 获取分组内所有启用且可用的配置
+    /// 2. 返回权重分数最高的配置
+    ///
+    /// # Returns
+    /// - Option<i64>: 最佳配置 ID,如果没有则返回 None
+    pub async fn find_best_config(&self, group_id: i64) -> AppResult<Option<i64>> {
+        self.db_pool.with_connection(|conn| {
+            use rusqlite::params;
+
+            // 获取权重分数最高的配置
+            let result = conn.query_row(
+                "SELECT id FROM ApiConfig
+                 WHERE group_id = ?1 AND is_enabled = 1 AND is_available = 1
+                 ORDER BY weight_score DESC, sort_order ASC
+                 LIMIT 1",
+                params![group_id],
+                |row| row.get(0),
+            );
+
+            match result {
+                Ok(id) => Ok(Some(id)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(AppError::DatabaseError {
+                    message: format!("查询最佳配置失败: {}", e),
+                }),
+            }
         })
     }
 

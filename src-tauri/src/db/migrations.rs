@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 11;
+const CURRENT_DB_VERSION: i32 = 12;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -104,6 +104,10 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             11 => {
                 // v10 -> v11: 添加分组级别的健康检查控制
                 migrate_v10_to_v11(conn)?;
+            }
+            12 => {
+                // v11 -> v12: 智能切换功能增强
+                migrate_v11_to_v12(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -511,6 +515,44 @@ fn migrate_v10_to_v11(conn: &Connection) -> AppResult<()> {
     })?;
 
     log::info!("v10 -> v11 迁移完成: 已添加分组级别的健康检查控制字段");
+    Ok(())
+}
+
+/// 迁移: v11 -> v12 - 智能切换功能增强
+/// 添加配置启用/停用、权重计算、切换冷却期等功能支持
+fn migrate_v11_to_v12(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v11 -> v12 迁移: 智能切换功能增强");
+
+    // 检查 is_enabled 列是否已存在
+    let column_exists: bool = conn
+        .prepare("PRAGMA table_info(ApiConfig)")
+        .and_then(|mut stmt| {
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            Ok(columns.contains(&"is_enabled".to_string()))
+        })
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查列是否存在失败: {}", e),
+        })?;
+
+    if column_exists {
+        log::info!("v11 -> v12 迁移: is_enabled 列已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v12_smart_switch.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v11->v12 迁移失败: {}", e),
+        })?;
+
+    log::info!("v11 -> v12 迁移完成: 已添加智能切换相关字段和表");
     Ok(())
 }
 

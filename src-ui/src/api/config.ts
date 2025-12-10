@@ -154,6 +154,22 @@ export async function getApiKey(configId: number): Promise<string> {
 }
 
 /**
+ * 设置配置的启用/停用状态
+ *
+ * @param configId 配置ID
+ * @param enabled 是否启用
+ * @returns 更新后的配置
+ *
+ * 注意：如果停用的是当前激活的配置，会自动切换到下一个可用配置
+ */
+export async function setConfigEnabled(
+  configId: number,
+  enabled: boolean
+): Promise<ApiConfig> {
+  return await invoke('set_config_enabled', { configId, enabled });
+}
+
+/**
  * 测试 API 配置连接性
  * @returns [延迟毫秒, 是否可用]
  */

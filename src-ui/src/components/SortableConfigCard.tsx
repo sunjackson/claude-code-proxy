@@ -22,11 +22,13 @@ interface SortableConfigCardProps {
   testingConfigId: number | null;
   queryingBalanceId: number | null;
   actionLoading: boolean;
+  togglingEnabledId: number | null;
   onSwitchConfig: (configId: number) => void;
   onTestConfig: (config: ApiConfig) => void;
   onQueryBalance: (config: ApiConfig) => void;
   onEditConfig: (config: ApiConfig) => void;
   onDeleteConfig: (config: ApiConfig) => void;
+  onToggleEnabled: (config: ApiConfig, enabled: boolean) => void;
 }
 
 /**
@@ -67,11 +69,13 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
   testingConfigId,
   queryingBalanceId,
   actionLoading,
+  togglingEnabledId,
   onSwitchConfig,
   onTestConfig,
   onQueryBalance,
   onEditConfig,
   onDeleteConfig,
+  onToggleEnabled,
 }) => {
   const {
     attributes,
@@ -87,8 +91,11 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
     transition,
   };
 
-  // 判断是否可以点击切换：不是当前活跃配置、配置在线、非加载状态
-  const canClickToSwitch = !isActive && config.is_available && !actionLoading;
+  // 判断是否可以点击切换：不是当前活跃配置、配置启用且在线、非加载状态
+  const canClickToSwitch = !isActive && config.is_enabled && config.is_available && !actionLoading;
+
+  // 判断配置是否处于禁用状态（用于视觉提示）
+  const isDisabled = !config.is_enabled;
 
   // 处理卡片点击
   const handleCardClick = () => {
@@ -113,6 +120,8 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
         isJustSwitchedTarget ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-black animate-pulse' : ''
       } ${
         isJustSwitchedSource ? 'opacity-60' : ''
+      } ${
+        isDisabled ? 'opacity-50' : ''
       }`}
     >
       {/* ========== 左侧内容区域 ========== */}
@@ -185,6 +194,30 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
               {config.is_available ? '在线' : '离线'}
             </div>
 
+            {/* 启用/停用开关 */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleEnabled(config, !config.is_enabled);
+              }}
+              disabled={togglingEnabledId === config.id || isActive}
+              title={isActive ? '当前使用中的配置无法停用' : (config.is_enabled ? '点击停用此配置' : '点击启用此配置')}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                togglingEnabledId === config.id ? 'opacity-50 cursor-wait' :
+                isActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              } ${
+                config.is_enabled
+                  ? 'bg-green-500'
+                  : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                  config.is_enabled ? 'translate-x-5' : 'translate-x-1'
+                }`}
+              />
+            </button>
+
             {/* 分类标签 */}
             {config.category && config.category !== 'custom' && (
               <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
@@ -204,19 +237,40 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
                 {config.last_latency_ms}ms
               </span>
             )}
+
+            {/* 权重分数显示 */}
+            {config.weight_score !== null && config.weight_score !== undefined && (
+              <span
+                className={`px-2 py-0.5 text-xs font-mono font-bold rounded-full ${
+                  config.weight_score >= 0.7 ? 'bg-emerald-500/20 text-emerald-400' :
+                  config.weight_score >= 0.4 ? 'bg-amber-500/20 text-amber-400' :
+                  'bg-rose-500/20 text-rose-400'
+                }`}
+                title={`权重分数：${(config.weight_score * 100).toFixed(1)}%\n连续失败：${config.consecutive_failures}次${config.last_success_time ? '\n上次成功：' + new Date(config.last_success_time).toLocaleString() : ''}`}
+              >
+                ⚖ {(config.weight_score * 100).toFixed(0)}%
+              </span>
+            )}
           </div>
 
           {/* 操作按钮组 */}
           <div className="flex items-center gap-1.5">
-            {/* 切换按钮 - 只在代理运行时显示 */}
-            {isProxyRunning && !isActive && (
+            {/* 切换按钮 - 只在代理运行时且配置启用时显示 */}
+            {isProxyRunning && !isActive && config.is_enabled && (
               <button
-                className="px-3 py-1.5 bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-all text-xs font-bold shadow-lg shadow-yellow-500/20"
+                className={`px-3 py-1.5 rounded-lg transition-all text-xs font-bold shadow-lg ${
+                  config.is_available
+                    ? 'bg-yellow-500 text-black hover:bg-yellow-400 shadow-yellow-500/20'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSwitchConfig(config.id);
+                  if (config.is_available) {
+                    onSwitchConfig(config.id);
+                  }
                 }}
-                disabled={actionLoading}
+                disabled={actionLoading || !config.is_available}
+                title={!config.is_available ? '配置离线，无法切换' : '切换到此配置'}
               >
                 切换到此
               </button>
@@ -317,6 +371,20 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
               <span className="text-purple-400">{config.default_model}</span>
+            </div>
+          )}
+
+          {/* 连续失败次数警告 */}
+          {config.consecutive_failures > 0 && (
+            <div className={`flex items-center gap-1.5 ${
+              config.consecutive_failures >= 3 ? 'text-red-400' : 'text-amber-400'
+            }`}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="font-medium text-xs">
+                连续失败 {config.consecutive_failures} 次
+              </span>
             </div>
           )}
         </div>

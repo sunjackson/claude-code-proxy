@@ -24,6 +24,7 @@ pub mod proxy_service;
 pub mod recommendation;
 pub mod retry_manager;
 pub mod skills_config;
+pub mod weight_calculator;
 
 // 重新导出常用类型
 pub use api_config::ApiConfigService;
@@ -39,5 +40,6 @@ pub use mcp_config::McpConfigService;
 pub use permissions_config::PermissionsConfigService;
 pub use provider_preset::ProviderPresetService;
 pub use skills_config::SkillsConfigService;
+pub use weight_calculator::WeightCalculator;
 // ProxyRequestLog 和 ProxyRequestLogService 在 commands/proxy_log.rs 中直接导入使用
 // HealthCheckService 在 commands/health_check.rs 和 health_check_scheduler.rs 中直接导入使用

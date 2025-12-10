@@ -52,6 +52,7 @@ const Dashboard: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'monitor'>('list');
   const [testingConfigId, setTestingConfigId] = useState<number | null>(null);
   const [queryingBalanceId, setQueryingBalanceId] = useState<number | null>(null);
+  const [togglingEnabledId, setTogglingEnabledId] = useState<number | null>(null);
   const [showSwitchHistory, setShowSwitchHistory] = useState(false);
   const [showMonitor, setShowMonitor] = useState(false);
 
@@ -590,6 +591,21 @@ const Dashboard: React.FC = () => {
         }
       },
     });
+  };
+
+  // 处理启用/停用配置
+  const handleToggleEnabled = async (config: ApiConfig, enabled: boolean) => {
+    try {
+      setTogglingEnabledId(config.id);
+      await configApi.setConfigEnabled(config.id, enabled);
+      showSuccess(enabled ? `配置 "${config.name}" 已启用` : `配置 "${config.name}" 已停用`);
+      await loadData();
+    } catch (err) {
+      console.error('切换配置启用状态失败:', err);
+      showError(err instanceof Error ? err.message : '切换配置启用状态失败');
+    } finally {
+      setTogglingEnabledId(null);
+    }
   };
 
   const handleTestConfig = async (config: ApiConfig) => {
@@ -1515,11 +1531,13 @@ const Dashboard: React.FC = () => {
                           testingConfigId={testingConfigId}
                           queryingBalanceId={queryingBalanceId}
                           actionLoading={actionLoading}
+                          togglingEnabledId={togglingEnabledId}
                           onSwitchConfig={handleSwitchConfig}
                           onTestConfig={handleTestConfig}
                           onQueryBalance={handleQueryBalance}
                           onEditConfig={handleEditConfig}
                           onDeleteConfig={handleDeleteConfig}
+                          onToggleEnabled={handleToggleEnabled}
                         />
                       );
                     })}

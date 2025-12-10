@@ -7,6 +7,7 @@ use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::proxy::logger::ProxyLogger;
 use crate::proxy::router::RequestRouter;
+use crate::services::api_config::ApiConfigService;
 use crate::services::auto_switch::AutoSwitchService;
 use crate::services::proxy_log::ProxyRequestLogService;
 use crate::utils::constants::default_proxy_port;
@@ -481,6 +482,7 @@ impl ProxyServer {
                     // 启动后台任务等待流结束并更新日志
                     let db_for_update = db_pool.clone();
                     let response_headers = forward_details.response_headers;
+                    let stream_config_id = config_id;
                     tokio::spawn(async move {
                         // 等待流式响应完成
                         if let Some(completion_data) = rx.recv().await {
@@ -501,6 +503,13 @@ impl ProxyServer {
                             ) {
                                 log::warn!("Failed to update streaming log: {}", e);
                             }
+
+                            // 更新成功记录和权重分数
+                            if let Err(e) = db_for_update.with_connection(|conn| {
+                                ApiConfigService::record_success(conn, stream_config_id)
+                            }) {
+                                log::warn!("Failed to record success for config {}: {}", stream_config_id, e);
+                            }
                         } else {
                             log::warn!("Stream receiver closed without completion data");
                         }
@@ -517,11 +526,18 @@ impl ProxyServer {
                     );
                     ProxyLogger::log_request(&log_entry);
 
-                    // Save to database (async, don't block response)
+                    // Save to database and update weight (async, don't block response)
                     let db = db_pool.clone();
+                    let success_config_id = config_id;
                     tokio::spawn(async move {
                         if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
                             log::warn!("Failed to save proxy request log: {}", e);
+                        }
+                        // 更新成功记录和权重分数
+                        if let Err(e) = db.with_connection(|conn| {
+                            ApiConfigService::record_success(conn, success_config_id)
+                        }) {
+                            log::warn!("Failed to record success for config {}: {}", success_config_id, e);
                         }
                     });
                 }
@@ -542,11 +558,18 @@ impl ProxyServer {
                 );
                 ProxyLogger::log_request(&log_entry);
 
-                // Save to database (async, don't block response)
+                // Save to database and update failure count (async, don't block response)
                 let db = db_pool.clone();
+                let failed_config_id = config_id;
                 tokio::spawn(async move {
                     if let Err(e) = ProxyRequestLogService::save_log(&db, &log_entry) {
                         log::warn!("Failed to save proxy request log: {}", e);
+                    }
+                    // 增加失败计数
+                    if let Err(e) = db.with_connection(|conn| {
+                        ApiConfigService::increment_failure_count(conn, failed_config_id)
+                    }) {
+                        log::warn!("Failed to increment failure count for config {}: {}", failed_config_id, e);
                     }
                 });
 

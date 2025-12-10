@@ -122,6 +122,14 @@ export interface ApiConfig {
   sort_order: number;
   /** 是否可用 */
   is_available: boolean;
+  /** 是否启用（用户手动控制） */
+  is_enabled: boolean;
+  /** 权重分数（用于智能切换） */
+  weight_score: number;
+  /** 最后成功请求时间 */
+  last_success_time: string | null;
+  /** 连续失败次数 */
+  consecutive_failures: number;
   /** 最后测试时间 */
   last_test_at: string | null;
   /** 最后测试延迟(毫秒) */

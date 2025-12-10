@@ -3,6 +3,16 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// 默认值函数：返回 true
+fn default_true() -> bool {
+    true
+}
+
+/// 默认值函数：返回权重默认值 1.0
+fn default_weight() -> f64 {
+    1.0
+}
+
 /// API 提供商类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -121,6 +131,22 @@ pub struct ApiConfig {
 
     /// 可用状态(由测试和自动切换更新)
     pub is_available: bool,
+
+    /// 是否启用（用户手动控制，停用后不参与自动切换）
+    /// 区别于 is_available（系统自动设置的可用状态）
+    #[serde(default = "default_true")]
+    pub is_enabled: bool,
+
+    /// 权重计算分数，用于智能选择（0.0 - 1.0）
+    #[serde(default = "default_weight")]
+    pub weight_score: f64,
+
+    /// 最后一次成功请求的时间
+    pub last_success_time: Option<String>,
+
+    /// 连续失败次数
+    #[serde(default)]
+    pub consecutive_failures: i32,
 
     /// 最后测试时间
     pub last_test_at: Option<String>,
@@ -475,6 +501,10 @@ mod tests {
             group_id: None,
             sort_order: 0,
             is_available: true,
+            is_enabled: true,
+            weight_score: 1.0,
+            last_success_time: None,
+            consecutive_failures: 0,
             last_test_at: None,
             last_latency_ms: None,
             provider_type: ProviderType::Claude,
@@ -517,6 +547,10 @@ mod tests {
             group_id: None,
             sort_order: 0,
             is_available: true,
+            is_enabled: true,
+            weight_score: 1.0,
+            last_success_time: None,
+            consecutive_failures: 0,
             last_test_at: None,
             last_latency_ms: None,
             provider_type: ProviderType::Claude,

@@ -216,3 +216,64 @@ pub async fn quick_test_config_url(url: String) -> AppResult<EndpointTestResult>
         error: result.error_message,
     })
 }
+
+/// 设置配置的启用状态
+///
+/// # 参数
+/// - `pool`: 数据库连接池
+/// - `proxy_state`: 代理服务状态
+/// - `config_id`: 配置ID
+/// - `enabled`: 是否启用
+///
+/// # 说明
+/// 如果停用的是当前激活的配置，会尝试自动切换到下一个可用配置
+#[tauri::command]
+pub async fn set_config_enabled(
+    config_id: i64,
+    enabled: bool,
+    pool: State<'_, Arc<DbPool>>,
+    proxy_state: State<'_, ProxyServiceState>,
+) -> AppResult<ApiConfig> {
+    log::info!("设置配置启用状态: ID {} -> {}", config_id, enabled);
+
+    // 执行更新
+    let updated_config = pool.with_connection(|conn| {
+        ApiConfigService::set_config_enabled(conn, config_id, enabled)
+    })?;
+
+    // 如果是停用操作，检查是否需要触发自动切换
+    if !enabled {
+        let proxy_service = proxy_state.service();
+        let current_status = proxy_service.get_status().await?;
+
+        // 如果停用的是当前激活的配置
+        if current_status.active_config_id == Some(config_id) {
+            log::warn!(
+                "正在停用当前激活的配置: {} (ID: {})，尝试切换到下一个可用配置",
+                updated_config.name,
+                config_id
+            );
+
+            // 触发自动切换
+            if let Some(group_id) = current_status.active_group_id {
+                // 获取下一个可用配置
+                if let Ok(next_config) = pool.with_connection(|conn| {
+                    ApiConfigService::list_enabled_available_configs(conn, group_id)
+                }) {
+                    if let Some(next) = next_config.first() {
+                        log::info!("自动切换到配置: {} (ID: {})", next.name, next.id);
+                        // 更新代理服务使用新配置
+                        let _ = proxy_service.switch_config(next.id).await;
+                    } else {
+                        log::warn!("没有可用的备用配置，代理服务可能无法正常工作");
+                    }
+                }
+            }
+
+            // 触发状态刷新以通知UI更新
+            let _ = proxy_service.refresh_status().await;
+        }
+    }
+
+    Ok(updated_config)
+}

@@ -3,12 +3,12 @@
  * 定时检查所有 API 配置的健康状态
  *
  * Features:
- * - 每5分钟自动发送模拟 Claude Code 的请求
+ * - 每5分钟自动检查 /v1/health 端点
  * - 直接向各服务商发送请求（不通过代理）
  * - 记录检查结果到数据库
  * - 支持启动/停止/配置检查间隔
  * - 根据检查结果自动更新配置可用状态
- * - 服务商恢复可用时自动切换到最高优先级服务商
+ * - 服务商恢复可用时自动切换到最高权重服务商
  */
 
 use crate::db::DbPool;
@@ -16,7 +16,6 @@ use crate::models::api_config::UpdateApiConfigInput;
 use crate::models::error::{AppError, AppResult};
 use crate::models::health_check::{CreateHealthCheckRecordInput, HealthCheckStatus};
 use crate::services::api_config::ApiConfigService;
-use crate::services::claude_test_request::{add_claude_code_headers, build_test_request_body, TEST_REQUEST_TIMEOUT_SECS};
 use crate::services::health_check_service::HealthCheckService;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -328,6 +327,21 @@ impl HealthCheckScheduler {
         log::info!("════════════════════════════════════════════════════════════════");
         log::info!("📊 健康检查统计: 成功 {} 个, 失败 {} 个, 共 {} 个", success_count, failed_count, all_configs.len());
 
+        // 更新所有配置的权重分数
+        log::info!("⚖️ 更新配置权重分数...");
+        if let Ok(updated_configs) = db_pool.with_connection(|conn| {
+            ApiConfigService::list_configs(conn, None)
+        }) {
+            let weight_calculator = crate::services::weight_calculator::WeightCalculator::new();
+            if let Err(e) = db_pool.with_connection(|conn| {
+                weight_calculator.update_weights(conn, &updated_configs)
+            }) {
+                log::error!("更新权重分数失败: {}", e);
+            } else {
+                log::info!("⚖️ 权重分数已更新");
+            }
+        }
+
         // 如果有配置恢复可用，检查是否需要切换到更高优先级的服务商
         if !recovered_configs.is_empty() {
             log::info!("🔄 检测到 {} 个配置恢复可用，检查是否需要切换...", recovered_configs.len());
@@ -354,17 +368,17 @@ impl HealthCheckScheduler {
                         .collect();
 
                     if !group_recovered.is_empty() {
-                        // 获取当前分组所有可用配置（按 sort_order 排序）
+                        // 获取当前分组所有启用且可用的配置（按权重分数降序排序）
                         let available_configs = db_pool.with_connection(|conn| {
                             let mut stmt = conn.prepare(
-                                "SELECT id, name, sort_order FROM ApiConfig
-                                 WHERE group_id = ?1 AND is_available = 1
-                                 ORDER BY sort_order ASC"
+                                "SELECT id, name, weight_score FROM ApiConfig
+                                 WHERE group_id = ?1 AND is_enabled = 1 AND is_available = 1
+                                 ORDER BY weight_score DESC, sort_order ASC"
                             ).map_err(|e| AppError::DatabaseError {
                                 message: format!("准备查询失败: {}", e),
                             })?;
 
-                            let configs: Vec<(i64, String, i32)> = stmt
+                            let configs: Vec<(i64, String, f64)> = stmt
                                 .query_map(params![group_id], |row| {
                                     Ok((row.get(0)?, row.get(1)?, row.get(2)?))
                                 })
@@ -381,46 +395,48 @@ impl HealthCheckScheduler {
 
                         if let Ok(available) = available_configs {
                             if !available.is_empty() {
-                                // 找到最高优先级的可用配置
-                                let highest_priority = &available[0];
-                                let highest_priority_id = highest_priority.0;
+                                // 找到权重最高的可用配置
+                                let highest_weight = &available[0];
+                                let highest_weight_id = highest_weight.0;
 
-                                // 检查当前配置是否是最高优先级
-                                if highest_priority_id != current_id {
-                                    // 获取当前配置的 sort_order
-                                    let current_sort_order = available
+                                // 检查当前配置是否是权重最高的
+                                if highest_weight_id != current_id {
+                                    // 获取当前配置的权重分数
+                                    let current_weight = available
                                         .iter()
                                         .find(|(id, _, _)| *id == current_id)
-                                        .map(|(_, _, order)| *order);
+                                        .map(|(_, _, weight)| *weight);
 
-                                    // 只有当最高优先级配置排序更靠前时才切换
-                                    let should_switch = current_sort_order
-                                        .map(|current_order| highest_priority.2 < current_order)
+                                    // 只有当最高权重配置权重更高时才切换
+                                    let should_switch = current_weight
+                                        .map(|current_w| highest_weight.2 > current_w)
                                         .unwrap_or(true); // 如果当前配置不在可用列表中，应该切换
 
                                     if should_switch {
                                         log::info!(
-                                            "🔄 发现更高优先级的可用配置 {} (ID: {})，正在切换...",
-                                            highest_priority.1,
-                                            highest_priority_id
+                                            "🔄 发现更高权重的可用配置 {} (ID: {}, 权重: {:.4})，正在切换...",
+                                            highest_weight.1,
+                                            highest_weight_id,
+                                            highest_weight.2
                                         );
 
                                         // 更新 ProxyService 的当前配置
                                         if let Err(e) = db_pool.with_connection(|conn| {
                                             conn.execute(
                                                 "UPDATE ProxyService SET current_config_id = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
-                                                params![highest_priority_id],
+                                                params![highest_weight_id],
                                             )
                                             .map_err(|e| AppError::DatabaseError {
                                                 message: format!("更新 ProxyService 失败: {}", e),
                                             })
                                         }) {
-                                            log::error!("切换到高优先级配置失败: {}", e);
+                                            log::error!("切换到高权重配置失败: {}", e);
                                         } else {
                                             log::info!(
-                                                "✅ 已自动切换到高优先级配置: {} (ID: {})",
-                                                highest_priority.1,
-                                                highest_priority_id
+                                                "✅ 已自动切换到高权重配置: {} (ID: {}, 权重: {:.4})",
+                                                highest_weight.1,
+                                                highest_weight_id,
+                                                highest_weight.2
                                             );
 
                                             // 🔧 关键修复：调用回调通知 ProxyServer 更新内存配置
@@ -428,9 +444,9 @@ impl HealthCheckScheduler {
                                             if let Some(cb) = callback.as_ref() {
                                                 log::info!(
                                                     "📡 调用切换回调，通知 ProxyServer 更新内存配置: {}",
-                                                    highest_priority_id
+                                                    highest_weight_id
                                                 );
-                                                cb(highest_priority_id);
+                                                cb(highest_weight_id);
                                             } else {
                                                 log::warn!(
                                                     "⚠️ 健康检查切换回调未设置，ProxyServer 内存配置可能未更新"
@@ -451,8 +467,11 @@ impl HealthCheckScheduler {
         Ok(())
     }
 
+    /// 健康检查超时时间（秒）- 比 API 测试短，用于快速检测服务可用性
+    const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
+
     /// 检查单个配置的健康状态
-    /// 使用与真实 Claude Code 完全相同的请求格式
+    /// 使用 /v1/health 端点进行轻量级健康检查
     async fn check_single_config(
         server_url: &str,
         api_key: &str,
@@ -464,7 +483,7 @@ impl HealthCheckScheduler {
         log::info!("🔑 API Key: {}...{}", &api_key[..8.min(api_key.len())], &api_key[api_key.len().saturating_sub(4)..]);
 
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(TEST_REQUEST_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(Self::HEALTH_CHECK_TIMEOUT_SECS))
             .build()
             .map_err(|e| {
                 log::error!("❌ 创建 HTTP 客户端失败: {}", e);
@@ -475,21 +494,20 @@ impl HealthCheckScheduler {
                 )
             })?;
 
-        // 使用共享的测试请求构建器
-        let url = format!("{}/v1/messages", server_url.trim_end_matches('/'));
-        let request_body = build_test_request_body();
+        // 使用 /v1/health 端点进行轻量级健康检查
+        let url = format!("{}/v1/health", server_url.trim_end_matches('/'));
 
-        log::info!("📤 测试 API 端点: {}", url);
-        log::info!("⏱️  超时配置: {}s", TEST_REQUEST_TIMEOUT_SECS);
+        log::info!("📤 健康检查端点: {}", url);
+        log::info!("⏱️  超时配置: {}s", Self::HEALTH_CHECK_TIMEOUT_SECS);
         log::info!("🚀 正在发送健康检查请求...");
 
         let start_time = std::time::Instant::now();
 
-        // 使用共享的请求头构建器
-        let request_builder = client.post(&url);
-        let request_builder = add_claude_code_headers(request_builder, api_key);
-        let response = request_builder
-            .json(&request_body)
+        // 发送 GET 请求到 /v1/health 端点，携带 API Key 用于认证
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("x-api-key", api_key)
             .send()
             .await;
 
@@ -501,11 +519,11 @@ impl HealthCheckScheduler {
                 log::info!("📥 收到响应 (耗时 {:.2}s)", latency_ms as f64 / 1000.0);
                 log::info!("📥 HTTP 状态码: {}", status_code);
 
+                // 2xx 状态码表示服务健康
                 if resp.status().is_success() {
-                    // 读取响应体
                     let body = resp.text().await.unwrap_or_default();
                     log::info!("📥 响应体大小: {} 字节", body.len());
-                    log::debug!("响应体内容: {}", if body.len() > 500 { format!("{}...(截断)", &body[..500]) } else { body.clone() });
+                    log::debug!("响应体内容: {}", if body.len() > 200 { format!("{}...(截断)", &body[..200]) } else { body.clone() });
 
                     log::info!(
                         "✅ 健康检查成功 - 状态码: {}, 延迟: {}ms",
@@ -514,137 +532,54 @@ impl HealthCheckScheduler {
                     );
                     log::info!("└──────────────────────────────────────────────────────────────┘");
                     Ok((latency_ms, status_code))
-                } else if status_code == 401 || status_code == 403 {
-                    // 认证问题，但服务可达
-                    let body = resp.text().await.unwrap_or_default();
-                    log::info!("📥 响应体大小: {} 字节", body.len());
-                    log::warn!("响应体内容: {}", body);
-
-                    log::warn!(
-                        "⚠️ 健康检查认证失败 - 状态码: {}, 延迟: {}ms",
-                        status_code,
+                } else if status_code == 404 {
+                    // 404 表示端点不存在，但服务可达，视为健康
+                    log::info!(
+                        "✅ 服务可达（/v1/health 端点不存在，但服务响应正常）- 延迟: {}ms",
                         latency_ms
                     );
                     log::info!("└──────────────────────────────────────────────────────────────┘");
-                    Err((
-                        HealthCheckStatus::Failed,
-                        format!("认证失败: HTTP {}", status_code),
-                        Some(status_code),
-                    ))
+                    Ok((latency_ms, status_code))
+                } else if status_code == 401 || status_code == 403 {
+                    // 认证失败，但服务可达，视为健康（健康检查不关心认证）
+                    log::info!(
+                        "✅ 服务可达（认证未通过，但服务响应正常）- 延迟: {}ms",
+                        latency_ms
+                    );
+                    log::info!("└──────────────────────────────────────────────────────────────┘");
+                    Ok((latency_ms, status_code))
                 } else if status_code == 429 {
                     // 限流，但服务可达
-                    log::warn!(
-                        "⚠️ 健康检查被限流 - 状态码: {}, 延迟: {}ms (服务可达)",
+                    log::info!(
+                        "✅ 服务可达（被限流，但服务响应正常）- 延迟: {}ms",
+                        latency_ms
+                    );
+                    log::info!("└──────────────────────────────────────────────────────────────┘");
+                    Ok((latency_ms, status_code))
+                } else if status_code >= 500 {
+                    // 5xx 服务器错误，视为不健康
+                    let error_body = resp.text().await.unwrap_or_default();
+                    log::error!(
+                        "❌ 服务器错误 - 状态码: {}, 延迟: {}ms",
+                        status_code,
+                        latency_ms
+                    );
+                    log::warn!("响应体: {}", error_body);
+                    log::info!("└──────────────────────────────────────────────────────────────┘");
+                    Err((
+                        HealthCheckStatus::Failed,
+                        format!("服务器错误: HTTP {}", status_code),
+                        Some(status_code),
+                    ))
+                } else {
+                    // 其他状态码（如 400），服务可达
+                    log::info!(
+                        "✅ 服务可达（HTTP {}）- 延迟: {}ms",
                         status_code,
                         latency_ms
                     );
                     log::info!("└──────────────────────────────────────────────────────────────┘");
-                    // 限流也算成功，因为服务是可达的
                     Ok((latency_ms, status_code))
-                } else {
-                    // 其他错误，读取响应体以获取详细错误信息
-                    let error_body = resp.text().await.unwrap_or_else(|_| "无法读取响应体".to_string());
-                    log::info!("📥 响应体大小: {} 字节", error_body.len());
-                    log::warn!("响应体内容: {}", error_body);
-
-                    // 检查是否是"服务可达但请求被拒绝"的场景
-                    // 这些情况说明服务本身是正常的，只是健康检查请求不被接受
-                    let lower_body = error_body.to_lowercase();
-
-                    // 场景1: Claude Code 专用限制
-                    let is_claude_code_only = lower_body.contains("only authorized for use with claude code")
-                        || lower_body.contains("暂不支持非 claude code")
-                        || lower_body.contains("only for claude code")
-                        || lower_body.contains("claude code only")
-                        || lower_body.contains("仅支持 claude code")
-                        || lower_body.contains("仅限 claude code");
-
-                    // 场景2: 请求格式/参数问题（服务可达，只是请求不符合要求）
-                    let is_request_format_issue =
-                        // 模型不存在/不支持
-                        (lower_body.contains("model") && (
-                            lower_body.contains("not found")
-                            || lower_body.contains("does not exist")
-                            || lower_body.contains("not supported")
-                            || lower_body.contains("不存在")
-                            || lower_body.contains("不支持")
-                        ))
-                        // 参数验证失败
-                        || lower_body.contains("invalid_request_error")
-                        || lower_body.contains("validation error")
-                        || lower_body.contains("参数错误")
-                        || lower_body.contains("参数无效");
-
-                    // 场景3: 配额/余额问题（服务可达，账户问题）
-                    let is_quota_issue = lower_body.contains("quota")
-                        || lower_body.contains("credit")
-                        || lower_body.contains("balance")
-                        || lower_body.contains("余额")
-                        || lower_body.contains("配额")
-                        || lower_body.contains("额度");
-
-                    // 场景4: 需要特定权限/功能未开通
-                    let is_permission_issue = lower_body.contains("permission")
-                        || lower_body.contains("not enabled")
-                        || lower_body.contains("not activated")
-                        || lower_body.contains("未开通")
-                        || lower_body.contains("未启用")
-                        || lower_body.contains("无权限");
-
-                    // 场景5: 请求内容被拒绝（内容审核等）
-                    let is_content_rejected = lower_body.contains("content policy")
-                        || lower_body.contains("content filter")
-                        || lower_body.contains("safety")
-                        || lower_body.contains("内容违规")
-                        || lower_body.contains("内容审核");
-
-                    // 400 错误且符合以上任一场景，视为服务可达
-                    if status_code == 400 && (is_claude_code_only || is_request_format_issue || is_quota_issue || is_permission_issue || is_content_rejected) {
-                        let reason = if is_claude_code_only {
-                            "Claude Code 专用限制"
-                        } else if is_request_format_issue {
-                            "请求格式限制"
-                        } else if is_quota_issue {
-                            "配额/余额限制"
-                        } else if is_permission_issue {
-                            "权限限制"
-                        } else {
-                            "内容审核限制"
-                        };
-
-                        log::info!(
-                            "✅ 服务可达（{}）- 延迟: {}ms",
-                            reason,
-                            latency_ms
-                        );
-                        log::info!("└──────────────────────────────────────────────────────────────┘");
-                        return Ok((latency_ms, status_code));
-                    }
-
-                    // 解析错误信息
-                    let error_msg = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&error_body) {
-                        if let Some(err) = json.get("error") {
-                            if let Some(msg) = err.get("message").and_then(|m| m.as_str()) {
-                                format!("HTTP {}: {}", status_code, msg)
-                            } else {
-                                format!("HTTP {}: {}", status_code, err)
-                            }
-                        } else if let Some(msg) = json.get("message").and_then(|m| m.as_str()) {
-                            format!("HTTP {}: {}", status_code, msg)
-                        } else {
-                            format!("HTTP {}", status_code)
-                        }
-                    } else {
-                        format!("HTTP {}", status_code)
-                    };
-
-                    log::error!("❌ 健康检查失败: {}", error_msg);
-                    log::info!("└──────────────────────────────────────────────────────────────┘");
-                    Err((
-                        HealthCheckStatus::Failed,
-                        error_msg,
-                        Some(status_code),
-                    ))
                 }
             }
             Err(e) => {
@@ -656,12 +591,20 @@ impl HealthCheckScheduler {
                         format!("请求超时: {}", e),
                         None,
                     ))
+                } else if e.is_connect() {
+                    log::error!("❌ 连接失败: {}", e);
+                    log::info!("└──────────────────────────────────────────────────────────────┘");
+                    Err((
+                        HealthCheckStatus::Failed,
+                        format!("连接失败: {}", e),
+                        None,
+                    ))
                 } else {
                     log::error!("❌ 健康检查失败: {}", e);
                     log::info!("└──────────────────────────────────────────────────────────────┘");
                     Err((
                         HealthCheckStatus::Failed,
-                        format!("连接失败: {}", e),
+                        format!("请求失败: {}", e),
                         None,
                     ))
                 }

@@ -1,5 +1,6 @@
 use crate::models::api_config::{ApiConfig, CreateApiConfigInput, UpdateApiConfigInput, VendorCategory, ProviderType};
 use crate::models::error::{AppError, AppResult};
+use crate::utils::time::now_rfc3339;
 use rusqlite::{Connection, Row};
 
 /// API 配置管理服务
@@ -723,7 +724,7 @@ impl ApiConfigService {
     /// - `Ok(())`: 更新成功
     /// - `Err(AppError)`: 更新失败
     pub fn update_latency(conn: &Connection, config_id: i64, latency_ms: i32) -> AppResult<()> {
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = now_rfc3339();
 
         conn.execute(
             "UPDATE ApiConfig SET last_test_at = ?1, last_latency_ms = ?2, updated_at = ?3 WHERE id = ?4",
@@ -831,7 +832,7 @@ impl ApiConfigService {
     /// - `Ok(())`: 更新成功
     /// - `Err(AppError)`: 更新失败
     pub fn record_success(conn: &Connection, config_id: i64) -> AppResult<()> {
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = now_rfc3339();
 
         conn.execute(
             "UPDATE ApiConfig SET
@@ -951,7 +952,7 @@ mod tests {
                 name TEXT NOT NULL UNIQUE,
                 description TEXT,
                 auto_switch_enabled BOOLEAN NOT NULL DEFAULT 0,
-                latency_threshold_ms INTEGER NOT NULL DEFAULT 30000,
+                latency_threshold_ms INTEGER NOT NULL DEFAULT 100000,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )",
@@ -992,7 +993,7 @@ mod tests {
             name: "测试分组".to_string(),
             description: Some("测试用".to_string()),
             auto_switch_enabled: false,
-            latency_threshold_ms: 30000,
+            latency_threshold_ms: 100000,
             created_at: chrono::Local::now().naive_local().to_string(),
             updated_at: chrono::Local::now().naive_local().to_string(),
         };

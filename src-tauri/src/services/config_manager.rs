@@ -386,7 +386,7 @@ mod tests {
                 name TEXT NOT NULL UNIQUE,
                 description TEXT,
                 auto_switch_enabled BOOLEAN NOT NULL DEFAULT 0,
-                latency_threshold_ms INTEGER NOT NULL DEFAULT 30000,
+                latency_threshold_ms INTEGER NOT NULL DEFAULT 100000,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )",
@@ -423,7 +423,7 @@ mod tests {
             name: "测试分组".to_string(),
             description: Some("测试描述".to_string()),
             auto_switch_enabled: false,
-            latency_threshold_ms: 30000,
+            latency_threshold_ms: 100000,
             created_at: chrono::Local::now().naive_local().to_string(),
             updated_at: chrono::Local::now().naive_local().to_string(),
         };
@@ -474,7 +474,7 @@ mod tests {
             name: "测试分组2".to_string(),
             description: Some("第二个分组".to_string()),
             auto_switch_enabled: false,
-            latency_threshold_ms: 30000,
+            latency_threshold_ms: 100000,
             created_at: chrono::Local::now().naive_local().to_string(),
             updated_at: chrono::Local::now().naive_local().to_string(),
         };

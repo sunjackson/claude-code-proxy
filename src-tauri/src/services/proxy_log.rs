@@ -378,7 +378,7 @@ impl ProxyRequestLogService {
                         SUM(request_body_size) as total_request_size,
                         SUM(response_body_size) as total_response_size
                     FROM ProxyRequestLog
-                    WHERE request_at >= datetime('now', ? || ' hours')
+                    WHERE request_at >= datetime('now', 'localtime', ? || ' hours')
                     "#,
                     params![format!("-{}", hours)],
                     |row| {
@@ -428,7 +428,7 @@ impl ProxyRequestLogService {
                     response_body = ?,
                     response_body_size = ?,
                     stream_chunk_count = ?,
-                    response_end_at = datetime('now')
+                    response_end_at = datetime('now', 'localtime')
                 WHERE id = ?
                 "#,
                 params![

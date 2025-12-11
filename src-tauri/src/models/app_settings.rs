@@ -99,8 +99,8 @@ impl AppSettings {
             return Err("延迟阈值必须大于 0".to_string());
         }
 
-        if threshold_ms > 60000 {
-            return Err("延迟阈值不能超过 60000 毫秒 (1分钟)".to_string());
+        if threshold_ms > 100000 {
+            return Err("延迟阈值不能超过 100000 毫秒".to_string());
         }
 
         Ok(())
@@ -166,7 +166,7 @@ impl Default for AppSettings {
         AppSettings {
             id: Self::SINGLETON_ID,
             language: Language::ZhCn,
-            default_latency_threshold_ms: 30000,
+            default_latency_threshold_ms: 100000,
             default_proxy_port: default_proxy_port_i32(),
             remote_recommendation_url: None,
             local_recommendation_path: None,
@@ -218,10 +218,13 @@ mod tests {
 
     #[test]
     fn test_default_settings() {
+        use crate::utils::constants::default_proxy_port_i32;
+
         let settings = AppSettings::default();
         assert_eq!(settings.id, AppSettings::SINGLETON_ID);
         assert_eq!(settings.language, Language::ZhCn);
-        assert_eq!(settings.default_proxy_port, 25341);
-        assert_eq!(settings.default_latency_threshold_ms, 30000);
+        // Port is dynamically set based on build mode
+        assert_eq!(settings.default_proxy_port, default_proxy_port_i32());
+        assert_eq!(settings.default_latency_threshold_ms, 100000);
     }
 }

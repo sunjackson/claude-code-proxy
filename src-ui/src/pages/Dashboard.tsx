@@ -50,7 +50,7 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'monitor'>('list');
-  const [testingConfigId, setTestingConfigId] = useState<number | null>(null);
+  const [testingConfigIds, setTestingConfigIds] = useState<Set<number>>(new Set());
   const [queryingBalanceId, setQueryingBalanceId] = useState<number | null>(null);
   const [togglingEnabledId, setTogglingEnabledId] = useState<number | null>(null);
   const [showSwitchHistory, setShowSwitchHistory] = useState(false);
@@ -195,6 +195,19 @@ const Dashboard: React.FC = () => {
       // 同步健康检查状态到全局 store
       if (healthStatus) {
         setHealthCheckStatus(healthStatus);
+      }
+
+      // 检查是否有分组启用了健康检查，如果调度器未运行则自动启动
+      const enabledGroups = groupsList.filter(g => g.health_check_enabled);
+      if (enabledGroups.length > 0 && (!healthStatus || !healthStatus.running)) {
+        // 使用第一个启用分组的间隔时间启动调度器
+        const interval = enabledGroups[0].health_check_interval_sec;
+        try {
+          await proxyApi.startHealthCheck(interval);
+          console.log(`[Dashboard] 自动启动健康检查调度器，间隔: ${interval}秒`);
+        } catch (err) {
+          console.warn('[Dashboard] 自动启动健康检查调度器失败:', err);
+        }
       }
 
       if (logs.length === 0 && configsList.length >= 2) {
@@ -371,6 +384,21 @@ const Dashboard: React.FC = () => {
         currentGroup.health_check_interval_sec
       );
 
+      // 启动或停止健康检查调度器
+      if (newEnabled) {
+        // 启动调度器，使用分组配置的检测间隔
+        await proxyApi.startHealthCheck(currentGroup.health_check_interval_sec);
+      } else {
+        // 检查是否还有其他分组启用了健康检查
+        const otherEnabledGroups = groups.filter(g =>
+          g.id !== currentGroup.id && g.health_check_enabled
+        );
+        // 如果没有其他分组启用，则停止调度器
+        if (otherEnabledGroups.length === 0) {
+          await proxyApi.stopHealthCheck();
+        }
+      }
+
       // 重新加载数据
       await loadData();
 
@@ -410,6 +438,12 @@ const Dashboard: React.FC = () => {
         currentGroup.health_check_enabled,
         newInterval
       );
+
+      // 如果健康检查已启用，重启调度器以应用新间隔
+      if (currentGroup.health_check_enabled) {
+        await proxyApi.stopHealthCheck();
+        await proxyApi.startHealthCheck(newInterval);
+      }
 
       // 重新加载数据
       await loadData();
@@ -609,8 +643,15 @@ const Dashboard: React.FC = () => {
   };
 
   const handleTestConfig = async (config: ApiConfig) => {
+    // 如果已经在测试中，忽略重复点击
+    if (testingConfigIds.has(config.id)) {
+      return;
+    }
+
+    // 添加到测试集合（独立进程，不阻塞其他测试）
+    setTestingConfigIds(prev => new Set(prev).add(config.id));
+
     try {
-      setTestingConfigId(config.id);
       const result = await testApi.testApiConfig(config.id);
 
       // 使用 is_available 判断可用性（与后端 TestResult::is_available() 保持一致）
@@ -645,6 +686,10 @@ const Dashboard: React.FC = () => {
         '测试结果',
         <div className="space-y-2">
           <div className="flex items-center gap-2">
+            <span className="text-gray-400">配置:</span>
+            <span className="text-gray-300">{config.name}</span>
+          </div>
+          <div className="flex items-center gap-2">
             <span className="text-gray-400">状态:</span>
             <span className={isAvailable ? 'text-green-400' : 'text-red-400'}>
               {isAvailable ? '✅ 可用' : '❌ 不可用'}
@@ -667,7 +712,12 @@ const Dashboard: React.FC = () => {
       console.error('测试配置失败:', err);
       showMessage('error', '测试失败', err instanceof Error ? err.message : '未知错误');
     } finally {
-      setTestingConfigId(null);
+      // 从测试集合中移除
+      setTestingConfigIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(config.id);
+        return newSet;
+      });
     }
   };
 
@@ -1528,7 +1578,7 @@ const Dashboard: React.FC = () => {
                           isJustSwitchedTarget={isJustSwitchedTarget}
                           isJustSwitchedSource={isJustSwitchedSource}
                           switchReason={switchState.reason}
-                          testingConfigId={testingConfigId}
+                          testingConfigIds={testingConfigIds}
                           queryingBalanceId={queryingBalanceId}
                           actionLoading={actionLoading}
                           togglingEnabledId={togglingEnabledId}

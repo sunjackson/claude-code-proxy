@@ -108,8 +108,8 @@ impl ConfigGroup {
             return Err("延迟阈值必须大于 0".to_string());
         }
 
-        if threshold_ms > 60000 {
-            return Err("延迟阈值不能超过 60000 毫秒 (1分钟)".to_string());
+        if threshold_ms > 100000 {
+            return Err("延迟阈值不能超过 100000 毫秒".to_string());
         }
 
         Ok(())
@@ -240,10 +240,10 @@ mod tests {
     fn test_validate_latency_threshold() {
         assert!(ConfigGroup::validate_latency_threshold(3000).is_ok());
         assert!(ConfigGroup::validate_latency_threshold(1).is_ok());
-        assert!(ConfigGroup::validate_latency_threshold(60000).is_ok());
+        assert!(ConfigGroup::validate_latency_threshold(100000).is_ok());
         assert!(ConfigGroup::validate_latency_threshold(0).is_err());
         assert!(ConfigGroup::validate_latency_threshold(-100).is_err());
-        assert!(ConfigGroup::validate_latency_threshold(60001).is_err());
+        assert!(ConfigGroup::validate_latency_threshold(100001).is_err());
     }
 
     #[test]
@@ -253,11 +253,13 @@ mod tests {
             name: "未分组".to_string(),
             description: None,
             auto_switch_enabled: false,
-            latency_threshold_ms: 30000,
+            latency_threshold_ms: 100000,
             retry_count: 3,
             retry_base_delay_ms: 2000,
             retry_max_delay_ms: 8000,
             rate_limit_delay_ms: 30000,
+            health_check_enabled: true,
+            health_check_interval_sec: 60,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };
@@ -273,11 +275,13 @@ mod tests {
             name: "工作".to_string(),
             description: None,
             auto_switch_enabled: false,
-            latency_threshold_ms: 30000,
+            latency_threshold_ms: 100000,
             retry_count: 3,
             retry_base_delay_ms: 2000,
             retry_max_delay_ms: 8000,
             rate_limit_delay_ms: 30000,
+            health_check_enabled: true,
+            health_check_interval_sec: 60,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };
@@ -293,6 +297,8 @@ mod tests {
             description: Some("测试描述".to_string()),
             auto_switch_enabled: Some(true),
             latency_threshold_ms: Some(5000),
+            health_check_enabled: Some(true),
+            health_check_interval_sec: Some(60),
         };
         assert!(valid_input.validate().is_ok());
 
@@ -301,6 +307,8 @@ mod tests {
             description: None,
             auto_switch_enabled: None,
             latency_threshold_ms: None,
+            health_check_enabled: None,
+            health_check_interval_sec: None,
         };
         assert!(invalid_input.validate().is_err());
     }

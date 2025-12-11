@@ -92,13 +92,13 @@ pub struct ConfigHealthSummary {
     pub config_id: i64,
     /// 配置名称
     pub config_name: String,
-    /// 最近24小时的小时统计
+    /// 当天小时级别统计 (0:00-23:00)
     pub hourly_stats: Vec<HealthCheckHourlyStats>,
     /// 最后一次检查记录
     pub last_check: Option<HealthCheckRecord>,
-    /// 24小时可用率(0-100)
+    /// 当天可用率(0-100)，字段名保留 24h 以保持 API 兼容性
     pub availability_24h: f64,
-    /// 24小时平均延迟
+    /// 当天平均延迟，字段名保留 24h 以保持 API 兼容性
     pub avg_latency_24h: Option<f64>,
 }
 

@@ -11,6 +11,7 @@ use crate::db::DbPool;
 use crate::models::error::AppResult;
 use crate::models::switch_log::SwitchLogDetail;
 use crate::services::auto_switch::AutoSwitchService;
+use crate::utils::time::now_rfc3339;
 use std::sync::Arc;
 use tauri::State;
 
@@ -55,7 +56,7 @@ pub async fn toggle_auto_switch(
     // 更新分组的自动切换设置
     db_pool.with_connection(|conn| {
         use rusqlite::params;
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = now_rfc3339();
 
         conn.execute(
             "UPDATE ConfigGroup SET auto_switch_enabled = ?1, updated_at = ?2 WHERE id = ?3",

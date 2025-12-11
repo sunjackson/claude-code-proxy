@@ -6,6 +6,7 @@
 use crate::models::error::{AppError, AppResult};
 use crate::models::provider_preset::{ProviderConfig, ProviderPreset};
 use crate::models::recommended_service::{RecommendedService, ServiceSource};
+use crate::utils::time::now_rfc3339;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -156,7 +157,7 @@ impl RecommendationService {
             message: format!("读取响应内容失败: {}", e),
         })?;
 
-        let loaded_at = chrono::Utc::now().to_rfc3339();
+        let loaded_at = now_rfc3339();
 
         // 优先尝试解析为 ProviderConfig (新格式,与 config/providers.json 一致)
         if let Ok(provider_config) = serde_json::from_str::<ProviderConfig>(&content) {
@@ -201,7 +202,7 @@ impl RecommendationService {
 
     /// 从本地文件或内嵌配置加载推荐服务
     fn load_local(&self) -> AppResult<Vec<RecommendedService>> {
-        let loaded_at = chrono::Utc::now().to_rfc3339();
+        let loaded_at = now_rfc3339();
 
         // 如果配置了本地路径，优先从本地文件加载
         if let Some(path) = self.local_path.as_ref() {

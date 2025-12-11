@@ -48,7 +48,7 @@ impl HealthCheckService {
                 r#"
                 DELETE FROM HealthCheckRecord
                 WHERE config_id = ?1
-                  AND check_at < datetime('now', '-24 hours')
+                  AND check_at < datetime('now', 'localtime', '-24 hours')
                 "#,
                 rusqlite::params![input.config_id],
             )
@@ -135,18 +135,19 @@ impl HealthCheckService {
         Ok(records)
     }
 
-    /// 获取小时级别统计数据
+    /// 获取小时级别统计数据（当天 0:00 - 23:59）
+    /// hours 参数保留以保持 API 兼容性，但实际查询当天数据
     pub fn get_hourly_stats(
         conn: &Connection,
         config_id: i64,
-        hours: i64,
+        _hours: i64,
     ) -> AppResult<Vec<HealthCheckHourlyStats>> {
         let mut stmt = conn
             .prepare(
                 r#"
             SELECT
                 config_id,
-                strftime('%Y-%m-%d %H:00:00', check_at) as hour,
+                strftime('%Y-%m-%d %H:00:00', check_at, 'localtime') as hour,
                 COUNT(*) as total_checks,
                 SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
@@ -156,9 +157,9 @@ impl HealthCheckService {
                 MAX(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END) as max_latency_ms
             FROM HealthCheckRecord
             WHERE config_id = ?1
-              AND check_at >= datetime('now', '-' || ?2 || ' hours')
-            GROUP BY config_id, strftime('%Y-%m-%d %H:00:00', check_at)
-            ORDER BY hour DESC
+              AND date(check_at, 'localtime') = date('now', 'localtime')
+            GROUP BY config_id, strftime('%Y-%m-%d %H:00:00', check_at, 'localtime')
+            ORDER BY hour ASC
             "#,
             )
             .map_err(|e| AppError::DatabaseError {
@@ -166,7 +167,7 @@ impl HealthCheckService {
             })?;
 
         let stats = stmt
-            .query_map([config_id, hours], |row| {
+            .query_map([config_id], |row| {
                 Ok(HealthCheckHourlyStats {
                     config_id: row.get(0)?,
                     hour: row.get(1)?,
@@ -242,11 +243,12 @@ impl HealthCheckService {
         })
     }
 
-    /// 计算可用率和平均延迟
+    /// 计算当天可用率和平均延迟
+    /// hours 参数保留以保持 API 兼容性，但实际计算当天数据
     fn calculate_availability(
         conn: &Connection,
         config_id: i64,
-        hours: i64,
+        _hours: i64,
     ) -> AppResult<(f64, Option<f64>)> {
         let result: (i64, i64, Option<f64>) = conn
             .query_row(
@@ -257,9 +259,9 @@ impl HealthCheckService {
                 AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END) as avg_latency
             FROM HealthCheckRecord
             WHERE config_id = ?1
-              AND check_at >= datetime('now', '-' || ?2 || ' hours')
+              AND date(check_at, 'localtime') = date('now', 'localtime')
             "#,
-                [config_id, hours],
+                [config_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .map_err(|e| AppError::DatabaseError {
@@ -282,7 +284,7 @@ impl HealthCheckService {
             .execute(
                 r#"
             DELETE FROM HealthCheckRecord
-            WHERE check_at < datetime('now', '-' || ?1 || ' days')
+            WHERE check_at < datetime('now', 'localtime', '-' || ?1 || ' days')
             "#,
                 [retain_days],
             )

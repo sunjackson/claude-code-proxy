@@ -1,6 +1,8 @@
 use crate::models::config_backup::{ConfigBackup, Platform};
 use crate::models::error::{AppError, AppResult};
 use crate::utils::paths;
+use crate::utils::time::now_rfc3339;
+use chrono::Local;
 use std::fs;
 use std::path::PathBuf;
 
@@ -74,7 +76,7 @@ impl BackupService {
                             let modified = metadata.modified().map_err(|e| AppError::IoError {
                                 message: format!("获取文件修改时间失败: {}", e),
                             })?;
-                            let backup_time = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+                            let backup_time = chrono::DateTime::<Local>::from(modified).to_rfc3339();
 
                             log::info!(
                                 "备份时间已更新: {} -> {}",
@@ -116,7 +118,7 @@ impl BackupService {
                             let modified = metadata.modified().map_err(|e| AppError::IoError {
                                 message: format!("获取文件修改时间失败: {}", e),
                             })?;
-                            let backup_time = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+                            let backup_time = chrono::DateTime::<Local>::from(modified).to_rfc3339();
 
                             log::info!(
                                 "备份时间已更新: {} -> {}",
@@ -183,7 +185,7 @@ impl BackupService {
         };
 
         // 创建备份记录
-        let backup_time = chrono::Utc::now().to_rfc3339();
+        let backup_time = now_rfc3339();
         let backup = ConfigBackup {
             id: 0, // 数据库会自动分配
             file_path: backup_path.to_string_lossy().to_string(),
@@ -265,7 +267,7 @@ impl BackupService {
             })?;
 
             // 转换为 RFC3339 时间
-            let backup_time = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339();
+            let backup_time = chrono::DateTime::<Local>::from(modified).to_rfc3339();
 
             // 读取备份内容
             let content = fs::read_to_string(&path).unwrap_or_default();

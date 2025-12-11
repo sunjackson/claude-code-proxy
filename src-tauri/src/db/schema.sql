@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS ConfigGroup (
     name TEXT NOT NULL UNIQUE,
     description TEXT,
     auto_switch_enabled BOOLEAN NOT NULL DEFAULT 0,
-    latency_threshold_ms INTEGER NOT NULL DEFAULT 30000 CHECK(latency_threshold_ms > 0 AND latency_threshold_ms <= 60000),
+    latency_threshold_ms INTEGER NOT NULL DEFAULT 100000 CHECK(latency_threshold_ms > 0 AND latency_threshold_ms <= 100000),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -187,7 +187,7 @@ CREATE INDEX IF NOT EXISTS idx_env_active ON EnvironmentVariable(is_active);
 CREATE TABLE IF NOT EXISTS AppSettings (
     id INTEGER PRIMARY KEY CHECK(id = 1),  -- 单例: 固定 id=1
     language TEXT NOT NULL DEFAULT 'zh-CN' CHECK(language IN ('zh-CN', 'en-US')),
-    default_latency_threshold_ms INTEGER NOT NULL DEFAULT 30000 CHECK(default_latency_threshold_ms > 0 AND default_latency_threshold_ms <= 60000),
+    default_latency_threshold_ms INTEGER NOT NULL DEFAULT 100000 CHECK(default_latency_threshold_ms > 0 AND default_latency_threshold_ms <= 100000),
     default_proxy_port INTEGER NOT NULL DEFAULT 25341 CHECK(default_proxy_port >= 1 AND default_proxy_port <= 65535),
     remote_recommendation_url TEXT,
     local_recommendation_path TEXT,

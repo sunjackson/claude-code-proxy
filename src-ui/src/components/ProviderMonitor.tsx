@@ -180,11 +180,11 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
     };
 
     return (
-      <div className="flex flex-wrap gap-[2px]">
+      <div className="flex flex-wrap gap-[3px]">
         {cells.map((item, i) => (
           <div
             key={i}
-            className={`w-[6px] h-[6px] rounded-[1px] ${getColor(item)}`}
+            className={`w-[8px] h-[8px] rounded-[2px] ${getColor(item)}`}
             title={item ? `${item.latency}ms - ${item.success ? '成功' : '失败'}` : ''}
           />
         ))}
@@ -215,37 +215,37 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
             </button>
 
             <div>
-              <h1 className="text-lg font-bold text-yellow-500">服务商监控 · {currentGroupName}</h1>
-              <p className="text-xs text-gray-500">{filteredConfigs.length} 个配置</p>
+              <h1 className="text-xl font-bold text-yellow-500">服务商监控 · {currentGroupName}</h1>
+              <p className="text-sm text-gray-500">{filteredConfigs.length} 个配置</p>
             </div>
 
             {/* 核心指标 */}
             <div className="flex items-center gap-6 pl-5 border-l border-gray-800">
               <div className="text-center">
-                <div className="text-xl font-bold text-green-400">{summary.online}/{summary.total}</div>
-                <div className="text-[10px] text-gray-500">在线</div>
+                <div className="text-2xl font-bold text-green-400">{summary.online}/{summary.total}</div>
+                <div className="text-xs text-gray-500">在线</div>
               </div>
               <div className="text-center">
-                <div className={`text-xl font-bold ${getLatencyColor(summary.avgLatency)}`}>
-                  {summary.avgLatency ?? '-'}<span className="text-xs text-gray-500">ms</span>
+                <div className={`text-2xl font-bold ${getLatencyColor(summary.avgLatency)}`}>
+                  {summary.avgLatency ?? '-'}<span className="text-sm text-gray-500">ms</span>
                 </div>
-                <div className="text-[10px] text-gray-500">平均延迟</div>
+                <div className="text-xs text-gray-500">平均延迟</div>
               </div>
               <div className="text-center">
-                <div className="text-xl font-bold text-cyan-400">{summary.totalRequests}</div>
-                <div className="text-[10px] text-gray-500">请求</div>
+                <div className="text-2xl font-bold text-cyan-400">{summary.totalRequests}</div>
+                <div className="text-xs text-gray-500">请求</div>
               </div>
             </div>
           </div>
 
           {/* 右侧 */}
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="w-3.5 h-3.5 rounded bg-gray-700 border-gray-600 text-yellow-500 focus:ring-0"
+                className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-yellow-500 focus:ring-0"
               />
               自动刷新
             </label>
@@ -255,7 +255,7 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
               disabled={refreshing}
               className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
             >
-              <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
@@ -263,7 +263,7 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
             <button
               onClick={handleTestAll}
               disabled={testingAll}
-              className="px-3 py-1.5 bg-yellow-500 text-black text-sm font-bold rounded-lg hover:bg-yellow-400 disabled:opacity-50"
+              className="px-4 py-2 bg-yellow-500 text-black text-sm font-bold rounded-lg hover:bg-yellow-400 disabled:opacity-50"
             >
               {testingAll ? '测试中...' : '测试全部'}
             </button>
@@ -272,13 +272,13 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
       </div>
 
       {/* 配置列表 */}
-      <div className="p-4">
+      <div className="p-6">
         {loading ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">加载中...</div>
+          <div className="flex items-center justify-center h-64 text-gray-500 text-base">加载中...</div>
         ) : sortedStats.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">暂无配置</div>
+          <div className="flex items-center justify-center h-64 text-gray-500 text-base">暂无配置</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {sortedStats.map((stats) => {
               const testData = stats.testHistory.map(t => ({ success: t.status === 'success', latency: t.latency_ms || 0 }));
               const requestData = stats.proxyLogs.map(l => ({ success: l.is_success, latency: l.latency_ms }));
@@ -286,49 +286,49 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
               return (
                 <div
                   key={stats.config.id}
-                  className="bg-gray-900/60 border border-gray-800 rounded-lg p-3 hover:border-gray-700 transition-colors"
+                  className="bg-gray-900/60 border border-gray-800 rounded-lg p-4 hover:border-gray-700 transition-colors"
                 >
                   {/* 头部 */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${stats.config.is_available ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className="text-sm text-white font-medium truncate flex-1" title={stats.config.name}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${stats.config.is_available ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span className="text-base text-white font-medium truncate flex-1" title={stats.config.name}>
                       {stats.config.name}
                     </span>
                   </div>
 
                   {/* 指标 */}
-                  <div className="grid grid-cols-4 gap-1 mb-2 text-center">
+                  <div className="grid grid-cols-4 gap-2 mb-3 text-center">
                     <div>
-                      <div className={`text-sm font-bold ${getLatencyColor(stats.avgLatency)}`}>{stats.avgLatency ?? '-'}</div>
-                      <div className="text-[9px] text-gray-600">测试</div>
+                      <div className={`text-lg font-bold ${getLatencyColor(stats.avgLatency)}`}>{stats.avgLatency ?? '-'}</div>
+                      <div className="text-xs text-gray-500">测试</div>
                     </div>
                     <div>
-                      <div className={`text-sm font-bold ${stats.successRate >= 90 ? 'text-green-400' : stats.successRate >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      <div className={`text-lg font-bold ${stats.successRate >= 90 ? 'text-green-400' : stats.successRate >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {stats.successRate}%
                       </div>
-                      <div className="text-[9px] text-gray-600">成功</div>
+                      <div className="text-xs text-gray-500">成功</div>
                     </div>
                     <div>
-                      <div className={`text-sm font-bold ${getLatencyColor(stats.proxyAvgLatency)}`}>{stats.proxyAvgLatency ?? '-'}</div>
-                      <div className="text-[9px] text-gray-600">请求</div>
+                      <div className={`text-lg font-bold ${getLatencyColor(stats.proxyAvgLatency)}`}>{stats.proxyAvgLatency ?? '-'}</div>
+                      <div className="text-xs text-gray-500">请求</div>
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-cyan-400">{stats.proxyTotalRequests}</div>
-                      <div className="text-[9px] text-gray-600">次数</div>
+                      <div className="text-lg font-bold text-cyan-400">{stats.proxyTotalRequests}</div>
+                      <div className="text-xs text-gray-500">次数</div>
                     </div>
                   </div>
 
                   {/* 热力图 */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div>
-                      <div className="flex items-center justify-between text-[9px] text-gray-500 mb-0.5">
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                         <span>连通性</span>
                         <span>{stats.totalTests}次</span>
                       </div>
                       {renderHeatmap(testData, 'test')}
                     </div>
                     <div>
-                      <div className="flex items-center justify-between text-[9px] text-gray-500 mb-0.5">
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                         <span>实际请求</span>
                         <span>{stats.proxyTotalRequests}次</span>
                       </div>
@@ -342,11 +342,11 @@ export const ProviderMonitor: React.FC<ProviderMonitorProps> = ({
         )}
 
         {/* 图例 */}
-        <div className="mt-4 flex items-center justify-center gap-4 text-[10px] text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-green-500" />正常</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-yellow-500" />较慢</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500" />失败</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gray-800/40" />无数据</span>
+        <div className="mt-6 flex items-center justify-center gap-6 text-xs text-gray-500">
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500" />正常</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-500" />较慢</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" />失败</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-800/40" />无数据</span>
         </div>
       </div>
     </div>

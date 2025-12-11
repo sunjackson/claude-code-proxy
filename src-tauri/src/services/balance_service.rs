@@ -13,7 +13,7 @@ use crate::db::DbPool;
 use crate::models::balance::{BalanceInfo, BalanceQueryStatus, BalanceResponse};
 use crate::models::error::{AppError, AppResult};
 use crate::services::api_config::ApiConfigService;
-use chrono::Utc;
+use crate::utils::time::now_rfc3339;
 use std::sync::Arc;
 use std::time::Duration;
 use reqwest::Client;
@@ -77,7 +77,7 @@ impl BalanceService {
 
                 // 更新数据库
                 if let Some(bal) = balance {
-                    let now = Utc::now().to_rfc3339();
+                    let now = now_rfc3339();
                     self.db_pool.with_connection(|conn| {
                         Self::update_balance_in_db(
                             conn,
@@ -108,7 +108,7 @@ impl BalanceService {
                     }
                 } else {
                     let error_msg = "无法从响应中提取余额信息".to_string();
-                    let now = Utc::now().to_rfc3339();
+                    let now = now_rfc3339();
                     self.db_pool.with_connection(|conn| {
                         Self::update_balance_in_db(
                             conn,
@@ -138,7 +138,7 @@ impl BalanceService {
             }
             Err(e) => {
                 let error_msg = format!("余额查询失败: {}", e);
-                let now = Utc::now().to_rfc3339();
+                let now = now_rfc3339();
                 self.db_pool.with_connection(|conn| {
                     Self::update_balance_in_db(
                         conn,

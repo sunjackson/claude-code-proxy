@@ -16,14 +16,11 @@ interface HealthMonitorPanelProps {
   checkIntervalSecs: number;
 }
 
-// 获取过去24小时的时间标签
-function getLast24Hours(): string[] {
+// 获取当天0点到23点的时间标签
+function getTodayHours(): string[] {
   const hours: string[] = [];
-  const now = new Date();
-  for (let i = 23; i >= 0; i--) {
-    const d = new Date(now);
-    d.setHours(d.getHours() - i);
-    hours.push(d.getHours().toString().padStart(2, '0') + ':00');
+  for (let i = 0; i <= 23; i++) {
+    hours.push(i.toString().padStart(2, '0') + ':00');
   }
   return hours;
 }
@@ -91,7 +88,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
   const configSummaryMap = new Map<number, ConfigHealthSummary>();
   summaries.forEach(s => configSummaryMap.set(s.config_id, s));
 
-  const hours = getLast24Hours();
+  const hours = getTodayHours();
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -140,7 +137,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">
-            显示过去 24 小时的连通性统计
+            显示今日 (0:00 - 23:00) 的连通性统计
           </span>
         </div>
         <button

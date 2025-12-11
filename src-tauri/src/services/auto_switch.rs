@@ -16,6 +16,7 @@ use crate::models::retry_strategy::RetryStrategy;
 use crate::models::switch_log::{CreateSwitchLogInput, SwitchLogDetail, SwitchReason, ErrorType};
 use crate::services::error_classifier::ErrorClassifier;
 use crate::services::retry_manager::RetryManager;
+use crate::utils::time::now_rfc3339;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
@@ -507,6 +508,7 @@ impl AutoSwitchService {
     ///
     /// # Returns
     /// - Option<i64>: 最佳配置 ID,如果没有则返回 None
+    #[allow(dead_code)]
     pub async fn find_best_config(&self, group_id: i64) -> AppResult<Option<i64>> {
         self.db_pool.with_connection(|conn| {
             use rusqlite::params;
@@ -553,7 +555,7 @@ impl AutoSwitchService {
         self.db_pool.with_connection(|conn| {
             use rusqlite::params;
 
-            let now = chrono::Utc::now().to_rfc3339();
+            let now = now_rfc3339();
 
             conn.execute(
                 "INSERT INTO SwitchLog (
@@ -655,7 +657,7 @@ impl AutoSwitchService {
         self.db_pool.with_connection(|conn| {
             use rusqlite::params;
 
-            let now = chrono::Utc::now().to_rfc3339();
+            let now = now_rfc3339();
 
             conn.execute(
                 "UPDATE ApiConfig SET is_available = 0, updated_at = ?1 WHERE id = ?2",

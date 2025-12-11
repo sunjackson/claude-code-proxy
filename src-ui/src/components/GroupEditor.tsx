@@ -34,7 +34,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
-  const [latencyThresholdMs, setLatencyThresholdMs] = useState(30000);
+  const [latencyThresholdMs, setLatencyThresholdMs] = useState(100000);
   const [healthCheckEnabled, setHealthCheckEnabled] = useState(false);
   const [healthCheckIntervalSec, setHealthCheckIntervalSec] = useState(300);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -53,7 +53,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
       setName('');
       setDescription('');
       setAutoSwitchEnabled(false);
-      setLatencyThresholdMs(30000);
+      setLatencyThresholdMs(100000);
       setHealthCheckEnabled(false);
       setHealthCheckIntervalSec(300);
     }
@@ -70,8 +70,8 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
       newErrors.name = '分组名称不能超过 100 个字符';
     }
 
-    if (latencyThresholdMs < 100 || latencyThresholdMs > 60000) {
-      newErrors.latencyThresholdMs = '延迟阈值必须在 100-60000 毫秒范围内';
+    if (latencyThresholdMs < 100 || latencyThresholdMs > 100000) {
+      newErrors.latencyThresholdMs = '延迟阈值必须在 100-100000 毫秒范围内';
     }
 
     if (healthCheckIntervalSec < 60 || healthCheckIntervalSec > 3600) {
@@ -218,10 +218,10 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 id="latencyThresholdMs"
                 value={latencyThresholdMs}
                 onChange={(e) =>
-                  setLatencyThresholdMs(parseInt(e.target.value) || 30000)
+                  setLatencyThresholdMs(parseInt(e.target.value) || 100000)
                 }
                 min="100"
-                max="60000"
+                max="100000"
                 step="100"
                 className={`w-full px-4 py-2.5 bg-black border ${
                   errors.latencyThresholdMs
@@ -239,7 +239,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 </p>
               )}
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                当配置延迟超过此值时,将触发自动切换。推荐范围: 10000-60000ms
+                当配置延迟超过此值时,将触发自动切换。推荐范围: 10000-100000ms
               </p>
             </div>
           </div>

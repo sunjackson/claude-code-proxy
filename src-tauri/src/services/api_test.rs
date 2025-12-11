@@ -14,7 +14,7 @@ use crate::models::error::{AppError, AppResult};
 use crate::models::test_result::{TestResult, TestStatus};
 use crate::services::api_config::ApiConfigService;
 use crate::services::claude_test_request::{add_claude_code_headers, build_test_request_body, TEST_REQUEST_TIMEOUT_SECS};
-use chrono::Utc;
+use crate::utils::time::now_rfc3339;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
@@ -666,7 +666,7 @@ impl ApiTestService {
             id: 0, // 将由数据库生成
             config_id,
             group_id: None,
-            test_at: Utc::now().to_rfc3339(),
+            test_at: now_rfc3339(),
             status: TestStatus::Success,
             latency_ms: Some(latency_ms as i32),
             error_message: None,
@@ -690,7 +690,7 @@ impl ApiTestService {
             id: 0,
             config_id,
             group_id: None,
-            test_at: Utc::now().to_rfc3339(),
+            test_at: now_rfc3339(),
             status: TestStatus::Failed,
             latency_ms: Some(latency_ms as i32),
             error_message: Some(error_message.to_string()),
@@ -712,7 +712,7 @@ impl ApiTestService {
             id: 0,
             config_id,
             group_id: None,
-            test_at: Utc::now().to_rfc3339(),
+            test_at: now_rfc3339(),
             status: TestStatus::Timeout,
             latency_ms: None,
             error_message: Some(format!("测试超时(>{}秒)", TEST_TIMEOUT_SECS)),
@@ -728,7 +728,7 @@ impl ApiTestService {
         self.db_pool.with_connection(|conn| {
             use rusqlite::params;
 
-            let now = chrono::Utc::now().to_rfc3339();
+            let now = now_rfc3339();
 
             // 使用 is_available() 判断服务是否可用
             // 注意：is_available() 与 is_success() 不同

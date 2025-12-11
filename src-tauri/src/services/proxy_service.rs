@@ -14,6 +14,7 @@ use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::models::proxy_status::{ProxyService as ProxyServiceModel, ProxyStatus};
 use crate::proxy::server::{ProxyConfig, ProxyServer, ProxyServerStatus};
+use crate::services::status_notifier::StatusNotifier;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
@@ -100,8 +101,8 @@ impl ProxyService {
 
                 // 获取最新状态
                 // 注意：这里不能直接调用 ProxyService 的方法，因为会造成循环引用
-                // 我们手动查询数据库并发送事件
-                match Self::fetch_and_emit_status(db_pool_clone, app_handle_clone).await {
+                // 使用 StatusNotifier 的静态方法
+                match StatusNotifier::fetch_and_emit_status(db_pool_clone, app_handle_clone).await {
                     Ok(_) => {
                         log::info!(
                             "\n┌─────────────────────────────────────────────────────────┐\n\
@@ -125,125 +126,12 @@ impl ProxyService {
         log::debug!("Switch callback registered for ProxyService");
     }
 
-    /// 获取并发送状态更新事件（静态方法，避免循环引用）
-    ///
-    /// # Arguments
-    /// - `db_pool`: 数据库连接池
-    /// - `app_handle`: Tauri AppHandle
-    async fn fetch_and_emit_status(
-        db_pool: Arc<DbPool>,
-        app_handle: Arc<RwLock<Option<AppHandle>>>,
-    ) -> AppResult<()> {
-        use tauri::Emitter;
-
-        // 延迟100ms确保数据库写入完成
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        // 读取 ProxyService 表获取当前活动配置
-        let (active_config_id, active_group_id) = db_pool.with_connection(|conn| {
-            use rusqlite::params;
-
-            conn.query_row(
-                "SELECT current_config_id, current_group_id FROM ProxyService WHERE id = 1",
-                params![],
-                |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?)),
-            )
-            .map_err(|e| AppError::DatabaseError {
-                message: format!("查询 ProxyService 失败: {}", e),
-            })
-        })?;
-
-        // 获取配置详情
-        let active_config = if let Some(config_id) = active_config_id {
-            use crate::services::api_config::ApiConfigService;
-            db_pool
-                .with_connection(|conn| ApiConfigService::get_config_by_id(conn, config_id))
-                .ok()
-        } else {
-            None
-        };
-
-        // 获取分组详情
-        let active_group = if let Some(group_id) = active_group_id {
-            use crate::services::config_manager::ConfigManager;
-            db_pool
-                .with_connection(|conn| ConfigManager::get_group_by_id(conn, group_id))
-                .ok()
-        } else {
-            None
-        };
-
-        // 构建状态模型
-        let status = ProxyServiceModel {
-            status: ProxyStatus::Running,
-            listen_host: "127.0.0.1".to_string(), // 默认值，实际值应该从 server config 读取
-            listen_port: 3000, // 默认值
-            active_group_id,
-            active_group_name: active_group.map(|g| g.name),
-            active_config_id,
-            active_config_name: active_config.map(|c| c.name),
-        };
-
-        // 发送事件
-        let handle_guard = app_handle.read().await;
-        if let Some(handle) = handle_guard.as_ref() {
-            // 发送 proxy-status-changed 事件
-            if let Err(e) = handle.emit("proxy-status-changed", &status) {
-                log::error!("Failed to emit proxy-status-changed: {}", e);
-            } else {
-                log::info!("✅ 已发送 proxy-status-changed 事件: config={:?}", status.active_config_name);
-            }
-
-            // 更新系统托盘 - 使用完整的更新方法
-            let status_text = match status.status {
-                ProxyStatus::Running => "运行中",
-                ProxyStatus::Stopped => "已停止",
-                ProxyStatus::Starting => "启动中",
-                ProxyStatus::Stopping => "停止中",
-                ProxyStatus::Error => "错误",
-            };
-
-            // 更新托盘状态文本和图标
-            if let Err(e) = crate::tray::update_tray_status(
-                handle,
-                status.active_config_name.clone(),
-                status_text,
-            ) {
-                log::error!("更新托盘状态失败: {}", e);
-            }
-
-            // 更新托盘菜单中的配置列表
-            if let Err(e) = crate::tray::update_tray_menu(
-                handle,
-                db_pool.clone(),
-                status.active_group_id,
-                status.active_config_id,
-                status.active_config_name.clone(),
-                status_text,
-            ) {
-                log::error!("更新托盘菜单失败: {}", e);
-            }
-
-            log::info!("✅ 系统托盘已更新: config={:?}", status.active_config_name);
-        }
-
-        Ok(())
-    }
-
     /// Emit proxy status changed event
     ///
     /// # Arguments
     /// - `status`: Current proxy service status
     async fn emit_status_changed(&self, status: &ProxyServiceModel) {
-        use tauri::Emitter;
-        let app_handle = self.app_handle.read().await;
-        if let Some(handle) = app_handle.as_ref() {
-            if let Err(e) = handle.emit("proxy-status-changed", status) {
-                log::error!("Failed to emit proxy-status-changed event: {}", e);
-            } else {
-                log::debug!("Emitted proxy-status-changed event: {:?}", status.status);
-            }
-        }
+        StatusNotifier::emit_status_changed(&self.app_handle, status).await;
     }
 
     /// Update system tray status
@@ -251,37 +139,7 @@ impl ProxyService {
     /// # Arguments
     /// - `status`: Current proxy service status
     async fn update_tray_status(&self, status: &ProxyServiceModel) {
-        let app_handle = self.app_handle.read().await;
-        if let Some(handle) = app_handle.as_ref() {
-            let status_text = match status.status {
-                ProxyStatus::Running => "运行中",
-                ProxyStatus::Stopped => "已停止",
-                ProxyStatus::Starting => "启动中",
-                ProxyStatus::Stopping => "停止中",
-                ProxyStatus::Error => "错误",
-            };
-
-            // 更新托盘状态文本和图标
-            if let Err(e) = crate::tray::update_tray_status(
-                handle,
-                status.active_config_name.clone(),
-                status_text,
-            ) {
-                log::error!("Failed to update tray status: {}", e);
-            }
-
-            // 更新托盘菜单中的配置列表
-            if let Err(e) = crate::tray::update_tray_menu(
-                handle,
-                self.db_pool.clone(),
-                status.active_group_id,
-                status.active_config_id,
-                status.active_config_name.clone(),
-                status_text,
-            ) {
-                log::error!("Failed to update tray menu: {}", e);
-            }
-        }
+        StatusNotifier::update_tray(&self.app_handle, &self.db_pool, status).await;
     }
 
     /// Start proxy service

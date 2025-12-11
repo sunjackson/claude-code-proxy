@@ -13,7 +13,7 @@
  * - Timing details
  */
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use hyper::{Method, StatusCode, Uri};
 use std::time::Instant;
 
@@ -21,7 +21,7 @@ use std::time::Instant;
 #[derive(Debug, Clone)]
 pub struct RequestLogEntry {
     /// Timestamp when request was received
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: DateTime<Local>,
     /// HTTP method
     pub method: Method,
     /// Request URI
@@ -50,9 +50,9 @@ pub struct RequestLogEntry {
     /// Response body (truncated if too large)
     pub response_body: Option<String>,
     /// Response start timestamp
-    pub response_start_at: Option<DateTime<Utc>>,
+    pub response_start_at: Option<DateTime<Local>>,
     /// Response end timestamp
-    pub response_end_at: Option<DateTime<Utc>>,
+    pub response_end_at: Option<DateTime<Local>>,
     /// Request body size in bytes
     pub request_body_size: u64,
     /// Response body size in bytes
@@ -157,7 +157,7 @@ impl ProxyLogger {
         remote_addr: String,
     ) -> RequestLogBuilder {
         RequestLogBuilder {
-            timestamp: Utc::now(),
+            timestamp: Local::now(),
             method,
             uri,
             remote_addr,
@@ -179,7 +179,7 @@ impl ProxyLogger {
 
 /// Request log builder for tracking request lifecycle
 pub struct RequestLogBuilder {
-    timestamp: DateTime<Utc>,
+    timestamp: DateTime<Local>,
     method: Method,
     uri: Uri,
     remote_addr: String,
@@ -293,7 +293,7 @@ impl RequestLogBuilder {
         is_streaming: bool,
         stream_chunk_count: u32,
     ) -> RequestLogEntry {
-        let now = Utc::now();
+        let now = Local::now();
         let latency_ms = self.start_time.elapsed().as_millis() as u64;
         let time_to_first_byte_ms = self.response_start_time
             .map(|t| self.start_time.elapsed().as_millis() as u64 - t.elapsed().as_millis() as u64);
@@ -352,7 +352,7 @@ impl RequestLogBuilder {
             response_headers: None,
             response_body: None,
             response_start_at: None,
-            response_end_at: Some(Utc::now()),
+            response_end_at: Some(Local::now()),
             request_body_size: self.request_body_size,
             response_body_size: 0,
             is_streaming: false,
@@ -371,7 +371,7 @@ mod tests {
 
     fn create_base_entry() -> RequestLogEntry {
         RequestLogEntry {
-            timestamp: Utc::now(),
+            timestamp: Local::now(),
             method: Method::POST,
             uri: "/v1/messages".parse().unwrap(),
             target_url: "https://api.anthropic.com:443".to_string(),

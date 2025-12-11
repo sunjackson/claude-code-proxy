@@ -19,7 +19,7 @@ interface SortableConfigCardProps {
   isJustSwitchedTarget: boolean;
   isJustSwitchedSource: boolean;
   switchReason: string | null;
-  testingConfigId: number | null;
+  testingConfigIds: Set<number>;
   queryingBalanceId: number | null;
   actionLoading: boolean;
   togglingEnabledId: number | null;
@@ -66,7 +66,7 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
   isJustSwitchedTarget,
   isJustSwitchedSource,
   switchReason,
-  testingConfigId,
+  testingConfigIds,
   queryingBalanceId,
   actionLoading,
   togglingEnabledId,
@@ -278,7 +278,7 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
 
             <button
               className={`px-2.5 py-1.5 rounded-lg transition-all text-xs font-semibold ${
-                testingConfigId === config.id
+                testingConfigIds.has(config.id)
                   ? 'bg-blue-500/30 text-blue-300 cursor-wait'
                   : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30'
               }`}
@@ -286,9 +286,9 @@ export const SortableConfigCard: React.FC<SortableConfigCardProps> = ({
                 e.stopPropagation();
                 onTestConfig(config);
               }}
-              disabled={testingConfigId !== null}
+              disabled={testingConfigIds.has(config.id)}
             >
-              {testingConfigId === config.id ? '测试中...' : '测试'}
+              {testingConfigIds.has(config.id) ? '测试中...' : '测试'}
             </button>
 
             {config.balance_query_url && config.auto_balance_check && (

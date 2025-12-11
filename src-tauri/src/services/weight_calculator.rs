@@ -94,6 +94,7 @@ impl WeightCalculator {
     }
 
     /// 使用自定义配置创建权重计算器
+    #[allow(dead_code)]
     pub fn with_config(config: WeightConfig) -> Self {
         Self { config }
     }
@@ -271,6 +272,7 @@ impl WeightCalculator {
     ///
     /// # Returns
     /// 权重最高的配置 ID
+    #[allow(dead_code)]
     pub fn get_best_config(&self, configs: &[ApiConfig]) -> Option<i64> {
         if configs.is_empty() {
             return None;

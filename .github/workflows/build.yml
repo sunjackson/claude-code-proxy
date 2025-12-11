@@ -20,7 +20,61 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # 测试阶段（在构建前运行）
+  test:
+    runs-on: ubuntu-22.04
+    name: 运行测试
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装 Rust 缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装系统依赖 (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsqlite3-dev \
+            pkg-config
+
+      - name: 运行后端测试
+        working-directory: src-tauri
+        run: cargo test --verbose
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: src-ui/package-lock.json
+
+      - name: 安装前端依赖
+        working-directory: src-ui
+        run: npm ci
+
+      - name: 运行前端测试
+        working-directory: src-ui
+        run: npm test -- --run
+
   build:
+    needs: test
     strategy:
       fail-fast: false
       matrix:

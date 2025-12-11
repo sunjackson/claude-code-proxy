@@ -130,6 +130,7 @@ impl Default for EnvironmentVariableService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::time::now_rfc3339;
 
     #[test]
     fn test_set_and_get_env() {
@@ -174,6 +175,7 @@ mod tests {
     fn test_apply_from_config() {
         let service = EnvironmentVariableService::new();
 
+        #[allow(deprecated)]
         let config = ApiConfig {
             id: 1,
             name: "Test Config".to_string(),
@@ -183,6 +185,10 @@ mod tests {
             group_id: None,
             sort_order: 0,
             is_available: true,
+            is_enabled: true,
+            weight_score: 1.0,
+            last_success_time: None,
+            consecutive_failures: 0,
             last_test_at: None,
             last_latency_ms: None,
             provider_type: crate::models::api_config::ProviderType::Claude,
@@ -207,8 +213,8 @@ mod tests {
             balance_query_error: None,
             auto_balance_check: false,
             balance_check_interval_sec: None,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
         };
 
         // 应用配置
@@ -229,16 +235,21 @@ mod tests {
     fn test_check_anthropic_env() {
         let service = EnvironmentVariableService::new();
 
-        // 初始状态应该是未设置
+        // Test with valid config
+        #[allow(deprecated)]
         let config = ApiConfig {
             id: 1,
             name: "Test Config".to_string(),
             api_key: "test-api-key".to_string(),
-            server_url: "api.example.com".to_string(),
+            server_url: "https://api.example.com:8080".to_string(),  // Fixed: added protocol
             server_port: 8080,
             group_id: None,
             sort_order: 0,
             is_available: true,
+            is_enabled: true,
+            weight_score: 1.0,
+            last_success_time: None,
+            consecutive_failures: 0,
             last_test_at: None,
             last_latency_ms: None,
             provider_type: crate::models::api_config::ProviderType::Claude,
@@ -263,8 +274,8 @@ mod tests {
             balance_query_error: None,
             auto_balance_check: false,
             balance_check_interval_sec: None,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
         };
 
         // 设置环境变量

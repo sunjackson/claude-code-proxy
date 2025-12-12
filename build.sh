@@ -5,6 +5,9 @@
 
 set -e
 
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -74,27 +77,27 @@ check_dependencies() {
 # 安装前端依赖
 install_frontend_deps() {
     print_info "安装前端依赖..."
-    cd src-ui
+    cd "$SCRIPT_DIR/src-ui" || exit 1
     npm install
-    cd ..
+    cd "$SCRIPT_DIR" || exit 1
     print_success "前端依赖安装完成"
 }
 
 # 构建前端
 build_frontend() {
     print_info "构建前端..."
-    cd src-ui
+    cd "$SCRIPT_DIR/src-ui" || exit 1
     npm run build
-    cd ..
+    cd "$SCRIPT_DIR" || exit 1
     print_success "前端构建完成"
 }
 
 # 构建后端（当前平台）
 build_backend_current() {
     print_info "构建后端（当前平台）..."
-    cd src-tauri
+    cd "$SCRIPT_DIR/src-tauri" || exit 1
     $CARGO_CMD build --release
-    cd ..
+    cd "$SCRIPT_DIR" || exit 1
     print_success "后端构建完成"
 }
 
@@ -105,10 +108,10 @@ build_for_platform() {
     case $platform in
         macos|mac|darwin)
             print_info "构建 macOS 版本..."
-            cd src-tauri
+            cd "$SCRIPT_DIR/src-tauri" || exit 1
             $CARGO_CMD build --release --target x86_64-apple-darwin
             $CARGO_CMD build --release --target aarch64-apple-darwin
-            cd ..
+            cd "$SCRIPT_DIR" || exit 1
             print_success "macOS 版本构建完成"
             ;;
         windows|win)
@@ -116,18 +119,18 @@ build_for_platform() {
             if ! command_exists x86_64-pc-windows-gnu-gcc; then
                 print_warning "未安装 Windows 交叉编译工具链，尝试使用 Tauri CLI..."
             fi
-            cd src-tauri
+            cd "$SCRIPT_DIR/src-tauri" || exit 1
             $CARGO_CMD build --release --target x86_64-pc-windows-gnu 2>/dev/null || \
             $CARGO_CMD build --release --target x86_64-pc-windows-msvc 2>/dev/null || \
             print_error "Windows 编译失败，请在 Windows 系统上构建"
-            cd ..
+            cd "$SCRIPT_DIR" || exit 1
             ;;
         linux)
             print_info "构建 Linux 版本..."
-            cd src-tauri
+            cd "$SCRIPT_DIR/src-tauri" || exit 1
             $CARGO_CMD build --release --target x86_64-unknown-linux-gnu 2>/dev/null || \
             print_error "Linux 编译失败，请在 Linux 系统上构建或安装交叉编译工具链"
-            cd ..
+            cd "$SCRIPT_DIR" || exit 1
             ;;
         all)
             print_info "构建所有平台版本..."
@@ -148,9 +151,9 @@ build_with_tauri_cli() {
     print_info "使用 Tauri CLI 构建安装包..."
 
     # 使用 cargo tauri build 构建（会自动构建前端+后端+打包）
-    cd src-tauri
+    cd "$SCRIPT_DIR/src-tauri" || exit 1
     $CARGO_CMD tauri build
-    cd ..
+    cd "$SCRIPT_DIR" || exit 1
 
     print_success "Tauri 构建完成"
     print_info "安装包位于: src-tauri/target/release/bundle/"

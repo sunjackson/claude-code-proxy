@@ -17,6 +17,7 @@ pub mod health_check_service;
 pub mod keychain;
 pub mod latency_test;
 pub mod mcp_config;
+pub mod node_scanner;
 pub mod permissions_config;
 pub mod provider_preset;
 pub mod proxy_log;
@@ -35,11 +36,12 @@ pub use balance_service::BalanceService;
 pub use claude_config::{ClaudeConfigService, ProxyConfig};
 pub use claude_installer::{ClaudeInstaller, InstallMethod, InstallOptions, InstallProgress, VersionInfo};
 pub use config_manager::ConfigManager;
-pub use env_detection::EnvironmentStatus;
+pub use env_detection::{EnhancedEnvironmentDetector, EnvironmentStatus};
 pub use latency_test::LatencyTestService;
 pub use mcp_config::McpConfigService;
 pub use permissions_config::PermissionsConfigService;
 pub use provider_preset::ProviderPresetService;
 pub use skills_config::SkillsConfigService;
+// NodeScanner 在 env_detection.rs 中内部使用
 // ProxyRequestLog 和 ProxyRequestLogService 在 commands/proxy_log.rs 中直接导入使用
 // HealthCheckService 在 commands/health_check.rs 和 health_check_scheduler.rs 中直接导入使用

@@ -6,6 +6,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type {
   EnvironmentStatus,
+  EnhancedEnvironmentStatus,
+  NodeEnvironmentConfig,
   InstallOptions,
   InstallProgress,
   InstallMethod,
@@ -118,4 +120,58 @@ export async function updateClaudeCode(
   } else {
     await invoke<void>('update_claude_code', { method });
   }
+}
+
+// ============================================
+// 多环境检测相关 API
+// ============================================
+
+/**
+ * 增强的环境检测（支持多 Node 环境）
+ */
+export async function detectEnvironmentEnhanced(): Promise<EnhancedEnvironmentStatus> {
+  return await invoke<EnhancedEnvironmentStatus>('detect_environment_enhanced');
+}
+
+/**
+ * 设置默认 Node 环境
+ * @param envId 环境唯一标识
+ * @param nodePath Node 可执行文件路径
+ * @param nodeVersion Node 版本
+ * @param managerType 版本管理器类型
+ */
+export async function setDefaultNodeEnvironment(
+  envId: string,
+  nodePath: string,
+  nodeVersion: string,
+  managerType: string
+): Promise<void> {
+  return await invoke<void>('set_default_node_environment', {
+    envId,
+    nodePath,
+    nodeVersion,
+    managerType,
+  });
+}
+
+/**
+ * 获取默认 Node 环境配置
+ */
+export async function getDefaultNodeEnvironment(): Promise<NodeEnvironmentConfig | null> {
+  return await invoke<NodeEnvironmentConfig | null>('get_default_node_environment');
+}
+
+/**
+ * 检查是否可以安装（增强版）
+ * @returns [可以安装, 缺失的依赖列表]
+ */
+export async function checkCanInstallEnhanced(): Promise<[boolean, string[]]> {
+  return await invoke<[boolean, string[]]>('check_can_install_enhanced');
+}
+
+/**
+ * 检查系统是否已完成初始配置
+ */
+export async function checkSystemConfigured(): Promise<boolean> {
+  return await invoke<boolean>('check_system_configured');
 }

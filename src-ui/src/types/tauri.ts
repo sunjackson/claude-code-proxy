@@ -835,3 +835,112 @@ export interface SkillDefinition {
   /** 是否启用 */
   enabled: boolean;
 }
+
+// ============================================
+// 多环境检测相关类型
+// ============================================
+
+/**
+ * Node 版本管理器类型
+ */
+export type NodeVersionManager =
+  | 'System'
+  | 'NVM'
+  | 'FNM'
+  | 'Volta'
+  | 'ASDF'
+  | 'N'
+  | 'NVMWindows'
+  | 'Unknown';
+
+/**
+ * Claude Code 信息（在特定 Node 环境中）
+ */
+export interface ClaudeCodeInfo {
+  /** Claude Code 版本 */
+  version: string;
+  /** Claude Code 可执行文件路径 */
+  path: string;
+  /** 安装方式 */
+  install_method: string;
+}
+
+/**
+ * Node 环境信息
+ */
+export interface NodeEnvironment {
+  /** 环境唯一标识 (格式: manager_version, 如 nvm_20.10.0) */
+  id: string;
+  /** Node.js 版本号 */
+  version: string;
+  /** 主版本号 */
+  major_version: number;
+  /** Node 可执行文件完整路径 */
+  node_path: string;
+  /** npm 可执行文件路径 */
+  npm_path: string | null;
+  /** bin 目录路径 */
+  bin_dir: string;
+  /** 版本管理器类型 */
+  manager: NodeVersionManager;
+  /** 该环境中的 Claude Code 信息 */
+  claude_info: ClaudeCodeInfo | null;
+  /** 是否为当前默认环境 */
+  is_default: boolean;
+  /** 是否满足 Claude Code 最低版本要求 (Node >= 18) */
+  meets_requirement: boolean;
+}
+
+/**
+ * 增强的环境检测状态（支持多 Node 环境）
+ */
+export interface EnhancedEnvironmentStatus {
+  /** 操作系统类型 */
+  os_type: string;
+  /** 操作系统版本 */
+  os_version: string;
+  /** Shell 环境 */
+  shell: string | null;
+  /** 检测到的所有 Node 环境列表 */
+  node_environments: NodeEnvironment[];
+  /** 用户选择的默认环境 ID */
+  default_environment_id: string | null;
+  /** Claude Code 是否已安装（任一环境） */
+  claude_installed: boolean;
+  /** 默认环境的 Claude Code 版本 */
+  claude_version: string | null;
+  /** 默认环境的 Claude Code 路径 */
+  claude_path: string | null;
+  /** Homebrew 是否已安装 (macOS) */
+  homebrew_installed: boolean;
+  /** WSL 是否已安装 (Windows) */
+  wsl_installed: boolean;
+  /** Git Bash 是否已安装 (Windows) */
+  git_bash_installed: boolean;
+  /** ripgrep 是否已安装 */
+  ripgrep_installed: boolean;
+  /** 网络是否可用（HTTP 检测） */
+  network_available: boolean;
+  /** 检测时间戳 */
+  detected_at: string;
+  /** 检测耗时（毫秒） */
+  detection_duration_ms: number;
+}
+
+/**
+ * Node 环境配置（数据库记录）
+ */
+export interface NodeEnvironmentConfig {
+  /** 环境唯一标识 */
+  environment_id: string;
+  /** Node 可执行文件路径 */
+  node_path: string;
+  /** Node 版本 */
+  node_version: string;
+  /** 版本管理器类型 */
+  manager_type: string;
+  /** Claude Code 可执行文件路径 */
+  claude_path: string | null;
+  /** Claude Code 版本 */
+  claude_version: string | null;
+}

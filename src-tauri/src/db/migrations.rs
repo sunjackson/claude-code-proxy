@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 12;
+const CURRENT_DB_VERSION: i32 = 13;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -108,6 +108,10 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             12 => {
                 // v11 -> v12: 智能切换功能增强
                 migrate_v11_to_v12(conn)?;
+            }
+            13 => {
+                // v12 -> v13: Node 环境配置表
+                migrate_v12_to_v13(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -553,6 +557,40 @@ fn migrate_v11_to_v12(conn: &Connection) -> AppResult<()> {
         })?;
 
     log::info!("v11 -> v12 迁移完成: 已添加智能切换相关字段和表");
+    Ok(())
+}
+
+/// 迁移: v12 -> v13 - Node 环境配置表
+/// 用于保存用户选择的默认 Node 环境
+fn migrate_v12_to_v13(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v12 -> v13 迁移: Node 环境配置表");
+
+    // 检查表是否已存在
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='NodeEnvironmentConfig')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查表是否存在失败: {}", e),
+        })?;
+
+    if table_exists {
+        log::info!("v12 -> v13 迁移: NodeEnvironmentConfig 表已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v13_node_environment.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v12->v13 迁移失败: {}", e),
+        })?;
+
+    log::info!("v12 -> v13 迁移完成: 已添加 Node 环境配置表");
     Ok(())
 }
 

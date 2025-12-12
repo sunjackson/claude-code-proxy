@@ -77,8 +77,10 @@ pub use health_check::{
 };
 
 pub use setup::{
-    check_can_install, check_for_updates, check_system_configured, detect_environment, generate_environment_report, get_claude_version,
-    install_claude_code, run_claude_doctor, uninstall_claude_code, update_claude_code, verify_claude_installation,
+    check_can_install, check_can_install_enhanced, check_for_updates, check_system_configured,
+    detect_environment, detect_environment_enhanced, generate_environment_report, get_claude_version,
+    get_default_node_environment, install_claude_code, run_claude_doctor, set_default_node_environment,
+    uninstall_claude_code, update_claude_code, verify_claude_installation,
 };
 
 pub use mcp::{

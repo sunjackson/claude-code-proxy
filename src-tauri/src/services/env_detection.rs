@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use crate::models::error::AppResult;
+use crate::models::node_environment::{EnhancedEnvironmentStatus, NodeEnvironment};
+use crate::services::node_scanner::NodeScanner;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentStatus {
@@ -312,7 +314,7 @@ impl EnvironmentStatus {
     }
 
     /// 检测操作系统版本
-    fn detect_os_version() -> String {
+    pub fn detect_os_version() -> String {
         #[cfg(target_os = "macos")]
         {
             if let Ok(output) = Command::new("sw_vers")
@@ -359,7 +361,7 @@ impl EnvironmentStatus {
     }
 
     /// 检测当前 Shell 环境
-    fn detect_shell() -> Option<String> {
+    pub fn detect_shell() -> Option<String> {
         std::env::var("SHELL").ok().and_then(|shell_path| {
             std::path::Path::new(&shell_path)
                 .file_name()
@@ -397,7 +399,7 @@ impl EnvironmentStatus {
     }
 
     /// 检测 Homebrew (macOS)
-    fn detect_homebrew() -> bool {
+    pub fn detect_homebrew() -> bool {
         #[cfg(target_os = "macos")]
         {
             let installed = safe_command_output("brew", &["--version"]).is_some();
@@ -416,7 +418,7 @@ impl EnvironmentStatus {
     }
 
     /// 检测 Windows 环境 (WSL, Git Bash)
-    fn detect_windows_env() -> (bool, bool) {
+    pub fn detect_windows_env() -> (bool, bool) {
         #[cfg(target_os = "windows")]
         {
             let wsl = Command::new("wsl")
@@ -497,7 +499,7 @@ impl EnvironmentStatus {
     }
 
     /// 检测 ripgrep
-    fn detect_ripgrep() -> bool {
+    pub fn detect_ripgrep() -> bool {
         let installed = safe_command_output("rg", &["--version"]).is_some();
         if installed {
             log::info!("检测到 ripgrep");
@@ -610,6 +612,187 @@ impl EnvironmentStatus {
 
         let can_install = missing.is_empty();
         (can_install, missing)
+    }
+}
+
+// ============================================
+// 增强的环境检测功能
+// ============================================
+
+/// 增强的环境检测服务
+pub struct EnhancedEnvironmentDetector;
+
+impl EnhancedEnvironmentDetector {
+    /// 执行增强的环境检测（同步版本）
+    pub fn detect(default_env_id: Option<String>) -> AppResult<EnhancedEnvironmentStatus> {
+        let start = std::time::Instant::now();
+
+        log::info!("开始增强环境检测...");
+
+        // 1. 扫描所有 Node 环境
+        let mut node_environments = NodeScanner::scan_all_environments();
+
+        // 2. 标记默认环境
+        if let Some(ref default_id) = default_env_id {
+            for env in &mut node_environments {
+                env.set_default(env.id == *default_id);
+            }
+        } else if !node_environments.is_empty() {
+            // 如果没有设置默认，选择第一个满足要求且有 Claude Code 的环境
+            let first_with_claude = node_environments
+                .iter()
+                .position(|e| e.meets_requirement && e.claude_info.is_some());
+
+            if let Some(idx) = first_with_claude {
+                node_environments[idx].set_default(true);
+            } else {
+                // 否则选择第一个满足要求的环境
+                let first_valid = node_environments.iter().position(|e| e.meets_requirement);
+                if let Some(idx) = first_valid {
+                    node_environments[idx].set_default(true);
+                }
+            }
+        }
+
+        // 3. 检测其他环境信息
+        let os_type = std::env::consts::OS.to_string();
+        let os_version = EnvironmentStatus::detect_os_version();
+        let shell = EnvironmentStatus::detect_shell();
+        let homebrew_installed = EnvironmentStatus::detect_homebrew();
+        let (wsl_installed, git_bash_installed) = EnvironmentStatus::detect_windows_env();
+        let ripgrep_installed = EnvironmentStatus::detect_ripgrep();
+
+        // 4. 使用 HTTP 检测网络连接
+        let network_available = Self::check_network_http_sync();
+
+        // 5. 提取系统中找到的 Claude Code 信息（向后兼容）
+        let (claude_installed, claude_version, claude_path) = Self::extract_claude_info(&node_environments);
+
+        // 6. 获取默认环境 ID
+        let default_environment_id = node_environments
+            .iter()
+            .find(|e| e.is_default)
+            .map(|e| e.id.clone());
+
+        let duration = start.elapsed();
+        log::info!("增强环境检测完成，耗时 {}ms", duration.as_millis());
+
+        Ok(EnhancedEnvironmentStatus {
+            os_type,
+            os_version,
+            shell,
+            node_environments,
+            default_environment_id,
+            claude_installed,
+            claude_version,
+            claude_path,
+            homebrew_installed,
+            wsl_installed,
+            git_bash_installed,
+            ripgrep_installed,
+            network_available,
+            detected_at: chrono::Utc::now().to_rfc3339(),
+            detection_duration_ms: duration.as_millis() as u64,
+        })
+    }
+
+    /// 从 Node 环境列表中提取 Claude Code 信息（用于向后兼容）
+    fn extract_claude_info(envs: &[NodeEnvironment]) -> (bool, Option<String>, Option<String>) {
+        // 优先从默认环境获取
+        if let Some(default_env) = envs.iter().find(|e| e.is_default) {
+            if let Some(claude) = &default_env.claude_info {
+                return (true, Some(claude.version.clone()), Some(claude.path.clone()));
+            }
+        }
+
+        // 否则从任意环境获取
+        for env in envs {
+            if let Some(claude) = &env.claude_info {
+                return (true, Some(claude.version.clone()), Some(claude.path.clone()));
+            }
+        }
+
+        (false, None, None)
+    }
+
+    /// 使用 HTTP 请求检测网络连接（同步版本）
+    fn check_network_http_sync() -> bool {
+        // 使用 tokio 运行时执行异步请求
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(_) => {
+                // 如果无法创建运行时，回退到 ping 检测
+                return Self::check_network_ping();
+            }
+        };
+
+        rt.block_on(Self::check_network_http())
+    }
+
+    /// 使用 HTTP 请求检测网络连接（异步版本）
+    async fn check_network_http() -> bool {
+        // 测试多个端点，提高可靠性
+        let test_urls = vec![
+            "https://www.google.com/generate_204",      // Google 204 端点
+            "https://www.cloudflare.com/cdn-cgi/trace", // Cloudflare 诊断
+            "https://httpbin.org/status/200",           // HTTPBin
+            "https://www.baidu.com",                    // 国内备用
+        ];
+
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("创建 HTTP 客户端失败: {}", e);
+                return Self::check_network_ping();
+            }
+        };
+
+        for url in test_urls {
+            match client.get(url).send().await {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() || status.as_u16() == 204 {
+                        log::info!("网络检测成功: {} (状态: {})", url, status);
+                        return true;
+                    }
+                    log::debug!("网络检测 {} 返回非成功状态: {}", url, status);
+                }
+                Err(e) => {
+                    log::debug!("网络检测 {} 失败: {}", url, e);
+                }
+            }
+        }
+
+        log::warn!("HTTP 网络检测失败，尝试 ping 方式");
+        Self::check_network_ping()
+    }
+
+    /// 使用 ping 检测网络连接（备用方案）
+    fn check_network_ping() -> bool {
+        #[cfg(target_os = "windows")]
+        let result = Command::new("ping")
+            .args(&["-n", "1", "-w", "3000", "8.8.8.8"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        #[cfg(not(target_os = "windows"))]
+        let result = Command::new("ping")
+            .args(&["-c", "1", "-W", "3", "8.8.8.8"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if result {
+            log::info!("Ping 网络检测成功");
+        } else {
+            log::warn!("Ping 网络检测失败");
+        }
+
+        result
     }
 }
 

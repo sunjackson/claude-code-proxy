@@ -1,18 +1,28 @@
 /**
  * 环境设置页面
- * Claude Code 环境检测和自动安装
+ * Claude Code 环境检测和自动安装（支持多 Node 环境）
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CompactLayout } from '../components/CompactLayout';
-import type { EnvironmentStatus, InstallOptions, InstallProgress, InstallMethod, VersionInfo } from '../types/tauri';
+import { NodeEnvironmentList } from '../components/NodeEnvironmentList';
+import type {
+  EnvironmentStatus,
+  EnhancedEnvironmentStatus,
+  InstallOptions,
+  InstallProgress,
+  InstallMethod,
+  VersionInfo,
+} from '../types/tauri';
 import {
   detectEnvironment,
+  detectEnvironmentEnhanced,
   installClaudeCode,
   runClaudeDoctor,
   getClaudeVersion,
   verifyClaudeInstallation,
   checkCanInstall,
+  checkCanInstallEnhanced,
   checkForUpdates,
   updateClaudeCode,
 } from '../api/setup';
@@ -22,6 +32,7 @@ type SetupTab = 'detection' | 'install' | 'verify';
 export const EnvironmentSetup: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SetupTab>('detection');
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
+  const [enhancedEnvStatus, setEnhancedEnvStatus] = useState<EnhancedEnvironmentStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,20 +55,38 @@ export const EnvironmentSetup: React.FC = () => {
     loadEnvironmentStatus();
   }, []);
 
-  const loadEnvironmentStatus = async () => {
+  const loadEnvironmentStatus = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const status = await detectEnvironment();
-      setEnvStatus(status);
+      // 同时加载基础环境状态和增强环境状态
+      const [status, enhancedStatus] = await Promise.all([
+        detectEnvironment(),
+        detectEnvironmentEnhanced().catch((err) => {
+          console.warn('Enhanced detection failed, falling back:', err);
+          return null;
+        }),
+      ]);
 
-      // 检查是否可以安装
-      const [can, missing] = await checkCanInstall();
+      setEnvStatus(status);
+      setEnhancedEnvStatus(enhancedStatus);
+
+      // 检查是否可以安装（优先使用增强版）
+      let can: boolean;
+      let missing: string[];
+
+      if (enhancedStatus) {
+        [can, missing] = await checkCanInstallEnhanced();
+      } else {
+        [can, missing] = await checkCanInstall();
+      }
+
       setCanInstall(can);
       setMissingDeps(missing);
 
-      // 如果已安装,获取版本信息但不自动切换标签
-      if (status.claude_installed) {
+      // 如果已安装,获取版本信息
+      const claudeInstalled = enhancedStatus?.claude_installed || status.claude_installed;
+      if (claudeInstalled) {
         try {
           const version = await getClaudeVersion();
           setClaudeVersion(version);
@@ -70,7 +99,13 @@ export const EnvironmentSetup: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // 当用户选择新的默认环境后刷新
+  const handleDefaultEnvChanged = useCallback((_envId: string) => {
+    // 刷新环境状态
+    loadEnvironmentStatus();
+  }, [loadEnvironmentStatus]);
 
   const handleInstall = async () => {
     if (!canInstall) {
@@ -256,7 +291,7 @@ export const EnvironmentSetup: React.FC = () => {
             </button>
           </div>
 
-          {envStatus && (
+          {(envStatus || enhancedEnvStatus) && (
             <div className="space-y-4">
               {/* 基础信息 */}
               <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
@@ -264,22 +299,62 @@ export const EnvironmentSetup: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-gray-400">操作系统:</span>
-                    <span className="text-white ml-2">{envStatus.os_type} {envStatus.os_version}</span>
+                    <span className="text-white ml-2">
+                      {(enhancedEnvStatus?.os_type || envStatus?.os_type)} {(enhancedEnvStatus?.os_version || envStatus?.os_version)}
+                    </span>
                   </div>
-                  {envStatus.shell && (
+                  {(enhancedEnvStatus?.shell || envStatus?.shell) && (
                     <div>
                       <span className="text-gray-400">Shell:</span>
-                      <span className="text-white ml-2">{envStatus.shell}</span>
+                      <span className="text-white ml-2">{enhancedEnvStatus?.shell || envStatus?.shell}</span>
                     </div>
                   )}
                   <div>
                     <span className="text-gray-400">网络连接:</span>
                     <span className="text-white ml-2">
-                      {getStatusIcon(envStatus.network_available)} {envStatus.network_available ? '正常' : '异常'}
+                      {getStatusIcon(enhancedEnvStatus?.network_available ?? envStatus?.network_available ?? false)}
+                      {(enhancedEnvStatus?.network_available ?? envStatus?.network_available) ? '正常' : '异常'}
                     </span>
                   </div>
                 </div>
               </div>
+
+              {/* 多 Node 环境检测 - 优先显示增强版 */}
+              {enhancedEnvStatus && enhancedEnvStatus.node_environments.length > 0 ? (
+                <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
+                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">
+                    Node.js 环境
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      (支持 NVM/FNM/Volta/ASDF 多版本管理器)
+                    </span>
+                  </h3>
+                  <NodeEnvironmentList
+                    envStatus={enhancedEnvStatus}
+                    onRefresh={loadEnvironmentStatus}
+                    onDefaultChanged={handleDefaultEnvChanged}
+                    compact={false}
+                  />
+                </div>
+              ) : envStatus && (
+                // 回退到基础检测
+                <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
+                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">依赖检测</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Node.js (≥18):</span>
+                      <span className="text-white">
+                        {getStatusIcon(envStatus.node_installed)} {envStatus.node_version || '未安装'}
+                      </span>
+                    </div>
+                    {envStatus.node_path && (
+                      <div className="flex items-start justify-between">
+                        <span className="text-gray-400 flex-shrink-0">Node 路径:</span>
+                        <span className="text-white text-xs font-mono break-all ml-2 text-right">{envStatus.node_path}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Claude Code */}
               <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
@@ -288,72 +363,69 @@ export const EnvironmentSetup: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400">安装状态:</span>
                     <span className="text-white">
-                      {getStatusIcon(envStatus.claude_installed)} {envStatus.claude_installed ? '已安装' : '未安装'}
+                      {getStatusIcon(enhancedEnvStatus?.claude_installed ?? envStatus?.claude_installed ?? false)}
+                      {(enhancedEnvStatus?.claude_installed ?? envStatus?.claude_installed) ? '已安装' : '未安装'}
                     </span>
                   </div>
-                  {envStatus.claude_version && (
+                  {(enhancedEnvStatus?.claude_version || envStatus?.claude_version) && (
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400">版本:</span>
-                      <span className="text-white">{envStatus.claude_version}</span>
+                      <span className="text-white">{enhancedEnvStatus?.claude_version || envStatus?.claude_version}</span>
                     </div>
                   )}
-                  {envStatus.claude_path && (
+                  {(enhancedEnvStatus?.claude_path || envStatus?.claude_path) && (
                     <div className="flex items-start justify-between">
                       <span className="text-gray-400 flex-shrink-0">路径:</span>
-                      <span className="text-white text-xs font-mono break-all ml-2 text-right">{envStatus.claude_path}</span>
+                      <span className="text-white text-xs font-mono break-all ml-2 text-right">
+                        {enhancedEnvStatus?.claude_path || envStatus?.claude_path}
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 依赖检测 */}
-              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-                <h3 className="text-sm font-semibold text-yellow-400 mb-3">依赖检测</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Node.js (≥18):</span>
-                    <span className="text-white">
-                      {getStatusIcon(envStatus.node_installed)} {envStatus.node_version || '未安装'}
-                    </span>
-                  </div>
-                  {envStatus.node_path && (
-                    <div className="flex items-start justify-between">
-                      <span className="text-gray-400 flex-shrink-0">Node 路径:</span>
-                      <span className="text-white text-xs font-mono break-all ml-2 text-right">{envStatus.node_path}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">ripgrep:</span>
-                    <span className="text-white">
-                      {getStatusIcon(envStatus.ripgrep_installed)} {envStatus.ripgrep_installed ? '已安装' : '未安装'}
-                    </span>
-                  </div>
-                  {envStatus.os_type === 'macos' && (
+              {/* 其他依赖检测 */}
+              {envStatus && (
+                <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
+                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">其他依赖</h3>
+                  <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Homebrew:</span>
+                      <span className="text-gray-400">ripgrep:</span>
                       <span className="text-white">
-                        {getStatusIcon(envStatus.homebrew_installed)} {envStatus.homebrew_installed ? '已安装' : '未安装'}
+                        {getStatusIcon(enhancedEnvStatus?.ripgrep_installed ?? envStatus.ripgrep_installed)}
+                        {(enhancedEnvStatus?.ripgrep_installed ?? envStatus.ripgrep_installed) ? '已安装' : '未安装'}
                       </span>
                     </div>
-                  )}
-                  {envStatus.os_type === 'windows' && (
-                    <>
+                    {envStatus.os_type === 'macos' && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-400">WSL:</span>
+                        <span className="text-gray-400">Homebrew:</span>
                         <span className="text-white">
-                          {getStatusIcon(envStatus.wsl_installed)} {envStatus.wsl_installed ? '已安装' : '未安装'}
+                          {getStatusIcon(enhancedEnvStatus?.homebrew_installed ?? envStatus.homebrew_installed)}
+                          {(enhancedEnvStatus?.homebrew_installed ?? envStatus.homebrew_installed) ? '已安装' : '未安装'}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-400">Git Bash:</span>
-                        <span className="text-white">
-                          {getStatusIcon(envStatus.git_bash_installed)} {envStatus.git_bash_installed ? '已安装' : '未安装'}
-                        </span>
-                      </div>
-                    </>
-                  )}
+                    )}
+                    {envStatus.os_type === 'windows' && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400">WSL:</span>
+                          <span className="text-white">
+                            {getStatusIcon(enhancedEnvStatus?.wsl_installed ?? envStatus.wsl_installed)}
+                            {(enhancedEnvStatus?.wsl_installed ?? envStatus.wsl_installed) ? '已安装' : '未安装'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400">Git Bash:</span>
+                          <span className="text-white">
+                            {getStatusIcon(enhancedEnvStatus?.git_bash_installed ?? envStatus.git_bash_installed)}
+                            {(enhancedEnvStatus?.git_bash_installed ?? envStatus.git_bash_installed) ? '已安装' : '未安装'}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 安装检查结果 */}
               <div className={`rounded-lg p-4 border ${
@@ -388,14 +460,14 @@ export const EnvironmentSetup: React.FC = () => {
         <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 mt-4">
           <h2 className="text-xl font-bold text-yellow-400 mb-6">安装 Claude Code</h2>
 
-          {envStatus && envStatus.claude_installed ? (
+          {(enhancedEnvStatus?.claude_installed || envStatus?.claude_installed) ? (
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <span className="text-green-400 text-lg">✅</span>
                 <div className="flex-1">
                   <p className="text-green-400 font-semibold">Claude Code 已安装</p>
                   <p className="text-gray-300 text-sm mt-1">
-                    版本: {envStatus.claude_version || '未知'}
+                    版本: {enhancedEnvStatus?.claude_version || envStatus?.claude_version || '未知'}
                   </p>
                 </div>
               </div>
@@ -419,10 +491,10 @@ export const EnvironmentSetup: React.FC = () => {
                     <div className="font-semibold text-sm">官方脚本</div>
                     <div className="text-xs mt-1 opacity-70">推荐</div>
                   </button>
-                  {envStatus && envStatus.os_type === 'macos' && (
+                  {(enhancedEnvStatus?.os_type || envStatus?.os_type) === 'macos' && (
                     <button
                       onClick={() => setInstallMethod('Homebrew')}
-                      disabled={installing || !envStatus.homebrew_installed}
+                      disabled={installing || !(enhancedEnvStatus?.homebrew_installed ?? envStatus?.homebrew_installed)}
                       className={`p-4 rounded-lg border transition-all ${
                         installMethod === 'Homebrew'
                           ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400'
@@ -436,7 +508,7 @@ export const EnvironmentSetup: React.FC = () => {
                   )}
                   <button
                     onClick={() => setInstallMethod('NPM')}
-                    disabled={installing || (envStatus ? !envStatus.node_installed : true)}
+                    disabled={installing || !(enhancedEnvStatus?.node_environments?.some(e => e.meets_requirement) ?? envStatus?.node_installed)}
                     className={`p-4 rounded-lg border transition-all ${
                       installMethod === 'NPM'
                         ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400'

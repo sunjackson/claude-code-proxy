@@ -10,6 +10,7 @@ use crate::proxy::router::RequestRouter;
 use crate::services::api_config::ApiConfigService;
 use crate::services::auto_switch::AutoSwitchService;
 use crate::services::proxy_log::ProxyRequestLogService;
+use crate::services::session_config::SESSION_CONFIG_MAP;
 use crate::utils::constants::default_proxy_port;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -379,11 +380,32 @@ impl ProxyServer {
             log_builder = log_builder.with_content_type(ct);
         }
 
+        // Extract session_id from request URI path (e.g., /session/xxx)
+        // This allows terminal sessions to route to specific API configs
+        let session_id = Self::extract_session_id(&uri);
+
         // Get active config ID and group ID
+        // Priority: session-specific config > global config
         let cfg = config.read().await;
-        let config_id = cfg.active_config_id;
+        let global_config_id = cfg.active_config_id;
         let group_id = cfg.active_group_id.unwrap_or(0);
         drop(cfg);
+
+        // Determine which config to use
+        let (config_id, routing_source) = if let Some(ref sid) = session_id {
+            // Try to get session-specific config
+            if let Some(session_config_id) = SESSION_CONFIG_MAP.get_config_id(sid) {
+                log::debug!("Using session config: session={}, config_id={}", sid, session_config_id);
+                (Some(session_config_id), format!("session:{}", sid))
+            } else {
+                // Session not found, fall back to global
+                log::debug!("Session {} not found, using global config", sid);
+                (global_config_id, "global".to_string())
+            }
+        } else {
+            // No session specified, use global config
+            (global_config_id, "global".to_string())
+        };
 
         // If no active config, return error
         let config_id = match config_id {
@@ -429,7 +451,8 @@ impl ProxyServer {
             })
             .ok();
 
-        let target_url = format!("config:{}", config_id);
+        // Include routing source in target URL for debugging
+        let target_url = format!("config:{} ({})", config_id, routing_source);
         let log_builder = log_builder.with_target(target_url);
         let log_builder = if let Some(name) = config_name {
             log_builder.with_config(config_id, name)
@@ -577,6 +600,38 @@ impl ProxyServer {
             }
         }
     }
+
+    /// Extract session_id from request URI
+    ///
+    /// Supports multiple formats:
+    /// - `/session/{session_id}` - Path-based routing
+    /// - `?session={session_id}` - Query parameter (fallback)
+    ///
+    /// For CONNECT requests (HTTPS proxy), the URI might be in authority form,
+    /// so we check for session info in the path segment.
+    fn extract_session_id(uri: &hyper::Uri) -> Option<String> {
+        // Try path-based: /session/xxx or /session/xxx/...
+        if let Some(path) = uri.path().strip_prefix("/session/") {
+            // Extract session_id (everything before next '/' or end)
+            let session_id = path.split('/').next().unwrap_or(path);
+            if !session_id.is_empty() {
+                return Some(session_id.to_string());
+            }
+        }
+
+        // Try query parameter: ?session=xxx
+        if let Some(query) = uri.query() {
+            for pair in query.split('&') {
+                if let Some(value) = pair.strip_prefix("session=") {
+                    if !value.is_empty() {
+                        return Some(value.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]
@@ -643,5 +698,53 @@ mod tests {
         assert_eq!(current_config.port, 8080);
         assert_eq!(current_config.active_group_id, Some(1));
         assert_eq!(current_config.active_config_id, Some(2));
+    }
+
+    #[test]
+    fn test_extract_session_id_path() {
+        // Test path-based session extraction
+        let uri: hyper::Uri = "/session/my_session_123".parse().unwrap();
+        assert_eq!(
+            ProxyServer::extract_session_id(&uri),
+            Some("my_session_123".to_string())
+        );
+
+        // Test with trailing path
+        let uri: hyper::Uri = "/session/abc/some/path".parse().unwrap();
+        assert_eq!(
+            ProxyServer::extract_session_id(&uri),
+            Some("abc".to_string())
+        );
+
+        // Test empty session
+        let uri: hyper::Uri = "/session/".parse().unwrap();
+        assert_eq!(ProxyServer::extract_session_id(&uri), None);
+    }
+
+    #[test]
+    fn test_extract_session_id_query() {
+        // Test query parameter
+        let uri: hyper::Uri = "/?session=query_session".parse().unwrap();
+        assert_eq!(
+            ProxyServer::extract_session_id(&uri),
+            Some("query_session".to_string())
+        );
+
+        // Test with other params
+        let uri: hyper::Uri = "/?foo=bar&session=test123&baz=qux".parse().unwrap();
+        assert_eq!(
+            ProxyServer::extract_session_id(&uri),
+            Some("test123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_session_id_none() {
+        // Test no session
+        let uri: hyper::Uri = "/some/other/path".parse().unwrap();
+        assert_eq!(ProxyServer::extract_session_id(&uri), None);
+
+        let uri: hyper::Uri = "/?foo=bar".parse().unwrap();
+        assert_eq!(ProxyServer::extract_session_id(&uri), None);
     }
 }

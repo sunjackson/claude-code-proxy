@@ -58,6 +58,12 @@ anyhow = "1.0"
 # 时间处理
 chrono = { version = "0.4", features = ["serde"] }
 
+# 懒加载静态变量 (用于 SessionConfigMap)
+lazy_static = "1.4"
+
+# PTY (伪终端) 支持 - 用于终端集成功能
+portable-pty = "0.8"
+
 # HTTP 客户端(用于 API 测试) - 明确指定使用 ring 加密提供者
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "stream", "rustls-tls-native-roots"] }
 
@@ -72,6 +78,9 @@ rand = "0.8"
 
 # UUID 生成 (用于响应ID生成)
 uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Base64 编码 (用于终端数据传输)
+base64 = "0.21"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

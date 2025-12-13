@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, ToasterConfig } from './services/toast';
 import { SetupWizard } from './components/SetupWizard';
@@ -17,11 +18,13 @@ import Settings from './pages/Settings';
 import TestApi from './pages/TestApi';
 import ClaudeCodeSetup from './pages/ClaudeCodeSetup';
 import DevLogs from './pages/DevLogs';
+import TerminalWorkspace from './pages/TerminalWorkspace';
 
 /**
  * App 主组件
  */
 const App: React.FC = () => {
+  const { t } = useTranslation();
   const [showWizard, setShowWizard] = useState(false);
   const [wizardChecked, setWizardChecked] = useState(false);
 
@@ -59,11 +62,22 @@ const App: React.FC = () => {
         <div className="text-center">
           <div className="w-16 h-16 bg-yellow-500/20 rounded-full mx-auto mb-4 flex items-center justify-center animate-pulse">
             <svg className="w-8 h-8 text-yellow-400 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
             </svg>
           </div>
-          <p className="text-gray-400">正在加载...</p>
+          <p className="text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -89,6 +103,7 @@ const App: React.FC = () => {
           <Route path="/test-api" element={<TestApi />} />
           <Route path="/claude-code-setup" element={<ClaudeCodeSetup />} />
           <Route path="/dev-logs" element={<DevLogs />} />
+          <Route path="/terminal" element={<TerminalWorkspace />} />
 
           {/* 旧路由兼容 - 重定向 */}
           <Route path="/configs" element={<Navigate to="/" replace />} />

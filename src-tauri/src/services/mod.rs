@@ -24,7 +24,9 @@ pub mod proxy_log;
 pub mod proxy_service;
 pub mod recommendation;
 pub mod retry_manager;
+pub mod session_config;
 pub mod skills_config;
+pub mod pty_manager;
 pub mod status_notifier;
 pub mod weight_calculator;
 
@@ -42,6 +44,8 @@ pub use mcp_config::McpConfigService;
 pub use permissions_config::PermissionsConfigService;
 pub use provider_preset::ProviderPresetService;
 pub use skills_config::SkillsConfigService;
+pub use session_config::SESSION_CONFIG_MAP;
+pub use pty_manager::{PtyManager, PtyManagerState, PtySessionInfo};
 // NodeScanner 在 env_detection.rs 中内部使用
 // ProxyRequestLog 和 ProxyRequestLogService 在 commands/proxy_log.rs 中直接导入使用
 // HealthCheckService 在 commands/health_check.rs 和 health_check_scheduler.rs 中直接导入使用

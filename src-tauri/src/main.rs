@@ -41,10 +41,19 @@ use commands::{
     update_mcp_server, update_permissions_config, update_skill, verify_claude_installation,
     check_system_configured, EnvironmentVariableState, HealthCheckState, ProxyServiceState,
     RecommendationServiceState,
+    // 终端会话管理
+    register_terminal_session, switch_terminal_provider, get_terminal_session,
+    list_terminal_sessions, remove_terminal_session, get_terminal_session_count,
+    cleanup_stale_terminal_sessions, clear_all_terminal_sessions, get_terminal_proxy_url,
+    build_terminal_env_vars,
+    // PTY 管理
+    create_pty_session, create_claude_code_session, pty_write_input, close_pty_session,
+    list_pty_sessions, get_pty_session_count, switch_pty_provider, pty_resize,
 };
 use db::{initialize_database, DbPool};
 use services::balance_scheduler::BalanceScheduler;
 use services::proxy_service::ProxyService;
+use services::PtyManagerState;
 use std::sync::Arc;
 use utils::logger;
 
@@ -94,6 +103,11 @@ fn main() {
 
     log::info!("余额查询调度器已初始化");
 
+    // 初始化 PTY 管理器
+    let pty_state = PtyManagerState::new(25341); // 默认代理端口
+
+    log::info!("PTY 管理器已初始化");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
@@ -104,6 +118,7 @@ fn main() {
         .manage(recommendation_state)
         .manage(env_var_state)
         .manage(health_check_state)
+        .manage(pty_state)
         .setup(move |app| {
             let handle = app.handle().clone();
             // Set app handle for proxy service (for event emission)
@@ -251,6 +266,26 @@ fn main() {
             get_app_version,
             download_app_update,
             open_release_page,
+            // 终端会话管理
+            register_terminal_session,
+            switch_terminal_provider,
+            get_terminal_session,
+            list_terminal_sessions,
+            remove_terminal_session,
+            get_terminal_session_count,
+            cleanup_stale_terminal_sessions,
+            clear_all_terminal_sessions,
+            get_terminal_proxy_url,
+            build_terminal_env_vars,
+            // PTY 管理
+            create_pty_session,
+            create_claude_code_session,
+            pty_write_input,
+            close_pty_session,
+            list_pty_sessions,
+            get_pty_session_count,
+            switch_pty_provider,
+            pty_resize,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

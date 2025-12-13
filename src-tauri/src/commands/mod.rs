@@ -16,6 +16,7 @@ pub mod proxy_service;
 pub mod recommendation;
 pub mod setup;
 pub mod skills;
+pub mod terminal;
 
 // 重新导出常用命令
 pub use api_config::{
@@ -93,4 +94,14 @@ pub use permissions::{clear_permissions_config, get_permissions_config, update_p
 pub use skills::{
     add_skill, export_skills, import_skills, list_skills, read_skill_prompt, remove_skill,
     update_skill,
+};
+
+pub use terminal::{
+    build_terminal_env_vars, cleanup_stale_terminal_sessions, clear_all_terminal_sessions,
+    get_terminal_proxy_url, get_terminal_session, get_terminal_session_count,
+    list_terminal_sessions, register_terminal_session, remove_terminal_session,
+    switch_terminal_provider, TerminalSessionInfo,
+    // PTY commands
+    create_pty_session, create_claude_code_session, pty_write_input, close_pty_session,
+    list_pty_sessions, get_pty_session_count, switch_pty_provider, pty_resize,
 };

@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ClaudeCodePathDetector } from '../components/ClaudeCodePathDetector';
 import { BackupList } from '../components/BackupList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -13,6 +14,7 @@ import type { ClaudeCodePath, ConfigBackup } from '../types/tauri';
 
 export const ClaudeCodeIntegration: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [claudeCodePath, setClaudeCodePath] = useState<ClaudeCodePath | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -40,10 +42,11 @@ export const ClaudeCodeIntegration: React.FC = () => {
     if (action === 'restore' && backup) {
       setConfirmDialog({
         isOpen: true,
-        title: '恢复配置备份',
-        message: `确定要恢复到备份 "${backup.reason}" (${new Date(
-          backup.backup_time
-        ).toLocaleString('zh-CN')}) 吗?当前配置将被覆盖。`,
+        title: t('claudeCode.restoreBackup'),
+        message: t('claudeCode.restoreBackupConfirm', {
+          reason: backup.reason,
+          time: new Date(backup.backup_time).toLocaleString()
+        }),
         variant: 'default',
         onConfirm: () => {
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -53,8 +56,8 @@ export const ClaudeCodeIntegration: React.FC = () => {
     } else if (action === 'delete' && backup) {
       setConfirmDialog({
         isOpen: true,
-        title: '删除配置备份',
-        message: `确定要删除备份 "${backup.reason}" 吗?此操作无法撤销。`,
+        title: t('claudeCode.deleteBackup'),
+        message: t('claudeCode.deleteBackupConfirm', { reason: backup.reason }),
         variant: 'danger',
         onConfirm: () => {
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -64,8 +67,8 @@ export const ClaudeCodeIntegration: React.FC = () => {
     } else if (action === 'clear') {
       setConfirmDialog({
         isOpen: true,
-        title: '清空所有备份',
-        message: '确定要删除所有配置备份吗?此操作将删除所有历史备份，且无法撤销。',
+        title: t('claudeCode.clearAllBackups'),
+        message: t('claudeCode.clearAllBackupsConfirm'),
         variant: 'danger',
         onConfirm: () => {
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -95,9 +98,9 @@ export const ClaudeCodeIntegration: React.FC = () => {
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-yellow-400 mb-2 tracking-wide">配置 Claude Code 代理</h3>
+                <h3 className="text-lg font-bold text-yellow-400 mb-2 tracking-wide">{t('claudeCode.configureProxyTitle')}</h3>
                 <p className="text-sm text-gray-300 mb-4 leading-relaxed">
-                  要将 Claude Code 配置为使用本地代理，请前往仪表盘页面进行操作。
+                  {t('claudeCode.configureProxyDesc')}
                 </p>
                 <button
                   onClick={() => navigate('/')}
@@ -106,7 +109,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
-                  前往仪表盘
+                  {t('claudeCode.goToDashboard')}
                 </button>
               </div>
             </div>
@@ -131,10 +134,10 @@ export const ClaudeCodeIntegration: React.FC = () => {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-red-400 mb-2">
-                    配置文件权限不足
+                    {t('claudeCode.permissionDenied')}
                   </h3>
                   <p className="text-gray-300 leading-relaxed">
-                    Claude Code 配置文件权限不足。请检查文件权限后重试。
+                    {t('claudeCode.permissionDeniedDesc')}
                   </p>
                 </div>
               </div>
@@ -158,7 +161,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              使用说明
+              {t('claudeCode.usageGuide')}
             </h3>
             <div className="space-y-4">
               <div className="flex items-start gap-4 bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
@@ -166,7 +169,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
                   1
                 </span>
                 <p className="text-sm text-gray-300 leading-relaxed">
-                  <strong className="text-yellow-400 font-semibold">启用代理:</strong> 前往仪表盘页面，在"配置 Claude Code"卡片中点击"⚡ 启用代理"按钮
+                  <strong className="text-yellow-400 font-semibold">{t('claudeCode.guideStep1Title')}</strong> {t('claudeCode.guideStep1Desc')}
                 </p>
               </div>
               <div className="flex items-start gap-4 bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
@@ -174,7 +177,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
                   2
                 </span>
                 <p className="text-sm text-gray-300 leading-relaxed">
-                  <strong className="text-yellow-400 font-semibold">自动备份:</strong> 每次修改配置前会自动创建备份,可随时恢复
+                  <strong className="text-yellow-400 font-semibold">{t('claudeCode.guideStep2Title')}</strong> {t('claudeCode.guideStep2Desc')}
                 </p>
               </div>
               <div className="flex items-start gap-4 bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
@@ -182,7 +185,7 @@ export const ClaudeCodeIntegration: React.FC = () => {
                   3
                 </span>
                 <p className="text-sm text-gray-300 leading-relaxed">
-                  <strong className="text-yellow-400 font-semibold">管理备份:</strong> 查看历史备份,随时恢复或删除不需要的备份
+                  <strong className="text-yellow-400 font-semibold">{t('claudeCode.guideStep3Title')}</strong> {t('claudeCode.guideStep3Desc')}
                 </p>
               </div>
             </div>

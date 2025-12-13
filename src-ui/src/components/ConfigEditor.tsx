@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ApiConfig, ConfigGroup } from '../types/tauri';
 import {
   categoryLabels,
@@ -51,6 +52,8 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
   onSave,
   onCancel,
 }) => {
+  const { t } = useTranslation();
+
   // 表单状态
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -95,7 +98,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
         const presets = await providerPresetApi.listProviderPresets();
         setProviderPresets(presets);
       } catch (err) {
-        console.error('加载供应商预设失败:', err);
+        console.error(t('configEditor.loadPresetsFailed'), err);
       } finally {
         setLoadingPresets(false);
       }
@@ -122,7 +125,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       setShowApiKey(true); // 加载后自动显示
     } catch (err) {
       console.error('Failed to load API key:', err);
-      setErrors({ ...errors, apiKey: '加载API密钥失败' });
+      setErrors({ ...errors, apiKey: t('configEditor.loadKeyFailed') });
     } finally {
       setLoadingApiKey(false);
     }
@@ -253,23 +256,23 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (!name.trim()) {
-      newErrors.name = '配置名称不能为空';
+      newErrors.name = t('configEditor.configNameRequired');
     } else if (name.length > 100) {
-      newErrors.name = '配置名称不能超过 100 个字符';
+      newErrors.name = t('configEditor.configNameTooLong');
     }
 
     // 新建模式必须提供 API 密钥
     if (!config && !apiKey.trim()) {
-      newErrors.apiKey = 'API 密钥不能为空';
+      newErrors.apiKey = t('configEditor.apiKeyRequired');
     }
 
     if (!serverUrl.trim()) {
-      newErrors.serverUrl = '服务器地址不能为空';
+      newErrors.serverUrl = t('configEditor.serverUrlRequired');
     } else if (
       !serverUrl.startsWith('http://') &&
       !serverUrl.startsWith('https://')
     ) {
-      newErrors.serverUrl = '服务器地址必须以 http:// 或 https:// 开头';
+      newErrors.serverUrl = t('configEditor.serverUrlInvalid');
     }
 
     setErrors(newErrors);
@@ -326,7 +329,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-yellow-400 tracking-wide">
-              {config ? '编辑 API 配置' : '新建 API 配置'}
+              {config ? t('configEditor.editConfig') : t('configEditor.newConfig')}
             </h2>
           </div>
         </div>
@@ -345,8 +348,8 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-yellow-500 mb-1">快速开始</h3>
-                    <p className="text-sm text-gray-400">选择下方预设模板快速创建配置,或者手动填写自定义配置</p>
+                    <h3 className="text-lg font-semibold text-yellow-500 mb-1">{t('configEditor.quickStart')}</h3>
+                    <p className="text-sm text-gray-400">{t('configEditor.quickStartDesc')}</p>
                   </div>
                 </div>
               </div>
@@ -361,14 +364,14 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
                         </svg>
                       </div>
-                      <h3 className="text-base font-bold text-yellow-400">选择预设模板</h3>
+                      <h3 className="text-base font-bold text-yellow-400">{t('configEditor.selectPreset')}</h3>
                     </div>
                     <button
                       type="button"
                       onClick={() => setUseManualConfig(true)}
                       className="text-sm text-gray-400 hover:text-yellow-500 transition-colors flex items-center gap-2 font-medium"
                     >
-                      <span>手动配置</span>
+                      <span>{t('configEditor.manualConfig')}</span>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
@@ -379,17 +382,17 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   {loadingPresets ? (
                     <div className="flex items-center justify-center py-12 bg-black/30 rounded-lg border border-gray-800">
                       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-500"></div>
-                      <span className="ml-3 text-gray-400">加载预设列表...</span>
+                      <span className="ml-3 text-gray-400">{t('configEditor.loadingPresets')}</span>
                     </div>
                   ) : providerPresets.length === 0 ? (
                     <div className="text-center py-12 bg-black/30 rounded-lg border border-gray-800">
-                      <p className="text-gray-500 mb-4">未找到预设配置</p>
+                      <p className="text-gray-500 mb-4">{t('configEditor.noPresets')}</p>
                       <button
                         type="button"
                         onClick={() => setUseManualConfig(true)}
                         className="text-sm text-yellow-500 hover:text-yellow-400 transition-colors"
                       >
-                        使用手动配置
+                        {t('configEditor.useManualConfig')}
                       </button>
                     </div>
                   ) : (
@@ -447,12 +450,12 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                                     </span>
                                     {preset.isRecommended && (
                                       <span className="px-2 py-0.5 bg-yellow-500 text-black text-xs font-bold rounded-md">
-                                        推荐
+                                        {t('configEditor.recommended')}
                                       </span>
                                     )}
                                     {preset.isPartner && (
                                       <span className="px-2 py-0.5 bg-blue-500 text-white text-xs font-bold rounded-md">
-                                        合作
+                                        {t('configEditor.cooperation')}
                                       </span>
                                     )}
                                   </div>
@@ -491,8 +494,8 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                           onClick={() => setUseManualConfig(true)}
                           className="text-sm text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-2 group"
                         >
-                          <span className="group-hover:scale-110 transition-transform">找不到合适的预设?</span>
-                          <span className="font-semibold text-yellow-500 group-hover:text-yellow-400">手动填写配置</span>
+                          <span className="group-hover:scale-110 transition-transform">{t('configEditor.cantFindPreset')}</span>
+                          <span className="font-semibold text-yellow-500 group-hover:text-yellow-400">{t('configEditor.manualFillConfig')}</span>
                           <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
@@ -506,7 +509,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               {/* 手动配置模式切换提示 */}
               {useManualConfig && (
                 <div className="flex items-center justify-between bg-gray-900/50 border border-gray-800 rounded-lg p-3">
-                  <span className="text-sm text-gray-400">当前模式: 手动配置</span>
+                  <span className="text-sm text-gray-400">{t('configEditor.currentMode')}: {t('configEditor.manualConfig')}</span>
                   <button
                     type="button"
                     onClick={() => setUseManualConfig(false)}
@@ -515,7 +518,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
-                    返回预设模板
+                    {t('configEditor.backToPresets')}
                   </button>
                 </div>
               )}
@@ -528,7 +531,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   </div>
                   <div className="relative flex justify-center text-sm">
                     <span className="px-4 bg-black text-gray-500">
-                      {useManualConfig ? '手动填写配置信息' : '完善配置信息'}
+                      {useManualConfig ? t('configEditor.manualFill') : t('configEditor.completeInfo')}
                     </span>
                   </div>
                 </div>
@@ -545,7 +548,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   htmlFor="name"
                   className="block text-sm font-medium text-gray-300 mb-2"
                 >
-              配置名称 <span className="text-red-500">*</span>
+              {t('config.configName')} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -555,7 +558,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               className={`w-full px-4 py-2 bg-gray-900 border ${
                 errors.name ? 'border-red-500' : 'border-gray-700'
               } rounded text-white focus:outline-none focus:border-yellow-500 transition-colors`}
-              placeholder="例如: 公司 API 1"
+              placeholder={t('configEditor.configNamePlaceholder')}
             />
             {errors.name && (
               <p className="mt-1 text-sm text-red-500">{errors.name}</p>
@@ -569,10 +572,10 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                 htmlFor="apiKey"
                 className="block text-sm font-medium text-gray-300"
               >
-                API 密钥 {!config && <span className="text-red-500">*</span>}
+                {t('config.apiKey')} {!config && <span className="text-red-500">*</span>}
                 {config && (
                   <span className="text-gray-500 text-xs ml-2">
-                    (留空表示不修改)
+                    ({t('configEditor.leaveEmptyToKeep')})
                   </span>
                 )}
               </label>
@@ -583,7 +586,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   disabled={loadingApiKey}
                   className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors disabled:opacity-50"
                 >
-                  {loadingApiKey ? '加载中...' : '显示当前密钥'}
+                  {loadingApiKey ? t('configEditor.loadingKey') : t('configEditor.showCurrentKey')}
                 </button>
               )}
             </div>
@@ -642,7 +645,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               htmlFor="serverUrl"
               className="block text-sm font-medium text-gray-300 mb-2"
             >
-              服务器地址 <span className="text-red-500">*</span>
+              {t('config.serverUrl')} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -652,7 +655,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               className={`w-full px-4 py-2 bg-gray-900 border ${
                 errors.serverUrl ? 'border-red-500' : 'border-gray-700'
               } rounded text-white focus:outline-none focus:border-yellow-500 transition-colors`}
-              placeholder="https://api.example.com 或 https://api.example.com:8443"
+              placeholder={t('configEditor.serverUrlPlaceholder')}
             />
             {errors.serverUrl && (
               <p className="mt-1 text-sm text-red-500">{errors.serverUrl}</p>
@@ -665,7 +668,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               htmlFor="groupId"
               className="block text-sm font-medium text-gray-300 mb-2"
             >
-              所属分组
+              {t('config.belongGroup')}
             </label>
             <select
               id="groupId"
@@ -698,7 +701,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
                 <span className="text-gray-200 font-semibold">
-                  高级配置 (模型、超时等)
+                  {t('configEditor.advancedConfig')}
                 </span>
               </div>
               <svg
@@ -719,12 +722,12 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                 {/* 模型配置 */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-yellow-500 border-b border-gray-800 pb-2">
-                    模型配置
+                    {t('configEditor.modelConfig')}
                   </h3>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      默认模型
+                      {t('configEditor.defaultModel')}
                     </label>
                     <input
                       type="text"
@@ -737,7 +740,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Haiku 模型 (快速、低成本)
+                      {t('configEditor.haikuModel')}
                     </label>
                     <input
                       type="text"
@@ -750,7 +753,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Sonnet 模型 (平衡)
+                      {t('configEditor.sonnetModel')}
                     </label>
                     <input
                       type="text"
@@ -763,7 +766,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Opus 模型 (最强)
+                      {t('configEditor.opusModel')}
                     </label>
                     <input
                       type="text"
@@ -776,7 +779,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      小型快速模型
+                      {t('configEditor.smallFastModel')}
                     </label>
                     <input
                       type="text"
@@ -791,7 +794,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                 {/* 余额查询配置 */}
                 <div className="space-y-3 pt-4 border-t border-gray-800">
                   <h3 className="text-sm font-semibold text-yellow-500 border-b border-gray-800 pb-2">
-                    余额查询配置
+                    {t('configEditor.balanceConfig')}
                   </h3>
 
                   {/* 内置余额查询提示 */}
@@ -802,11 +805,11 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
                         <div>
-                          <p className="text-sm font-medium text-green-400">该服务商支持内置余额查询</p>
+                          <p className="text-sm font-medium text-green-400">{t('configEditor.builtInBalance')}</p>
                           <p className="text-xs text-gray-400 mt-1">
                             {config
-                              ? '该服务商已内置余额查询接口，余额查询URL不可修改'
-                              : '该服务商已内置余额查询接口，无需手动配置余额查询URL'
+                              ? t('configEditor.builtInBalanceHintEdit')
+                              : t('configEditor.builtInBalanceHintNew')
                             }
                           </p>
                         </div>
@@ -817,9 +820,9 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   {/* 余额查询 URL */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      余额查询 URL
+                      {t('configEditor.balanceQueryUrl')}
                       {hasBuiltInBalanceQuery() && config && (
-                        <span className="ml-2 text-xs text-gray-500">(内置配置，不可修改)</span>
+                        <span className="ml-2 text-xs text-gray-500">({t('configEditor.builtInConfig')})</span>
                       )}
                     </label>
                     <input
@@ -834,13 +837,13 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                       }`}
                       placeholder={
                         hasBuiltInBalanceQuery()
-                          ? '使用内置余额查询接口'
-                          : 'https://api.example.com/v1/balance'
+                          ? t('configEditor.useBuiltInQuery')
+                          : t('configEditor.balanceUrlPlaceholder')
                       }
                     />
                     {!hasBuiltInBalanceQuery() && (
                       <p className="mt-1 text-xs text-gray-500">
-                        用于查询账户余额的API接口地址（支持标准格式和自定义格式）
+                        {t('configEditor.balanceUrlHint')}
                       </p>
                     )}
                   </div>
@@ -848,10 +851,10 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   <div className="flex items-center justify-between p-3 bg-gray-900/50 rounded border border-gray-800">
                     <div>
                       <label className="text-sm font-medium text-gray-300 block">
-                        启用余额查询
+                        {t('configEditor.enableBalanceQuery')}
                       </label>
                       <p className="text-xs text-gray-500 mt-1">
-                        开启后可以查询和显示账户余额，失败后会自动禁用
+                        {t('configEditor.enableBalanceQueryHint')}
                       </p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
@@ -867,7 +870,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      查询间隔（秒）
+                      {t('configEditor.queryInterval')}
                     </label>
                     <input
                       type="number"
@@ -879,7 +882,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                       disabled={!autoBalanceCheck}
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      自动查询余额的时间间隔（最小60秒，默认3600秒即1小时）
+                      {t('configEditor.queryIntervalHint')}
                     </p>
                   </div>
                 </div>
@@ -887,12 +890,12 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                 {/* API 高级设置 */}
                 <div className="space-y-3 pt-4 border-t border-gray-800">
                   <h3 className="text-sm font-semibold text-yellow-500 border-b border-gray-800 pb-2">
-                    API 高级设置
+                    {t('configEditor.apiAdvancedSettings')}
                   </h3>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      API 超时时间 (毫秒)
+                      {t('configEditor.apiTimeout')}
                     </label>
                     <input
                       type="number"
@@ -903,13 +906,13 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                       className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors"
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      推荐值: 600000 (10分钟)
+                      {t('configEditor.apiTimeoutHint')}
                     </p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      最大输出令牌数
+                      {t('configEditor.maxOutputTokens')}
                     </label>
                     <input
                       type="number"
@@ -920,7 +923,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                       className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors"
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      推荐值: 65000
+                      {t('configEditor.maxOutputTokensHint')}
                     </p>
                   </div>
                 </div>
@@ -935,7 +938,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               onClick={onCancel}
               className="px-6 py-2.5 bg-gray-900 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-all duration-200 font-semibold border border-gray-800 hover:border-gray-700"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -946,14 +949,14 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  保存
+                  {t('common.save')}
                 </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  创建
+                  {t('common.create')}
                 </>
               )}
             </button>

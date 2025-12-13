@@ -4,9 +4,12 @@
  */
 
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import DevLogPanel from '../components/DevLogPanel';
 
 export default function DevLogs() {
+  const { t } = useTranslation();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black">
       {/* 头部导航 */}
@@ -20,19 +23,19 @@ export default function DevLogs() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-              <span className="text-sm">返回主页</span>
+              <span className="text-sm">{t('devLogs.backToHome')}</span>
             </Link>
             <div className="h-6 w-px bg-gray-700" />
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <h1 className="text-lg font-semibold text-amber-400">开发者日志</h1>
+              <h1 className="text-lg font-semibold text-amber-400">{t('devLogs.title')}</h1>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>仅开发模式可见</span>
+            <span>{t('devLogs.devModeOnly')}</span>
           </div>
         </div>
       </header>

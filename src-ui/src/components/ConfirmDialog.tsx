@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface ConfirmDialogProps {
   /** 是否显示 */
@@ -33,14 +34,21 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   isOpen,
   title,
   message,
-  confirmText = '确认',
-  cancelText = '取消',
+  confirmText = '',
+  cancelText = '',
   variant = 'default',
   isLoading = false,
-  loadingText = '处理中...',
+  loadingText = '',
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useTranslation();
+
+  // 使用翻译值作为默认值
+  const finalConfirmText = confirmText || t('dialog.confirm');
+  const finalCancelText = cancelText || t('dialog.cancel');
+  const finalLoadingText = loadingText || t('common.loading');
+
   // ESC 键关闭
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -103,7 +111,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             disabled={isLoading}
             className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors disabled:opacity-50"
           >
-            {cancelText}
+            {finalCancelText}
           </button>
           <button
             onClick={onConfirm}
@@ -120,10 +128,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                {loadingText}
+                {finalLoadingText}
               </>
             ) : (
-              confirmText
+              finalConfirmText
             )}
           </button>
         </div>

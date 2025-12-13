@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, Download, X, ExternalLink } from 'lucide-react';
 
 interface AppVersionInfo {
@@ -17,6 +18,7 @@ interface UpdateNotificationProps {
 }
 
 export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose }) => {
+  const { t } = useTranslation();
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -35,7 +37,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         }
       }
     } catch (error) {
-      console.error('检查更新失败:', error);
+      console.error('Check update failed:', error);
     }
   };
 
@@ -63,7 +65,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
     try {
       await invoke('open_release_page');
     } catch (error) {
-      console.error('打开发布页面失败:', error);
+      console.error('Open release page failed:', error);
     }
   };
 
@@ -74,7 +76,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
       await handleOpenReleasePage();
       handleDismiss();
     } catch (error) {
-      console.error('下载更新失败:', error);
+      console.error('Download update failed:', error);
     } finally {
       setIsDownloading(false);
     }
@@ -91,7 +93,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         <div className="bg-gradient-to-r from-yellow-400 to-amber-500 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-white">
             <AlertCircle className="w-5 h-5 animate-pulse" />
-            <span className="font-bold text-lg">发现新版本</span>
+            <span className="font-bold text-lg">{t('update.newVersionFound')}</span>
           </div>
           <button
             onClick={handleDismiss}
@@ -106,12 +108,12 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
           {/* 版本信息 */}
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">当前版本</p>
+              <p className="text-sm text-gray-600">{t('update.currentVersion')}</p>
               <p className="text-lg font-semibold text-gray-800">{versionInfo.current_version}</p>
             </div>
             <div className="text-2xl font-bold text-amber-500">→</div>
             <div>
-              <p className="text-sm text-gray-600">最新版本</p>
+              <p className="text-sm text-gray-600">{t('update.latestVersion')}</p>
               <p className="text-lg font-semibold text-amber-600">{versionInfo.latest_version}</p>
             </div>
           </div>
@@ -119,7 +121,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
           {/* 发布说明 */}
           {versionInfo.release_notes && (
             <div className="bg-white rounded-lg p-3 max-h-32 overflow-y-auto border border-yellow-200">
-              <p className="text-xs font-semibold text-gray-700 mb-1">更新说明：</p>
+              <p className="text-xs font-semibold text-gray-700 mb-1">{t('update.releaseNotes')}:</p>
               <div className="text-sm text-gray-600 whitespace-pre-wrap">
                 {versionInfo.release_notes.split('\n').slice(0, 5).join('\n')}
                 {versionInfo.release_notes.split('\n').length > 5 && '...'}
@@ -130,7 +132,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
           {/* 发布时间 */}
           {versionInfo.published_at && (
             <p className="text-xs text-gray-500">
-              发布时间: {new Date(versionInfo.published_at).toLocaleString('zh-CN')}
+              {t('update.publishedAt')}: {new Date(versionInfo.published_at).toLocaleString()}
             </p>
           )}
 
@@ -142,14 +144,14 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
               className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               <Download className="w-4 h-4" />
-              <span>{isDownloading ? '正在打开...' : '立即下载'}</span>
+              <span>{isDownloading ? t('update.opening') : t('update.downloadNow')}</span>
             </button>
             <button
               onClick={handleOpenReleasePage}
               className="flex-1 bg-white hover:bg-gray-50 text-amber-600 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 border border-amber-300 transition-all"
             >
               <ExternalLink className="w-4 h-4" />
-              <span>查看详情</span>
+              <span>{t('update.viewDetails')}</span>
             </button>
           </div>
 
@@ -158,7 +160,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
             onClick={handleDismiss}
             className="w-full text-center text-sm text-gray-500 hover:text-gray-700 py-1 transition-colors"
           >
-            稍后提醒
+            {t('update.remindLater')}
           </button>
         </div>
       </div>
@@ -168,6 +170,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
 
 // 在应用标题栏显示的简洁版本更新提示
 export const UpdateBadge: React.FC = () => {
+  const { t } = useTranslation();
   const [hasUpdate, setHasUpdate] = useState(false);
   const [currentVersion, setCurrentVersion] = useState('');
 
@@ -181,7 +184,7 @@ export const UpdateBadge: React.FC = () => {
         const dismissedVersion = localStorage.getItem('dismissedUpdateVersion');
         setHasUpdate(info.has_update && dismissedVersion !== info.latest_version);
       } catch (error) {
-        console.error('检查更新失败:', error);
+        console.error('Check update failed:', error);
       }
     };
 
@@ -195,7 +198,7 @@ export const UpdateBadge: React.FC = () => {
     try {
       await invoke('open_release_page');
     } catch (error) {
-      console.error('打开发布页面失败:', error);
+      console.error('Open release page failed:', error);
     }
   };
 
@@ -211,7 +214,7 @@ export const UpdateBadge: React.FC = () => {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
           </span>
-          新版本
+          {t('update.newVersion')}
         </button>
       )}
     </div>

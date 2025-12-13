@@ -6,6 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
+// TODO: 完成国际化迁移后启用
+// import { useTranslation } from 'react-i18next';
 import type { McpServerInfo, McpServerConfig, McpServerTemplate } from '../types/tauri';
 import * as mcpApi from '../api/mcp';
 import { ConfirmDialog, MessageDialog } from './ui/Dialog';
@@ -23,6 +25,8 @@ const McpServerEditor: React.FC<McpServerEditorProps> = ({
   onSave,
   editingServer,
 }) => {
+  // TODO: 完成国际化迁移后使用 t() 函数替换硬编码文本
+  // const { t } = useTranslation();
   const [name, setName] = useState('');
   const [command, setCommand] = useState('');
   const [args, setArgs] = useState('');

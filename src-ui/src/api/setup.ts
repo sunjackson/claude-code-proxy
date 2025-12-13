@@ -32,7 +32,7 @@ export async function installClaudeCode(
 ): Promise<void> {
   // 监听安装进度事件
   if (onProgress) {
-    const unlisten = await listen<InstallProgress>('install-progress', (event) => {
+    const unlisten = await listen<InstallProgress>('install-progress', event => {
       onProgress(event.payload);
     });
 
@@ -108,7 +108,7 @@ export async function updateClaudeCode(
 ): Promise<void> {
   // 监听安装进度事件
   if (onProgress) {
-    const unlisten = await listen<InstallProgress>('install-progress', (event) => {
+    const unlisten = await listen<InstallProgress>('install-progress', event => {
       onProgress(event.payload);
     });
 

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { NodeEnvironment, NodeVersionManager, EnhancedEnvironmentStatus } from '../types/tauri';
 import { setDefaultNodeEnvironment } from '../api/setup';
 
@@ -21,16 +22,16 @@ interface NodeEnvironmentListProps {
 /**
  * 获取版本管理器的显示名称
  */
-const getManagerDisplayName = (manager: NodeVersionManager): string => {
+const getManagerDisplayName = (manager: NodeVersionManager, t: any): string => {
   const names: Record<NodeVersionManager, string> = {
-    System: '系统',
+    System: t('nodeEnv.system'),
     NVM: 'NVM',
     FNM: 'FNM',
     Volta: 'Volta',
     ASDF: 'asdf',
     N: 'n',
     NVMWindows: 'NVM-Win',
-    Unknown: '未知',
+    Unknown: t('common.unknown'),
   };
   return names[manager] || manager;
 };
@@ -58,6 +59,7 @@ export const NodeEnvironmentList: React.FC<NodeEnvironmentListProps> = ({
   onDefaultChanged,
   compact = false,
 }) => {
+  const { t } = useTranslation();
   const [settingDefault, setSettingDefault] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,7 +97,7 @@ export const NodeEnvironmentList: React.FC<NodeEnvironmentListProps> = ({
       );
       onDefaultChanged?.(env.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '设置默认环境失败');
+      setError(err instanceof Error ? err.message : t('nodeEnv.setDefaultFailed'));
     } finally {
       setSettingDefault(null);
     }
@@ -113,15 +115,15 @@ export const NodeEnvironmentList: React.FC<NodeEnvironmentListProps> = ({
           <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-lg font-semibold">未检测到 Node.js 环境</p>
-          <p className="text-sm mt-1">请安装 Node.js 或版本管理器 (NVM/FNM/Volta)</p>
+          <p className="text-lg font-semibold">{t('nodeEnv.notDetected')}</p>
+          <p className="text-sm mt-1">{t('nodeEnv.installHint')}</p>
         </div>
         {onRefresh && (
           <button
             onClick={onRefresh}
             className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg border border-yellow-500/30 transition-colors"
           >
-            重新检测
+            {t('nodeEnv.redetect')}
           </button>
         )}
       </div>
@@ -134,22 +136,22 @@ export const NodeEnvironmentList: React.FC<NodeEnvironmentListProps> = ({
       <div className="flex items-center justify-between bg-gray-900/50 border border-gray-700 rounded-lg p-3">
         <div className="flex items-center gap-4 text-sm">
           <span className="text-gray-400">
-            检测到 <span className="text-yellow-400 font-semibold">{totalEnvs}</span> 个环境
+            {t('nodeEnv.detected')} <span className="text-yellow-400 font-semibold">{totalEnvs}</span> {t('nodeEnv.environments')}
           </span>
           <span className="text-gray-600">|</span>
           <span className="text-gray-400">
-            <span className="text-green-400 font-semibold">{claudeInstalledCount}</span> 个已安装 Claude
+            <span className="text-green-400 font-semibold">{claudeInstalledCount}</span> {t('nodeEnv.claudeInstalled')}
           </span>
           <span className="text-gray-600">|</span>
           <span className="text-gray-400">
-            <span className="text-blue-400 font-semibold">{meetsRequirementCount}</span> 个满足要求
+            <span className="text-blue-400 font-semibold">{meetsRequirementCount}</span> {t('nodeEnv.meetsRequirement')}
           </span>
         </div>
         {onRefresh && (
           <button
             onClick={onRefresh}
             className="p-2 hover:bg-gray-800 rounded-lg transition-colors group"
-            title="刷新检测"
+            title={t('common.refresh')}
           >
             <svg className="w-4 h-4 text-gray-400 group-hover:text-yellow-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -172,10 +174,10 @@ export const NodeEnvironmentList: React.FC<NodeEnvironmentListProps> = ({
             {/* 分组标题 */}
             <div className="bg-gray-800/50 px-4 py-2 flex items-center gap-2 border-b border-gray-800">
               <span className={`px-2 py-0.5 text-xs font-semibold rounded ${getManagerBadgeClass(manager as NodeVersionManager)}`}>
-                {getManagerDisplayName(manager as NodeVersionManager)}
+                {getManagerDisplayName(manager as NodeVersionManager, t)}
               </span>
               <span className="text-gray-500 text-xs">
-                {envs.length} 个版本
+                {envs.length} {t('nodeEnv.versions')}
               </span>
             </div>
 
@@ -198,9 +200,9 @@ export const NodeEnvironmentList: React.FC<NodeEnvironmentListProps> = ({
 
       {/* 检测时间 */}
       <div className="text-xs text-gray-500 text-center">
-        检测于 {new Date(envStatus.detected_at).toLocaleString()}
+        {t('nodeEnv.detectedAt')} {new Date(envStatus.detected_at).toLocaleString()}
         <span className="text-gray-600 ml-2">
-          (耗时 {envStatus.detection_duration_ms}ms)
+          ({t('nodeEnv.duration')} {envStatus.detection_duration_ms}ms)
         </span>
       </div>
     </div>
@@ -223,6 +225,7 @@ const EnvironmentCard: React.FC<EnvironmentCardProps> = ({
   onSetDefault,
   compact = false,
 }) => {
+  const { t } = useTranslation();
   const hasClaudeCode = !!env.claude_info;
   const meetsReq = env.meets_requirement;
 
@@ -239,7 +242,7 @@ const EnvironmentCard: React.FC<EnvironmentCardProps> = ({
         <div className="flex items-center gap-2">
           {!meetsReq && (
             <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded border border-red-500/30">
-              Node &lt; 18
+              {t('nodeEnv.nodeLessThan18')}
             </span>
           )}
           {hasClaudeCode && (
@@ -249,7 +252,7 @@ const EnvironmentCard: React.FC<EnvironmentCardProps> = ({
           )}
           {isDefault && (
             <span className="px-1.5 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-400 rounded border border-yellow-500/30">
-              默认
+              {t('nodeEnv.default')}
             </span>
           )}
         </div>
@@ -262,7 +265,7 @@ const EnvironmentCard: React.FC<EnvironmentCardProps> = ({
               disabled={isSettingDefault}
               className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors disabled:opacity-50"
             >
-              {isSettingDefault ? '...' : '设为默认'}
+              {isSettingDefault ? '...' : t('nodeEnv.setAsDefault')}
             </button>
           )}
         </div>
@@ -282,12 +285,12 @@ const EnvironmentCard: React.FC<EnvironmentCardProps> = ({
             </span>
             {!meetsReq && (
               <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded border border-red-500/30">
-                不满足要求 (Node &lt; 18)
+                {t('nodeEnv.requirementNotMet')}
               </span>
             )}
             {isDefault && (
               <span className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded border border-yellow-500/30 font-semibold">
-                默认环境
+                {t('nodeEnv.defaultEnvironment')}
               </span>
             )}
           </div>
@@ -324,10 +327,10 @@ const EnvironmentCard: React.FC<EnvironmentCardProps> = ({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  设置中
+                  {t('nodeEnv.setting')}
                 </span>
               ) : (
-                '设为默认'
+                t('nodeEnv.setAsDefault')
               )}
             </button>
           )}

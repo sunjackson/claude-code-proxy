@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ConfigGroup, ApiConfig } from '../types/tauri';
 import * as configApi from '../api/config';
 import * as testApi from '../api/test';
@@ -18,6 +19,7 @@ import { categoryLabels, categoryColors, type ProviderCategory } from '../config
 import { formatDisplayUrl } from '../utils/url';
 
 export const ConfigManagement: React.FC = () => {
+  const { t } = useTranslation();
   // 状态管理
   const [groups, setGroups] = useState<ConfigGroup[]>([]);
   const [configs, setConfigs] = useState<ApiConfig[]>([]);
@@ -82,7 +84,7 @@ export const ConfigManagement: React.FC = () => {
       setLoading(false);
     } catch (err) {
       console.error('加载数据失败:', err);
-      setError(err instanceof Error ? err.message : '加载数据失败');
+      setError(err instanceof Error ? err.message : t('errors.loadFailed'));
       setLoading(false);
     }
   };
@@ -178,15 +180,15 @@ export const ConfigManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('保存配置失败:', err);
-      showMessage('error', '保存配置失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.saveConfigFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     }
   };
 
   const handleDeleteConfig = (config: ApiConfig) => {
     setConfirmDialog({
       isOpen: true,
-      title: '删除配置',
-      message: `确定要删除配置 "${config.name}" 吗?此操作无法撤销。`,
+      title: t('dialog.deleteTitle'),
+      message: t('dialog.deleteMessage', { name: config.name }),
       variant: 'danger',
       onConfirm: async () => {
         try {
@@ -195,7 +197,7 @@ export const ConfigManagement: React.FC = () => {
           await loadData();
         } catch (err) {
           console.error('删除配置失败:', err);
-          showMessage('error', '删除配置失败', err instanceof Error ? err.message : '未知错误');
+          showMessage('error', t('errors.deleteConfigFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
         }
       },
     });
@@ -237,21 +239,21 @@ export const ConfigManagement: React.FC = () => {
 
       showMessage(
         isAvailable ? 'success' : 'error',
-        '测试结果',
+        t('test.testResults'),
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">状态:</span>
+            <span className="text-gray-400">{t('common.status')}:</span>
             <span className={isAvailable ? 'text-green-400' : 'text-red-400'}>
-              {isAvailable ? '✅ 可用' : '❌ 不可用'}
+              {isAvailable ? `✅ ${t('common.available')}` : `❌ ${t('common.unavailable')}`}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">延迟:</span>
+            <span className="text-gray-400">{t('test.latency')}:</span>
             <span className="text-gray-300">{result.latency_ms ? `${result.latency_ms} ms` : '-'}</span>
           </div>
           {result.error_message && (
             <div className="flex items-start gap-2">
-              <span className="text-gray-400 shrink-0">原因:</span>
+              <span className="text-gray-400 shrink-0">{t('test.reason')}:</span>
               <span className="text-red-400 break-all">{result.error_message}</span>
             </div>
           )}
@@ -260,7 +262,7 @@ export const ConfigManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('测试配置失败:', err);
-      showMessage('error', '测试失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.testFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     } finally {
       // 清除测试中状态
       setTestingConfigId(null);
@@ -281,21 +283,21 @@ export const ConfigManagement: React.FC = () => {
 
       showMessage(
         isSuccess ? 'success' : 'error',
-        '余额查询结果',
+        t('balance.queryResult'),
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">状态:</span>
+            <span className="text-gray-400">{t('common.status')}:</span>
             <span className={isSuccess ? 'text-green-400' : 'text-red-400'}>
-              {isSuccess ? '✅ 成功' : '❌ 失败'}
+              {isSuccess ? `✅ ${t('common.success')}` : `❌ ${t('test.failed')}`}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">余额:</span>
+            <span className="text-gray-400">{t('balance.balance')}:</span>
             <span className="text-amber-400 font-medium">{balanceText}</span>
           </div>
           {result.error_message && (
             <div className="flex items-start gap-2">
-              <span className="text-gray-400">错误:</span>
+              <span className="text-gray-400">{t('common.error')}:</span>
               <span className="text-red-400">{result.error_message}</span>
             </div>
           )}
@@ -304,7 +306,7 @@ export const ConfigManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('查询余额失败:', err);
-      showMessage('error', '查询余额失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.queryBalanceFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     } finally {
       // 清除查询中状态
       setQueryingBalanceId(null);
@@ -359,15 +361,15 @@ export const ConfigManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('保存分组失败:', err);
-      showMessage('error', '保存分组失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.saveGroupFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     }
   };
 
   const handleDeleteGroup = (group: ConfigGroup) => {
     setConfirmDialog({
       isOpen: true,
-      title: '删除分组',
-      message: `确定要删除分组 "${group.name}" 吗?\n\n请选择删除方式:\n- 确定: 将分组下的配置移到"未分组"\n- 取消后可选择同时删除配置`,
+      title: t('dialog.deleteGroupTitle'),
+      message: t('config.deleteGroupConfirmation', { name: group.name }),
       variant: 'danger',
       onConfirm: async () => {
         try {
@@ -376,7 +378,7 @@ export const ConfigManagement: React.FC = () => {
           await loadData();
         } catch (err) {
           console.error('删除分组失败:', err);
-          showMessage('error', '删除分组失败', err instanceof Error ? err.message : '未知错误');
+          showMessage('error', t('errors.deleteGroupFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
         }
       },
     });
@@ -416,12 +418,12 @@ export const ConfigManagement: React.FC = () => {
               <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-4 shadow-lg shadow-yellow-500/5">
                 <div className="flex items-center justify-between mb-4 pb-2 border-b border-yellow-500/20">
                   <h2 className="text-sm font-bold text-yellow-500 tracking-wide">
-                    配置分组
+                    {t('dashboard.configGroups')}
                   </h2>
                   <button
                     className="p-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-md hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50"
                     onClick={handleCreateGroup}
-                    title="新建分组"
+                    title={t('dashboard.newGroup')}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -440,7 +442,7 @@ export const ConfigManagement: React.FC = () => {
                     onClick={() => setSelectedGroupId(null)}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold">全部配置</span>
+                      <span className="text-sm font-semibold">{t('dashboard.allConfigs')}</span>
                       <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
                         selectedGroupId === null
                           ? 'bg-yellow-500/30 text-yellow-300'
@@ -512,7 +514,7 @@ export const ConfigManagement: React.FC = () => {
                                 ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
                                 : 'bg-gray-800/70 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
                             }`}
-                            title="编辑分组"
+                            title={t('config.editGroup')}
                           >
                             <svg
                               className="w-3.5 h-3.5"
@@ -535,7 +537,7 @@ export const ConfigManagement: React.FC = () => {
                                 handleDeleteGroup(group);
                               }}
                               className="p-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20 hover:text-red-400 transition-all duration-200"
-                              title="删除分组"
+                              title={t('config.deleteGroup')}
                             >
                               <svg
                                 className="w-3.5 h-3.5"
@@ -567,9 +569,9 @@ export const ConfigManagement: React.FC = () => {
                   <div className="flex items-center gap-4">
                     <h2 className="text-xl font-bold text-yellow-500 tracking-wide">
                       {selectedGroupId === null
-                        ? '全部配置'
+                        ? t('dashboard.allConfigs')
                         : groups.find((g) => g.id === selectedGroupId)?.name ||
-                          '配置列表'}
+                          t('dashboard.configList')}
                     </h2>
                     {/* 视图切换 */}
                     <div className="flex bg-gray-900/70 border border-gray-800 rounded-lg overflow-hidden shadow-inner">
@@ -581,7 +583,7 @@ export const ConfigManagement: React.FC = () => {
                         }`}
                         onClick={() => setViewMode('list')}
                       >
-                        列表视图
+                        {t('config.listView')}
                       </button>
                       <button
                         className={`px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
@@ -591,7 +593,7 @@ export const ConfigManagement: React.FC = () => {
                         }`}
                         onClick={() => setViewMode('test')}
                       >
-                        端点测速
+                        {t('config.speedTest')}
                       </button>
                     </div>
                   </div>
@@ -599,7 +601,7 @@ export const ConfigManagement: React.FC = () => {
                     className="px-5 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50"
                     onClick={handleCreateConfig}
                   >
-                    + 新建配置
+                    + {t('dashboard.newConfig')}
                   </button>
                 </div>
 
@@ -626,10 +628,10 @@ export const ConfigManagement: React.FC = () => {
                       />
                     </svg>
                     <h3 className="mt-2 text-sm font-medium text-gray-400">
-                      暂无配置
+                      {t('dashboard.noConfigs')}
                     </h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      点击"新建配置"按钮开始添加 API 配置
+                      {t('dashboard.clickNewToAdd')}
                     </p>
                   </div>
                 ) : (
@@ -663,19 +665,19 @@ export const ConfigManagement: React.FC = () => {
                                 <svg className="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                 </svg>
-                                合作伙伴
+                                {t('config.partner')}
                               </span>
                             )}
                             {/* 可用性标签 */}
                             {config.is_available ? (
                               <span className="px-2.5 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-md border border-green-500/50">
                                 <span className="inline-block w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5"></span>
-                                在线
+                                {t('common.online')}
                               </span>
                             ) : (
                               <span className="px-2.5 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-md border border-red-500/50">
                                 <span className="inline-block w-1.5 h-1.5 bg-red-400 rounded-full mr-1.5"></span>
-                                离线
+                                {t('common.offline')}
                               </span>
                             )}
                           </div>
@@ -690,7 +692,7 @@ export const ConfigManagement: React.FC = () => {
                               }`}
                               onClick={() => handleTestConfig(config)}
                               disabled={testingConfigId !== null}
-                              title={testingConfigId === config.id ? '测试中...' : '测试连接'}
+                              title={testingConfigId === config.id ? t('common.testing') : t('config.testConnection')}
                             >
                               {testingConfigId === config.id ? (
                                 <>
@@ -698,14 +700,14 @@ export const ConfigManagement: React.FC = () => {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                  测试中...
+                                  {t('common.testing')}
                                 </>
                               ) : (
                                 <>
                                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                   </svg>
-                                  测试
+                                  {t('common.test')}
                                 </>
                               )}
                             </button>
@@ -721,12 +723,12 @@ export const ConfigManagement: React.FC = () => {
                               disabled={queryingBalanceId !== null || !config.balance_query_url || !config.auto_balance_check}
                               title={
                                 !config.balance_query_url
-                                  ? '未配置余额查询URL'
+                                  ? t('config.noBalanceUrl')
                                   : !config.auto_balance_check
-                                  ? '余额查询已禁用（查询失败后自动禁用，请在配置编辑中重新启用）'
+                                  ? t('config.balanceDisabledHint')
                                   : queryingBalanceId === config.id
-                                  ? '查询中...'
-                                  : '查询余额'
+                                  ? t('common.loading')
+                                  : t('config.queryBalance')
                               }
                             >
                               {queryingBalanceId === config.id ? (
@@ -735,36 +737,36 @@ export const ConfigManagement: React.FC = () => {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                  查询中...
+                                  {t('common.loading')}
                                 </>
                               ) : (
                                 <>
                                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                   </svg>
-                                  余额
+                                  {t('config.balance')}
                                 </>
                               )}
                             </button>
                             <button
                               className="px-3.5 py-2 bg-gray-800/50 text-gray-300 rounded-lg hover:bg-gray-700 transition-all duration-200 text-sm border border-gray-700/50 hover:border-gray-600 font-semibold hover:shadow-lg hover:shadow-gray-700/20"
                               onClick={() => handleEditConfig(config)}
-                              title="编辑配置"
+                              title={t('common.edit')}
                             >
                               <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
-                              编辑
+                              {t('common.edit')}
                             </button>
                             <button
                               className="px-3.5 py-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-all duration-200 text-sm border border-red-500/40 hover:border-red-500/60 font-semibold hover:shadow-lg hover:shadow-red-500/20"
                               onClick={() => handleDeleteConfig(config)}
-                              title="删除配置"
+                              title={t('common.delete')}
                             >
                               <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
-                              删除
+                              {t('common.delete')}
                             </button>
                           </div>
                         </div>
@@ -773,7 +775,7 @@ export const ConfigManagement: React.FC = () => {
                         <div className="space-y-3 text-sm mt-4 pt-4 border-t border-gray-800/50">
                           {/* 服务器地址 */}
                           <div className="flex items-start">
-                            <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">服务器</span>
+                            <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">{t('config.server')}</span>
                             <span className="text-gray-300 break-all font-mono text-xs" title={config.server_url}>
                               {formatDisplayUrl(config.server_url)}
                             </span>
@@ -781,16 +783,16 @@ export const ConfigManagement: React.FC = () => {
 
                           {/* 所属分组 */}
                           <div className="flex items-center">
-                            <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">所属分组</span>
+                            <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">{t('config.belongGroup')}</span>
                             <span className="px-2.5 py-1 bg-yellow-500/10 text-yellow-400 rounded-md border border-yellow-500/40 text-xs font-semibold">
-                              {groups.find((g) => g.id === config.group_id)?.name || '未分组'}
+                              {groups.find((g) => g.id === config.group_id)?.name || t('config.ungrouped')}
                             </span>
                           </div>
 
                           {/* 测试信息 */}
                           {config.last_test_at && (
                             <div className="flex items-center pt-2 border-t border-gray-800/50">
-                              <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">最后测试</span>
+                              <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">{t('config.lastTest')}</span>
                               <div className="flex items-center gap-3 text-gray-400">
                                 <span className="text-xs">
                                   {new Date(config.last_test_at).toLocaleString('zh-CN', {
@@ -818,7 +820,7 @@ export const ConfigManagement: React.FC = () => {
                           {/* 余额信息 */}
                           {config.last_balance !== null && config.last_balance !== undefined && (
                             <div className="flex items-center pt-2 border-t border-gray-800/50">
-                              <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">账户余额</span>
+                              <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">{t('config.accountBalance')}</span>
                               <div className="flex items-center gap-3">
                                 <span className={`px-3 py-1 rounded-md text-sm font-bold font-mono border ${
                                   config.last_balance >= 10
@@ -850,7 +852,7 @@ export const ConfigManagement: React.FC = () => {
                                 )}
                                 {!config.auto_balance_check && (
                                   <span className="inline-block px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded border border-orange-500/50">
-                                    已禁用余额查询
+                                    {t('config.balanceQueryDisabled')}
                                   </span>
                                 )}
                               </div>
@@ -860,11 +862,11 @@ export const ConfigManagement: React.FC = () => {
                           {/* 模型配置信息（如果有的话） */}
                           {(config.default_model || config.sonnet_model || config.haiku_model || config.opus_model) && (
                             <div className="flex items-start pt-2 border-t border-gray-800/50">
-                              <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">模型配置</span>
+                              <span className="text-gray-500 w-24 flex-shrink-0 font-semibold">{t('config.modelConfig')}</span>
                               <div className="flex flex-wrap gap-2">
                                 {config.default_model && (
                                   <span className="px-2.5 py-1 bg-purple-500/10 text-purple-400 rounded-md text-xs border border-purple-500/40 font-semibold">
-                                    默认: {config.default_model}
+                                    {t('config.default')}: {config.default_model}
                                   </span>
                                 )}
                                 {config.sonnet_model && (

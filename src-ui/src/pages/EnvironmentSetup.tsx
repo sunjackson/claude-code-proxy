@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CompactLayout } from '../components/CompactLayout';
 import { NodeEnvironmentList } from '../components/NodeEnvironmentList';
 import type {
@@ -30,6 +31,7 @@ import {
 type SetupTab = 'detection' | 'install' | 'verify';
 
 export const EnvironmentSetup: React.FC = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SetupTab>('detection');
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
   const [enhancedEnvStatus, setEnhancedEnvStatus] = useState<EnhancedEnvironmentStatus | null>(null);
@@ -95,7 +97,7 @@ export const EnvironmentSetup: React.FC = () => {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '环境检测失败');
+      setError(err instanceof Error ? err.message : t('env.detection.failed'));
     } finally {
       setLoading(false);
     }
@@ -109,7 +111,7 @@ export const EnvironmentSetup: React.FC = () => {
 
   const handleInstall = async () => {
     if (!canInstall) {
-      setError('环境不满足安装条件,请先安装缺失的依赖');
+      setError(t('env.install.requirementNotMet'));
       return;
     }
 
@@ -133,7 +135,7 @@ export const EnvironmentSetup: React.FC = () => {
       // 安装完成,重新检测环境
       await loadEnvironmentStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '安装失败');
+      setError(err instanceof Error ? err.message : t('env.install.failed'));
     } finally {
       setInstalling(false);
     }
@@ -147,13 +149,13 @@ export const EnvironmentSetup: React.FC = () => {
       console.log('开始运行 claude doctor...');
       const output = await runClaudeDoctor();
       console.log('claude doctor 输出:', output);
-      setDoctorOutput(output || '✅ claude doctor 执行成功，但没有输出');
+      setDoctorOutput(output || t('env.verify.doctorSuccess'));
     } catch (err) {
       console.error('claude doctor 执行失败:', err);
-      const errorMsg = err instanceof Error ? err.message : '运行 claude doctor 失败';
+      const errorMsg = err instanceof Error ? err.message : t('env.verify.doctorFailed');
       setError(errorMsg);
       // 同时在 doctor 输出区域显示错误
-      setDoctorOutput(`❌ 执行失败\n\n${errorMsg}`);
+      setDoctorOutput(`❌ ${t('env.verify.executionFailed')}\n\n${errorMsg}`);
     } finally {
       setVerifying(false);
     }
@@ -167,14 +169,14 @@ export const EnvironmentSetup: React.FC = () => {
       if (isInstalled) {
         const version = await getClaudeVersion();
         setClaudeVersion(version);
-        setDoctorOutput('✅ Claude Code 已正确安装');
+        setDoctorOutput(t('env.verify.installedCorrectly'));
         // 验证成功后检查更新
         checkUpdates();
       } else {
-        setError('Claude Code 未安装或安装不完整');
+        setError(t('env.verify.notInstalledOrIncomplete'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '验证失败');
+      setError(err instanceof Error ? err.message : t('env.verify.verifyFailed'));
     } finally {
       setVerifying(false);
     }
@@ -205,7 +207,7 @@ export const EnvironmentSetup: React.FC = () => {
       // 更新完成,重新检测环境
       await loadEnvironmentStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '更新失败');
+      setError(err instanceof Error ? err.message : t('env.update.failed'));
     } finally {
       setUpdating(false);
     }
@@ -238,7 +240,7 @@ export const EnvironmentSetup: React.FC = () => {
           }`}
         >
           <span>🔍</span>
-          环境检测
+          {t('env.tabs.detection')}
         </button>
         <button
           onClick={() => setActiveTab('install')}
@@ -249,7 +251,7 @@ export const EnvironmentSetup: React.FC = () => {
           }`}
         >
           <span>📦</span>
-          安装 Claude Code
+          {t('env.tabs.install')}
         </button>
         <button
           onClick={() => setActiveTab('verify')}
@@ -260,7 +262,7 @@ export const EnvironmentSetup: React.FC = () => {
           }`}
         >
           <span>✅</span>
-          验证安装
+          {t('env.tabs.verify')}
         </button>
       </div>
 
@@ -270,7 +272,7 @@ export const EnvironmentSetup: React.FC = () => {
           <div className="flex items-start gap-3">
             <span className="text-red-400 text-lg">⚠️</span>
             <div className="flex-1">
-              <p className="text-red-400 font-semibold">错误</p>
+              <p className="text-red-400 font-semibold">{t('common.error')}</p>
               <p className="text-gray-300 text-sm mt-1">{error}</p>
             </div>
           </div>
@@ -281,13 +283,13 @@ export const EnvironmentSetup: React.FC = () => {
       {activeTab === 'detection' && (
         <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 mt-4">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-yellow-400">系统环境检测</h2>
+            <h2 className="text-xl font-bold text-yellow-400">{t('env.detection.title')}</h2>
             <button
               onClick={loadEnvironmentStatus}
               disabled={loading}
               className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50"
             >
-              {loading ? '检测中...' : '🔄 重新检测'}
+              {loading ? t('env.detection.detecting') : `🔄 ${t('env.detection.redetect')}`}
             </button>
           </div>
 
@@ -295,25 +297,25 @@ export const EnvironmentSetup: React.FC = () => {
             <div className="space-y-4">
               {/* 基础信息 */}
               <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-                <h3 className="text-sm font-semibold text-yellow-400 mb-3">系统信息</h3>
+                <h3 className="text-sm font-semibold text-yellow-400 mb-3">{t('env.detection.systemInfo')}</h3>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-gray-400">操作系统:</span>
+                    <span className="text-gray-400">{t('env.detection.os')}:</span>
                     <span className="text-white ml-2">
                       {(enhancedEnvStatus?.os_type || envStatus?.os_type)} {(enhancedEnvStatus?.os_version || envStatus?.os_version)}
                     </span>
                   </div>
                   {(enhancedEnvStatus?.shell || envStatus?.shell) && (
                     <div>
-                      <span className="text-gray-400">Shell:</span>
+                      <span className="text-gray-400">{t('env.detection.shell')}:</span>
                       <span className="text-white ml-2">{enhancedEnvStatus?.shell || envStatus?.shell}</span>
                     </div>
                   )}
                   <div>
-                    <span className="text-gray-400">网络连接:</span>
+                    <span className="text-gray-400">{t('env.detection.network')}:</span>
                     <span className="text-white ml-2">
                       {getStatusIcon(enhancedEnvStatus?.network_available ?? envStatus?.network_available ?? false)}
-                      {(enhancedEnvStatus?.network_available ?? envStatus?.network_available) ? '正常' : '异常'}
+                      {(enhancedEnvStatus?.network_available ?? envStatus?.network_available) ? t('env.detection.networkNormal') : t('env.detection.networkAbnormal')}
                     </span>
                   </div>
                 </div>
@@ -323,9 +325,9 @@ export const EnvironmentSetup: React.FC = () => {
               {enhancedEnvStatus && enhancedEnvStatus.node_environments.length > 0 ? (
                 <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
                   <h3 className="text-sm font-semibold text-yellow-400 mb-3">
-                    Node.js 环境
+                    {t('env.detection.nodeEnvironment')}
                     <span className="ml-2 text-xs font-normal text-gray-500">
-                      (支持 NVM/FNM/Volta/ASDF 多版本管理器)
+                      {t('env.detection.nodeEnvDesc')}
                     </span>
                   </h3>
                   <NodeEnvironmentList
@@ -338,17 +340,17 @@ export const EnvironmentSetup: React.FC = () => {
               ) : envStatus && (
                 // 回退到基础检测
                 <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">依赖检测</h3>
+                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">{t('env.detection.dependencyCheck')}</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Node.js (≥18):</span>
+                      <span className="text-gray-400">{t('env.detection.nodeVersion')}:</span>
                       <span className="text-white">
-                        {getStatusIcon(envStatus.node_installed)} {envStatus.node_version || '未安装'}
+                        {getStatusIcon(envStatus.node_installed)} {envStatus.node_version || t('env.detection.notInstalled')}
                       </span>
                     </div>
                     {envStatus.node_path && (
                       <div className="flex items-start justify-between">
-                        <span className="text-gray-400 flex-shrink-0">Node 路径:</span>
+                        <span className="text-gray-400 flex-shrink-0">{t('env.detection.nodePath')}:</span>
                         <span className="text-white text-xs font-mono break-all ml-2 text-right">{envStatus.node_path}</span>
                       </div>
                     )}
@@ -361,21 +363,21 @@ export const EnvironmentSetup: React.FC = () => {
                 <h3 className="text-sm font-semibold text-yellow-400 mb-3">Claude Code</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400">安装状态:</span>
+                    <span className="text-gray-400">{t('env.detection.installStatus')}:</span>
                     <span className="text-white">
                       {getStatusIcon(enhancedEnvStatus?.claude_installed ?? envStatus?.claude_installed ?? false)}
-                      {(enhancedEnvStatus?.claude_installed ?? envStatus?.claude_installed) ? '已安装' : '未安装'}
+                      {(enhancedEnvStatus?.claude_installed ?? envStatus?.claude_installed) ? t('env.detection.installed') : t('env.detection.notInstalled')}
                     </span>
                   </div>
                   {(enhancedEnvStatus?.claude_version || envStatus?.claude_version) && (
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400">版本:</span>
+                      <span className="text-gray-400">{t('env.detection.version')}:</span>
                       <span className="text-white">{enhancedEnvStatus?.claude_version || envStatus?.claude_version}</span>
                     </div>
                   )}
                   {(enhancedEnvStatus?.claude_path || envStatus?.claude_path) && (
                     <div className="flex items-start justify-between">
-                      <span className="text-gray-400 flex-shrink-0">路径:</span>
+                      <span className="text-gray-400 flex-shrink-0">{t('env.detection.path')}:</span>
                       <span className="text-white text-xs font-mono break-all ml-2 text-right">
                         {enhancedEnvStatus?.claude_path || envStatus?.claude_path}
                       </span>
@@ -387,13 +389,13 @@ export const EnvironmentSetup: React.FC = () => {
               {/* 其他依赖检测 */}
               {envStatus && (
                 <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">其他依赖</h3>
+                  <h3 className="text-sm font-semibold text-yellow-400 mb-3">{t('env.detection.otherDependencies')}</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400">ripgrep:</span>
                       <span className="text-white">
                         {getStatusIcon(enhancedEnvStatus?.ripgrep_installed ?? envStatus.ripgrep_installed)}
-                        {(enhancedEnvStatus?.ripgrep_installed ?? envStatus.ripgrep_installed) ? '已安装' : '未安装'}
+                        {(enhancedEnvStatus?.ripgrep_installed ?? envStatus.ripgrep_installed) ? t('env.detection.installed') : t('env.detection.notInstalled')}
                       </span>
                     </div>
                     {envStatus.os_type === 'macos' && (
@@ -401,7 +403,7 @@ export const EnvironmentSetup: React.FC = () => {
                         <span className="text-gray-400">Homebrew:</span>
                         <span className="text-white">
                           {getStatusIcon(enhancedEnvStatus?.homebrew_installed ?? envStatus.homebrew_installed)}
-                          {(enhancedEnvStatus?.homebrew_installed ?? envStatus.homebrew_installed) ? '已安装' : '未安装'}
+                          {(enhancedEnvStatus?.homebrew_installed ?? envStatus.homebrew_installed) ? t('env.detection.installed') : t('env.detection.notInstalled')}
                         </span>
                       </div>
                     )}
@@ -411,14 +413,14 @@ export const EnvironmentSetup: React.FC = () => {
                           <span className="text-gray-400">WSL:</span>
                           <span className="text-white">
                             {getStatusIcon(enhancedEnvStatus?.wsl_installed ?? envStatus.wsl_installed)}
-                            {(enhancedEnvStatus?.wsl_installed ?? envStatus.wsl_installed) ? '已安装' : '未安装'}
+                            {(enhancedEnvStatus?.wsl_installed ?? envStatus.wsl_installed) ? t('env.detection.installed') : t('env.detection.notInstalled')}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-gray-400">Git Bash:</span>
                           <span className="text-white">
                             {getStatusIcon(enhancedEnvStatus?.git_bash_installed ?? envStatus.git_bash_installed)}
-                            {(enhancedEnvStatus?.git_bash_installed ?? envStatus.git_bash_installed) ? '已安装' : '未安装'}
+                            {(enhancedEnvStatus?.git_bash_installed ?? envStatus.git_bash_installed) ? t('env.detection.installed') : t('env.detection.notInstalled')}
                           </span>
                         </div>
                       </>
@@ -437,11 +439,11 @@ export const EnvironmentSetup: React.FC = () => {
                   <span className="text-lg">{canInstall ? '✅' : '⚠️'}</span>
                   <div className="flex-1">
                     <p className={`font-semibold ${canInstall ? 'text-green-400' : 'text-yellow-400'}`}>
-                      {canInstall ? '环境检查通过' : '环境检查未通过'}
+                      {canInstall ? t('env.detection.checkPassed') : t('env.detection.checkFailed')}
                     </p>
                     {missingDeps.length > 0 && (
                       <div className="mt-2 space-y-1">
-                        <p className="text-sm text-gray-400">缺失的依赖:</p>
+                        <p className="text-sm text-gray-400">{t('env.detection.missingDeps')}:</p>
                         {missingDeps.map((dep, idx) => (
                           <p key={idx} className="text-sm text-gray-300 ml-4">• {dep}</p>
                         ))}
@@ -458,16 +460,16 @@ export const EnvironmentSetup: React.FC = () => {
       {/* 安装标签 */}
       {activeTab === 'install' && (
         <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 mt-4">
-          <h2 className="text-xl font-bold text-yellow-400 mb-6">安装 Claude Code</h2>
+          <h2 className="text-xl font-bold text-yellow-400 mb-6">{t('env.install.title')}</h2>
 
           {(enhancedEnvStatus?.claude_installed || envStatus?.claude_installed) ? (
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <span className="text-green-400 text-lg">✅</span>
                 <div className="flex-1">
-                  <p className="text-green-400 font-semibold">Claude Code 已安装</p>
+                  <p className="text-green-400 font-semibold">{t('env.install.alreadyInstalled')}</p>
                   <p className="text-gray-300 text-sm mt-1">
-                    版本: {enhancedEnvStatus?.claude_version || envStatus?.claude_version || '未知'}
+                    {t('env.detection.version')}: {enhancedEnvStatus?.claude_version || envStatus?.claude_version || t('common.unknown')}
                   </p>
                 </div>
               </div>
@@ -476,7 +478,7 @@ export const EnvironmentSetup: React.FC = () => {
             <div className="space-y-6">
               {/* 安装方式选择 */}
               <div className="space-y-3">
-                <label className="text-sm font-semibold text-yellow-400">选择安装方式</label>
+                <label className="text-sm font-semibold text-yellow-400">{t('env.install.selectMethod')}</label>
                 <div className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => setInstallMethod('Native')}
@@ -488,8 +490,8 @@ export const EnvironmentSetup: React.FC = () => {
                     } disabled:opacity-50`}
                   >
                     <div className="text-2xl mb-2">🌐</div>
-                    <div className="font-semibold text-sm">官方脚本</div>
-                    <div className="text-xs mt-1 opacity-70">推荐</div>
+                    <div className="font-semibold text-sm">{t('env.install.officialScript')}</div>
+                    <div className="text-xs mt-1 opacity-70">{t('env.install.recommended')}</div>
                   </button>
                   {(enhancedEnvStatus?.os_type || envStatus?.os_type) === 'macos' && (
                     <button
@@ -517,7 +519,7 @@ export const EnvironmentSetup: React.FC = () => {
                   >
                     <div className="text-2xl mb-2">📦</div>
                     <div className="font-semibold text-sm">NPM</div>
-                    <div className="text-xs mt-1 opacity-70">需要 Node.js</div>
+                    <div className="text-xs mt-1 opacity-70">{t('env.install.requireNode')}</div>
                   </button>
                 </div>
               </div>
@@ -549,12 +551,12 @@ export const EnvironmentSetup: React.FC = () => {
                 disabled={installing || !canInstall}
                 className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-lg hover:from-yellow-600 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {installing ? '安装中...' : '🚀 开始安装'}
+                {installing ? t('env.install.installing') : `🚀 ${t('env.install.startInstall')}`}
               </button>
 
               {!canInstall && missingDeps.length > 0 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-                  <p className="text-yellow-400 font-semibold mb-2">安装前需要:</p>
+                  <p className="text-yellow-400 font-semibold mb-2">{t('env.install.requirementsBefore')}:</p>
                   {missingDeps.map((dep, idx) => (
                     <p key={idx} className="text-sm text-gray-300 ml-4">• {dep}</p>
                   ))}
@@ -568,14 +570,14 @@ export const EnvironmentSetup: React.FC = () => {
       {/* 验证标签 */}
       {activeTab === 'verify' && (
         <div className="bg-gradient-to-br from-black via-gray-950 to-black border border-yellow-500/30 rounded-xl p-6 mt-4">
-          <h2 className="text-xl font-bold text-yellow-400 mb-6">验证安装</h2>
+          <h2 className="text-xl font-bold text-yellow-400 mb-6">{t('env.verify.title')}</h2>
 
           <div className="space-y-4">
             {/* 版本信息 */}
             {claudeVersion && (
               <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-400">当前版本:</span>
+                  <span className="text-gray-400">{t('env.verify.currentVersion')}:</span>
                   <span className="text-white font-mono">{claudeVersion}</span>
                 </div>
 
@@ -583,7 +585,7 @@ export const EnvironmentSetup: React.FC = () => {
                   <>
                     {versionInfo.latest && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-400">最新版本:</span>
+                        <span className="text-gray-400">{t('env.verify.latestVersion')}:</span>
                         <span className="text-white font-mono">{versionInfo.latest}</span>
                       </div>
                     )}
@@ -592,7 +594,7 @@ export const EnvironmentSetup: React.FC = () => {
                       <div className="mt-3 pt-3 border-t border-gray-800">
                         <div className="flex items-center gap-2 text-yellow-400 mb-2">
                           <span>🎉</span>
-                          <span className="font-semibold">发现新版本！</span>
+                          <span className="font-semibold">{t('env.verify.newVersionAvailable')}</span>
                         </div>
                         {versionInfo.changelog_url && (
                           <a
@@ -601,7 +603,7 @@ export const EnvironmentSetup: React.FC = () => {
                             rel="noopener noreferrer"
                             className="text-sm text-blue-400 hover:text-blue-300 underline"
                           >
-                            查看更新日志
+                            {t('env.verify.viewChangelog')}
                           </a>
                         )}
                       </div>
@@ -610,7 +612,7 @@ export const EnvironmentSetup: React.FC = () => {
                     {!versionInfo.update_available && versionInfo.latest && (
                       <div className="mt-2 text-sm text-green-400 flex items-center gap-2">
                         <span>✅</span>
-                        <span>已是最新版本</span>
+                        <span>{t('env.verify.isLatestVersion')}</span>
                       </div>
                     )}
                   </>
@@ -625,21 +627,21 @@ export const EnvironmentSetup: React.FC = () => {
                 disabled={verifying || updating}
                 className="px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50 font-semibold transition-all"
               >
-                {verifying ? '验证中...' : '🔍 验证安装'}
+                {verifying ? t('env.verify.verifying') : `🔍 ${t('env.verify.verifyInstall')}`}
               </button>
               <button
                 onClick={handleRunDoctor}
                 disabled={verifying || updating}
                 className="px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 rounded-lg border border-yellow-500/30 disabled:opacity-50 font-semibold transition-all"
               >
-                {verifying ? '运行中...' : '🏥 运行 Doctor'}
+                {verifying ? t('env.verify.running') : `🏥 ${t('env.verify.runDoctor')}`}
               </button>
               <button
                 onClick={checkUpdates}
                 disabled={checkingUpdate || updating}
                 className="px-4 py-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 font-semibold transition-all"
               >
-                {checkingUpdate ? '检查中...' : '🔄 检查更新'}
+                {checkingUpdate ? t('env.verify.checking') : `🔄 ${t('env.verify.checkUpdate')}`}
               </button>
               {versionInfo?.update_available && (
                 <button
@@ -647,7 +649,7 @@ export const EnvironmentSetup: React.FC = () => {
                   disabled={updating}
                   className="px-4 py-3 bg-gradient-to-r from-green-500/20 to-green-600/20 hover:from-green-500/30 hover:to-green-600/30 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 font-semibold transition-all"
                 >
-                  {updating ? '更新中...' : '⬆️ 更新版本'}
+                  {updating ? t('env.verify.updating') : `⬆️ ${t('env.verify.updateVersion')}`}
                 </button>
               )}
             </div>
@@ -675,14 +677,14 @@ export const EnvironmentSetup: React.FC = () => {
 
             {/* Doctor 输出 */}
             <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800">
-              <h3 className="text-sm font-semibold text-yellow-400 mb-2">诊断输出</h3>
+              <h3 className="text-sm font-semibold text-yellow-400 mb-2">{t('env.verify.diagnosticOutput')}</h3>
               {doctorOutput ? (
                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto">
                   {doctorOutput}
                 </pre>
               ) : (
                 <div className="text-sm text-gray-500 italic py-4 text-center">
-                  点击 "运行 Doctor" 按钮查看诊断信息
+                  {t('env.verify.runDoctorPrompt')}
                 </div>
               )}
             </div>

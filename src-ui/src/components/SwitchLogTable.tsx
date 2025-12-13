@@ -4,6 +4,8 @@
  */
 
 import React, { useRef, useEffect, useState } from 'react';
+// TODO: 完成国际化迁移后启用
+// import { useTranslation } from 'react-i18next';
 import type { SwitchLog, SwitchReason, ErrorType } from '../types/tauri';
 
 interface SwitchLogTableProps {

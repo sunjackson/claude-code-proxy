@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ConfigGroup } from '../types/tauri';
 
 interface GroupEditorProps {
@@ -30,6 +31,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
   onSave,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   // 表单状态
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -65,17 +67,17 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (!name.trim()) {
-      newErrors.name = '分组名称不能为空';
+      newErrors.name = t('groupEditor.groupNameRequired');
     } else if (name.length > 100) {
-      newErrors.name = '分组名称不能超过 100 个字符';
+      newErrors.name = t('groupEditor.groupNameTooLong');
     }
 
     if (latencyThresholdMs < 100 || latencyThresholdMs > 100000) {
-      newErrors.latencyThresholdMs = '延迟阈值必须在 100-100000 毫秒范围内';
+      newErrors.latencyThresholdMs = t('groupEditor.latencyThresholdError');
     }
 
     if (healthCheckIntervalSec < 60 || healthCheckIntervalSec > 3600) {
-      newErrors.healthCheckIntervalSec = '健康检查间隔必须在 60-3600 秒范围内';
+      newErrors.healthCheckIntervalSec = t('groupEditor.checkIntervalError');
     }
 
     setErrors(newErrors);
@@ -116,7 +118,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-yellow-400 tracking-wide">
-              {group ? '编辑配置分组' : '新建配置分组'}
+              {group ? t('groupEditor.editConfigGroup') : t('groupEditor.newConfigGroup')}
             </h2>
           </div>
         </div>
@@ -130,7 +132,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
               htmlFor="name"
               className="block text-sm font-medium text-gray-300 mb-2"
             >
-              分组名称 <span className="text-red-500">*</span>
+              {t('config.groupName')} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -140,7 +142,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
               className={`w-full px-4 py-2 bg-gray-900 border ${
                 errors.name ? 'border-red-500' : 'border-gray-700'
               } rounded text-white focus:outline-none focus:border-yellow-500 transition-colors`}
-              placeholder="例如: 工作配置"
+              placeholder={t('groupEditor.groupNamePlaceholder')}
             />
             {errors.name && (
               <p className="mt-1 text-sm text-red-500">{errors.name}</p>
@@ -153,7 +155,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
               htmlFor="description"
               className="block text-sm font-medium text-gray-300 mb-2"
             >
-              分组描述
+              {t('config.groupDescription')}
             </label>
             <textarea
               id="description"
@@ -161,7 +163,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors resize-none"
-              placeholder="可选的分组描述..."
+              placeholder={t('groupEditor.groupDescPlaceholder')}
             />
           </div>
 
@@ -172,7 +174,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
               <h3 className="text-sm font-bold text-yellow-400 tracking-wide">
-                自动切换设置
+                {t('groupEditor.autoSwitchSettings')}
               </h3>
             </div>
 
@@ -183,10 +185,10 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                   htmlFor="autoSwitchEnabled"
                   className="text-sm font-semibold text-gray-200 cursor-pointer block mb-1"
                 >
-                  启用自动切换
+                  {t('groupEditor.enableAutoSwitch')}
                 </label>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  当配置不可用或延迟过高时,自动切换到下一个可用配置
+                  {t('groupEditor.autoSwitchHint')}
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer ml-4">
@@ -211,7 +213,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 htmlFor="latencyThresholdMs"
                 className="block text-sm font-semibold text-gray-200 mb-2"
               >
-                延迟阈值 (毫秒) <span className="text-red-500">*</span>
+                {t('groupEditor.latencyThreshold')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
@@ -239,7 +241,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 </p>
               )}
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                当配置延迟超过此值时,将触发自动切换。推荐范围: 10000-100000ms
+                {t('groupEditor.latencyThresholdHint')}
               </p>
             </div>
           </div>
@@ -251,7 +253,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <h3 className="text-sm font-bold text-yellow-400 tracking-wide">
-                自动健康检查
+                {t('groupEditor.autoHealthCheck')}
               </h3>
             </div>
 
@@ -262,10 +264,10 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                   htmlFor="healthCheckEnabled"
                   className="text-sm font-semibold text-gray-200 cursor-pointer block mb-1"
                 >
-                  启用自动检测
+                  {t('groupEditor.enableAutoDetection')}
                 </label>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  定期检查此分组中所有配置的健康状态，自动标记不可用的配置
+                  {t('groupEditor.healthCheckHint')}
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer ml-4">
@@ -290,7 +292,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 htmlFor="healthCheckIntervalSec"
                 className="block text-sm font-semibold text-gray-200 mb-2"
               >
-                检查间隔 (秒) <span className="text-red-500">*</span>
+                {t('groupEditor.checkIntervalLabel')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
@@ -318,7 +320,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 </p>
               )}
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                每隔指定时间自动检查配置健康状态。推荐范围: 300-600秒 (5-10分钟)
+                {t('groupEditor.checkIntervalHint')}
               </p>
             </div>
           </div>
@@ -341,7 +343,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                   </svg>
                 </div>
                 <p className="text-sm text-blue-300 leading-relaxed">
-                  这是系统默认分组，可以自定义名称和描述
+                  {t('groupEditor.defaultGroupHint')}
                 </p>
               </div>
             </div>
@@ -354,7 +356,7 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                 onClick={onCancel}
                 className="px-6 py-2.5 bg-gray-900 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-all duration-200 font-semibold border border-gray-800 hover:border-gray-700"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -365,14 +367,14 @@ export const GroupEditor: React.FC<GroupEditorProps> = ({
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    保存
+                    {t('common.save')}
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    创建
+                    {t('common.create')}
                   </>
                 )}
               </button>

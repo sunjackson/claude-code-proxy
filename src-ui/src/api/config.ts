@@ -76,10 +76,7 @@ export async function updateConfigGroup(
  * @param id 分组ID
  * @param moveToDefault 是否将分组下的配置移到"未分组"(true: 移动, false: 删除配置)
  */
-export async function deleteConfigGroup(
-  id: number,
-  moveToDefault: boolean
-): Promise<void> {
+export async function deleteConfigGroup(id: number, moveToDefault: boolean): Promise<void> {
   return await invoke('delete_config_group', { id, moveToDefault });
 }
 
@@ -95,9 +92,7 @@ export async function countConfigsInGroup(groupId: number): Promise<number> {
 /**
  * 创建 API 配置
  */
-export async function createApiConfig(
-  input: CreateApiConfigInput
-): Promise<ApiConfig> {
+export async function createApiConfig(input: CreateApiConfigInput): Promise<ApiConfig> {
   return await invoke('create_api_config', { input });
 }
 
@@ -105,9 +100,7 @@ export async function createApiConfig(
  * 列出所有 API 配置
  * @param groupId 可选的分组ID筛选
  */
-export async function listApiConfigs(
-  groupId?: number | null
-): Promise<ApiConfig[]> {
+export async function listApiConfigs(groupId?: number | null): Promise<ApiConfig[]> {
   return await invoke('list_api_configs', { groupId: groupId || null });
 }
 
@@ -121,9 +114,7 @@ export async function getApiConfig(id: number): Promise<ApiConfig> {
 /**
  * 更新 API 配置
  */
-export async function updateApiConfig(
-  input: UpdateApiConfigInput
-): Promise<ApiConfig> {
+export async function updateApiConfig(input: UpdateApiConfigInput): Promise<ApiConfig> {
   return await invoke('update_api_config', { input });
 }
 
@@ -137,10 +128,7 @@ export async function deleteApiConfig(id: number): Promise<void> {
 /**
  * 重新排序 API 配置
  */
-export async function reorderApiConfig(
-  configId: number,
-  newSortOrder: number
-): Promise<void> {
+export async function reorderApiConfig(configId: number, newSortOrder: number): Promise<void> {
   return await invoke('reorder_api_config', { configId, newSortOrder });
 }
 
@@ -162,10 +150,7 @@ export async function getApiKey(configId: number): Promise<string> {
  *
  * 注意：如果停用的是当前激活的配置，会自动切换到下一个可用配置
  */
-export async function setConfigEnabled(
-  configId: number,
-  enabled: boolean
-): Promise<ApiConfig> {
+export async function setConfigEnabled(configId: number, enabled: boolean): Promise<ApiConfig> {
   return await invoke('set_config_enabled', { configId, enabled });
 }
 
@@ -173,8 +158,6 @@ export async function setConfigEnabled(
  * 测试 API 配置连接性
  * @returns [延迟毫秒, 是否可用]
  */
-export async function testApiConfig(
-  configId: number
-): Promise<[number, boolean]> {
+export async function testApiConfig(configId: number): Promise<[number, boolean]> {
   return await invoke('test_api_config', { configId });
 }

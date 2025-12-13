@@ -33,7 +33,7 @@ export const Recommendations: React.FC = () => {
       const data = await recommendationApi.loadRecommendedServices();
       setServices(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载推荐服务失败');
+      setError(err instanceof Error ? err.message : t('errors.loadRecommendedServicesFailed'));
       console.error('Failed to load recommended services:', err);
     } finally {
       setLoading(false);
@@ -48,7 +48,7 @@ export const Recommendations: React.FC = () => {
       const data = await recommendationApi.refreshRecommendedServices();
       setServices(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '刷新推荐服务失败');
+      setError(err instanceof Error ? err.message : t('errors.refreshRecommendedServicesFailed'));
       console.error('Failed to refresh recommended services:', err);
     } finally {
       setLoading(false);
@@ -100,7 +100,7 @@ export const Recommendations: React.FC = () => {
             </div>
           </div>
           <p className="mt-6 text-gray-400 font-medium">{t('common.loading')}</p>
-          <p className="mt-2 text-sm text-gray-500">正在加载推荐服务...</p>
+          <p className="mt-2 text-sm text-gray-500">{t('recommendations.loadingServices')}</p>
         </div>
       </CompactLayout>
     );
@@ -120,7 +120,7 @@ export const Recommendations: React.FC = () => {
               </div>
             </div>
             <div className="flex-1">
-              <h4 className="text-red-400 font-bold mb-1 tracking-wide">加载失败</h4>
+              <h4 className="text-red-400 font-bold mb-1 tracking-wide">{t('errors.loadFailed')}</h4>
               <p className="text-gray-300 text-sm leading-relaxed">{error}</p>
             </div>
             <button
@@ -154,19 +154,19 @@ export const Recommendations: React.FC = () => {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-400 mb-2">
-                {filter === 'recommended' ? '暂无推荐服务' : '暂无服务'}
+                {filter === 'recommended' ? t('recommendations.noRecommendedServices') : t('recommendations.noServices')}
               </h3>
               <p className="text-sm text-gray-500 max-w-md leading-relaxed">
                 {filter === 'recommended'
-                  ? '当前没有标记为推荐的服务，请切换到"全部"查看所有服务'
-                  : '服务列表为空，请点击刷新按钮或联系管理员'}
+                  ? t('recommendations.noRecommendedServicesDesc')
+                  : t('recommendations.noServicesDesc')}
               </p>
               {filter === 'recommended' && (
                 <button
                   onClick={() => setFilter('all')}
                   className="mt-8 px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black rounded-lg font-bold transition-all duration-200 shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 hover:scale-105"
                 >
-                  查看全部服务
+                  {t('recommendations.viewAllServices')}
                 </button>
               )}
             </div>
@@ -180,8 +180,8 @@ export const Recommendations: React.FC = () => {
                   {filteredAndSortedServices.length}
                 </span>
                 <span className="text-sm text-gray-500">
-                  个服务
-                  {filter === 'recommended' && ` / 共 ${services.length} 个`}
+                  {t('recommendations.services', { count: filteredAndSortedServices.length })}
+                  {filter === 'recommended' && ` / ${t('recommendations.total', { count: services.length })}`}
                 </span>
               </div>
               {services.length > 0 && (
@@ -190,11 +190,13 @@ export const Recommendations: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>
-                    更新于 {new Date(services[0].loaded_at).toLocaleString('zh-CN', {
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
+                    {t('recommendations.updatedAt', {
+                      time: new Date(services[0].loaded_at).toLocaleString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
                     })}
                   </span>
                 </div>

@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ProxyService, ConfigGroup, ApiConfig } from '../types/tauri';
 import { formatDisplayUrl } from '../utils/url';
 
@@ -33,6 +34,7 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
   onToggleAutoSwitch,
   actionLoading = false,
 }) => {
+  const { t } = useTranslation();
   // 处理自动切换开关
   const handleAutoSwitchToggle = (e: React.MouseEvent, groupId: number, currentState: boolean) => {
     e.stopPropagation(); // 防止触发分组切换
@@ -58,15 +60,15 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-amber-400">分组管理</h3>
-              <p className="text-xs text-gray-400">快速切换配置分组</p>
+              <h3 className="text-lg font-semibold text-amber-400">{t('quickActions.groupManagement')}</h3>
+              <p className="text-xs text-gray-400">{t('quickActions.switchGroupQuickly')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 px-3 py-1 bg-gray-800/50 rounded-full border border-gray-700">
             <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
               <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
             </svg>
-            <span className="text-xs font-medium text-gray-400">{groups.length} 个</span>
+            <span className="text-xs font-medium text-gray-400">{groups.length} {t('quickActions.count')}</span>
           </div>
         </div>
 

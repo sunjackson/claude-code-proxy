@@ -150,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
                     </span>
                   )}
                   <span className="text-sm font-semibold text-yellow-400 group-hover:text-yellow-300 transition-colors leading-tight">
-                    {proxyStatus.active_config_name || '选择配置'}
+                    {proxyStatus.active_config_name || t('header.selectConfig')}
                   </span>
                 </div>
 
@@ -173,11 +173,11 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
                       <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      <h3 className="text-sm font-bold text-yellow-400">快速切换配置</h3>
+                      <h3 className="text-sm font-bold text-yellow-400">{t('header.quickSwitch')}</h3>
                     </div>
                     {proxyStatus.active_group_name && (
                       <p className="text-xs text-gray-500">
-                        当前分组: {proxyStatus.active_group_name}
+                        {t('header.currentGroup')}: {proxyStatus.active_group_name}
                       </p>
                     )}
                   </div>
@@ -188,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
                         <svg className="w-10 h-10 mx-auto text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <p className="text-sm text-gray-400">当前分组无可用配置</p>
+                        <p className="text-sm text-gray-400">{t('header.noAvailableConfig')}</p>
                       </div>
                     ) : (
                       <div className="py-2">
@@ -215,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
                                     </span>
                                     {isActive && (
                                       <span className="flex-shrink-0 px-2 py-0.5 bg-yellow-500 text-black text-xs font-bold rounded">
-                                        使用中
+                                        {t('header.inUse')}
                                       </span>
                                     )}
                                   </div>
@@ -247,7 +247,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
                   {/* 底部提示 */}
                   <div className="px-4 py-2 border-t border-gray-800 bg-gray-900/50">
                     <p className="text-xs text-gray-500 text-center">
-                      共 {availableConfigs.length} 个可用配置
+                      {t('header.totalAvailable', { count: availableConfigs.length })}
                     </p>
                   </div>
                 </div>
@@ -281,7 +281,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
             </svg>
-            {currentLanguage === 'zh-CN' ? '中文' : 'English'}
+            {currentLanguage === 'zh-CN' ? t('settings.languageZhCN') : t('settings.languageEnUS')}
           </button>
 
           {/* 版本徽章 */}

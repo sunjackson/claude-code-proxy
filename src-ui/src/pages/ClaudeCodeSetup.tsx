@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CompactLayout } from '../components/CompactLayout';
 import { McpServerManager } from '../components/McpServerManager';
 import { PermissionsManager } from '../components/PermissionsManager';
@@ -27,48 +28,49 @@ interface TabConfig {
   icon: React.ReactNode;
 }
 
-const mainTabs: TabConfig[] = [
-  {
-    id: 'environment',
-    label: '环境检测',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    )
-  },
-  {
-    id: 'mcp',
-    label: 'MCP 服务',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-      </svg>
-    )
-  },
-  {
-    id: 'permissions',
-    label: '权限管理',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-      </svg>
-    )
-  },
-  {
-    id: 'skills',
-    label: '技能配置',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    )
-  },
-];
-
 export const ClaudeCodeSetup: React.FC = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<MainTab>('environment');
   const [envSubTab, setEnvSubTab] = useState<EnvSubTab>('detection');
+
+  const mainTabs: TabConfig[] = [
+    {
+      id: 'environment',
+      label: t('setup.tabs.environment'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    },
+    {
+      id: 'mcp',
+      label: t('setup.tabs.mcp'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+        </svg>
+      )
+    },
+    {
+      id: 'permissions',
+      label: t('setup.tabs.permissions'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      )
+    },
+    {
+      id: 'skills',
+      label: t('setup.tabs.skills'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      )
+    },
+  ];
 
   // 环境检测状态
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
@@ -112,7 +114,7 @@ export const ClaudeCodeSetup: React.FC = () => {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '环境检测失败');
+      setError(err instanceof Error ? err.message : t('setup.environment.envDetectionFailed'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +122,7 @@ export const ClaudeCodeSetup: React.FC = () => {
 
   const handleInstall = async () => {
     if (!canInstall) {
-      setError('环境不满足安装条件,请先安装缺失的依赖');
+      setError(t('setup.errors.envNotReady'));
       return;
     }
 
@@ -142,7 +144,7 @@ export const ClaudeCodeSetup: React.FC = () => {
       });
       await loadEnvironmentStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '安装失败');
+      setError(err instanceof Error ? err.message : t('setup.errors.installFailed'));
     } finally {
       setInstalling(false);
     }
@@ -155,7 +157,7 @@ export const ClaudeCodeSetup: React.FC = () => {
       const output = await runClaudeDoctor();
       setDoctorOutput(output);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '运行 claude doctor 失败');
+      setError(err instanceof Error ? err.message : t('setup.verify.runDoctorFailed'));
     } finally {
       setVerifying(false);
     }
@@ -169,12 +171,12 @@ export const ClaudeCodeSetup: React.FC = () => {
       if (isInstalled) {
         const version = await getClaudeVersion();
         setClaudeVersion(version);
-        setDoctorOutput('✅ Claude Code 已正确安装');
+        setDoctorOutput(t('setup.verify.verifySuccess'));
       } else {
-        setError('Claude Code 未安装或安装不完整');
+        setError(t('setup.verify.notInstalledOrIncomplete'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '验证失败');
+      setError(err instanceof Error ? err.message : t('setup.verify.verifyFailed'));
     } finally {
       setVerifying(false);
     }
@@ -199,17 +201,17 @@ export const ClaudeCodeSetup: React.FC = () => {
       {/* 环境子标签 */}
       <div className="flex gap-1 bg-gray-800/30 p-1 rounded-lg">
         {[
-          { id: 'detection' as EnvSubTab, label: '环境检测', icon: (
+          { id: 'detection' as EnvSubTab, label: t('setup.envSubTabs.detection'), icon: (
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           )},
-          { id: 'install' as EnvSubTab, label: '安装', icon: (
+          { id: 'install' as EnvSubTab, label: t('setup.envSubTabs.install'), icon: (
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
           )},
-          { id: 'verify' as EnvSubTab, label: '验证', icon: (
+          { id: 'verify' as EnvSubTab, label: t('setup.envSubTabs.verify'), icon: (
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -234,7 +236,7 @@ export const ClaudeCodeSetup: React.FC = () => {
       {envSubTab === 'detection' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-yellow-400">系统环境</h3>
+            <h3 className="text-sm font-semibold text-yellow-400">{t('setup.environment.systemInfo')}</h3>
             <button
               onClick={loadEnvironmentStatus}
               disabled={loading}
@@ -250,7 +252,7 @@ export const ClaudeCodeSetup: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
-              {loading ? '检测中' : '刷新'}
+              {loading ? t('setup.environment.detecting') : t('common.refresh')}
             </button>
           </div>
 
@@ -258,24 +260,24 @@ export const ClaudeCodeSetup: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {/* 系统信息 */}
               <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800">
-                <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">系统信息</h4>
+                <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('setup.environment.systemInfoSection')}</h4>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">操作系统</span>
+                    <span className="text-gray-500">{t('setup.environment.osType')}</span>
                     <span className="text-white font-medium">{envStatus.os_type} {envStatus.os_version}</span>
                   </div>
                   {envStatus.shell && (
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Shell</span>
+                      <span className="text-gray-500">{t('setup.environment.shell')}</span>
                       <span className="text-white font-medium">{envStatus.shell}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-gray-500">网络</span>
+                    <span className="text-gray-500">{t('setup.environment.network')}</span>
                     <span className="flex items-center gap-1">
                       {getStatusIcon(envStatus.network_available)}
                       <span className={envStatus.network_available ? 'text-green-400' : 'text-red-400'}>
-                        {envStatus.network_available ? '正常' : '异常'}
+                        {envStatus.network_available ? t('setup.environment.normal') : t('setup.environment.abnormal')}
                       </span>
                     </span>
                   </div>
@@ -284,26 +286,26 @@ export const ClaudeCodeSetup: React.FC = () => {
 
               {/* Claude Code 状态 */}
               <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800">
-                <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Claude Code</h4>
+                <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('setup.environment.claudeCodeStatus')}</h4>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">状态</span>
+                    <span className="text-gray-500">{t('common.status')}</span>
                     <span className="flex items-center gap-1">
                       {getStatusIcon(envStatus.claude_installed)}
                       <span className={envStatus.claude_installed ? 'text-green-400' : 'text-red-400'}>
-                        {envStatus.claude_installed ? '已安装' : '未安装'}
+                        {envStatus.claude_installed ? t('setup.environment.installed') : t('setup.environment.notInstalled')}
                       </span>
                     </span>
                   </div>
                   {envStatus.claude_version && (
                     <div className="flex justify-between">
-                      <span className="text-gray-500">版本</span>
+                      <span className="text-gray-500">{t('setup.environment.version')}</span>
                       <span className="text-white font-mono">{envStatus.claude_version}</span>
                     </div>
                   )}
                   {envStatus.claude_path && (
                     <div className="flex justify-between items-start">
-                      <span className="text-gray-500 flex-shrink-0">路径</span>
+                      <span className="text-gray-500 flex-shrink-0">{t('setup.environment.path')}</span>
                       <span className="text-gray-300 text-[10px] font-mono break-all ml-2 text-right max-w-[180px]">{envStatus.claude_path}</span>
                     </div>
                   )}
@@ -312,7 +314,7 @@ export const ClaudeCodeSetup: React.FC = () => {
 
               {/* 依赖检测 */}
               <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800 md:col-span-2">
-                <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">依赖组件</h4>
+                <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('setup.environment.dependencies')}</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                   <div className="flex items-center gap-1.5 bg-gray-800/50 rounded px-2 py-1.5">
                     {getStatusIcon(envStatus.node_installed)}
@@ -359,11 +361,11 @@ export const ClaudeCodeSetup: React.FC = () => {
                   )}
                   <div>
                     <p className={`text-xs font-semibold ${canInstall ? 'text-green-400' : 'text-yellow-400'}`}>
-                      {canInstall ? '环境检查通过' : '环境检查未通过'}
+                      {canInstall ? t('setup.environment.checkPassed') : t('setup.environment.checkFailed')}
                     </p>
                     {missingDeps.length > 0 && (
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        缺失: {missingDeps.join(', ')}
+                        {t('setup.environment.missing')}: {missingDeps.join(', ')}
                       </p>
                     )}
                   </div>
@@ -377,7 +379,7 @@ export const ClaudeCodeSetup: React.FC = () => {
       {/* 安装 */}
       {envSubTab === 'install' && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-yellow-400">安装 Claude Code</h3>
+          <h3 className="text-sm font-semibold text-yellow-400">{t('setup.install.title')}</h3>
 
           {envStatus?.claude_installed ? (
             <div className="bg-green-500/5 border border-green-500/30 rounded-lg p-3">
@@ -386,8 +388,8 @@ export const ClaudeCodeSetup: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
-                  <p className="text-green-400 text-xs font-semibold">Claude Code 已安装</p>
-                  <p className="text-gray-400 text-[10px]">版本: {envStatus.claude_version || '未知'}</p>
+                  <p className="text-green-400 text-xs font-semibold">{t('setup.install.alreadyInstalled')}</p>
+                  <p className="text-gray-400 text-[10px]">{t('setup.environment.version')}: {envStatus.claude_version || t('common.unknown')}</p>
                 </div>
               </div>
             </div>
@@ -407,8 +409,8 @@ export const ClaudeCodeSetup: React.FC = () => {
                   <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                   </svg>
-                  <div className="font-semibold text-xs">官方脚本</div>
-                  <div className="text-[10px] mt-0.5 opacity-70">推荐</div>
+                  <div className="font-semibold text-xs">{t('setup.install.official')}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{t('setup.install.recommended')}</div>
                 </button>
                 {envStatus?.os_type === 'macos' && (
                   <button
@@ -421,8 +423,8 @@ export const ClaudeCodeSetup: React.FC = () => {
                     } disabled:opacity-50`}
                   >
                     <div className="text-lg mb-1">🍺</div>
-                    <div className="font-semibold text-xs">Homebrew</div>
-                    <div className="text-[10px] mt-0.5 opacity-70">macOS</div>
+                    <div className="font-semibold text-xs">{t('setup.install.homebrew')}</div>
+                    <div className="text-[10px] mt-0.5 opacity-70">{t('setup.install.macosOnly')}</div>
                   </button>
                 )}
                 <button
@@ -437,8 +439,8 @@ export const ClaudeCodeSetup: React.FC = () => {
                   <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
-                  <div className="font-semibold text-xs">NPM</div>
-                  <div className="text-[10px] mt-0.5 opacity-70">需 Node.js</div>
+                  <div className="font-semibold text-xs">{t('setup.install.npm')}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{t('setup.install.needsNodejs')}</div>
                 </button>
               </div>
 
@@ -471,21 +473,21 @@ export const ClaudeCodeSetup: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    安装中...
+                    {t('setup.install.installing')}
                   </>
                 ) : (
                   <>
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    开始安装
+                    {t('setup.install.startInstall')}
                   </>
                 )}
               </button>
 
               {!canInstall && missingDeps.length > 0 && (
                 <div className="bg-yellow-500/5 border border-yellow-500/30 rounded-lg p-3">
-                  <p className="text-yellow-400 text-xs font-semibold mb-1">安装前需要:</p>
+                  <p className="text-yellow-400 text-xs font-semibold mb-1">{t('setup.install.installRequirements')}</p>
                   {missingDeps.map((dep, idx) => (
                     <p key={idx} className="text-[10px] text-gray-400 ml-3">• {dep}</p>
                   ))}
@@ -499,12 +501,12 @@ export const ClaudeCodeSetup: React.FC = () => {
       {/* 验证 */}
       {envSubTab === 'verify' && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-yellow-400">验证安装</h3>
+          <h3 className="text-sm font-semibold text-yellow-400">{t('setup.verify.title')}</h3>
 
           {claudeVersion && (
             <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400">Claude Code 版本</span>
+                <span className="text-gray-400">{t('setup.environment.claudeCodeStatus')} {t('setup.environment.version')}</span>
                 <span className="text-white font-mono">{claudeVersion}</span>
               </div>
             </div>
@@ -526,7 +528,7 @@ export const ClaudeCodeSetup: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               )}
-              验证安装
+              {t('setup.verify.verifyInstallation')}
             </button>
             <button
               onClick={handleRunDoctor}
@@ -543,13 +545,13 @@ export const ClaudeCodeSetup: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
               )}
-              运行诊断
+              {t('setup.verify.runDiagnostic')}
             </button>
           </div>
 
           {doctorOutput && (
             <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800">
-              <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">诊断输出</h4>
+              <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('setup.verify.diagnosticOutput')}</h4>
               <pre className="text-[10px] text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto max-h-40 overflow-y-auto">
                 {doctorOutput}
               </pre>
@@ -583,10 +585,10 @@ export const ClaudeCodeSetup: React.FC = () => {
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
           </svg>
-          Claude Code 配置
+          {t('setup.title')}
         </h1>
         <p className="text-gray-500 text-xs mt-1">
-          环境检测 · MCP服务 · 权限管理 · 技能配置
+          {t('setup.subtitle')}
         </p>
       </div>
 

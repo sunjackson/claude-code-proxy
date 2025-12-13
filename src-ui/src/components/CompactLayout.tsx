@@ -6,6 +6,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../hooks/useLanguage';
 import { useAutoSwitch } from '../hooks/useAutoSwitch';
 import * as proxyApi from '../api/proxy';
@@ -16,6 +17,7 @@ interface CompactLayoutProps {
 }
 
 export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
+  const { t } = useTranslation();
   const { currentLanguage, toggleLanguage } = useLanguage();
   const [proxyStatus, setProxyStatus] = useState<ProxyService | null>(null);
 
@@ -80,10 +82,11 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
   };
 
   const navItems = [
-    { path: '/', title: '仪表盘' },
-    { path: '/claude-code-setup', title: 'CC配置' },
-    { path: '/recommendations', title: '推荐服务商' },
-    { path: '/settings', title: '系统设置' },
+    { path: '/', titleKey: 'nav.dashboard' },
+    { path: '/terminal', titleKey: 'nav.terminal' },
+    { path: '/claude-code-setup', titleKey: 'nav.advancedConfig' },
+    { path: '/recommendations', titleKey: 'nav.recommendations' },
+    { path: '/settings', titleKey: 'nav.systemSettings' },
   ];
 
   return (
@@ -120,7 +123,7 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
                 transition: 'color 0.15s ease-in-out, background-color 0.15s ease-in-out',
               }}
             >
-              {item.title}
+              {t(item.titleKey)}
             </NavLink>
           ))}
         </nav>
@@ -131,7 +134,7 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-900/50 border border-yellow-500/30 rounded">
               <div className={`w-2 h-2 rounded-full ${getStatusColor(proxyStatus.status)} ${proxyStatus.status === 'running' ? 'animate-pulse' : ''}`} />
               <span className="text-xs text-gray-300 whitespace-nowrap">
-                {proxyStatus.status === 'running' ? '运行' : '停止'}
+                {proxyStatus.status === 'running' ? t('status.running') : t('status.stopped')}
               </span>
               {proxyStatus.active_config_name && proxyStatus.status === 'running' && (
                 <>
@@ -147,7 +150,7 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
           <button
             onClick={toggleLanguage}
             className="flex items-center justify-center transition-all border rounded w-9 h-9 bg-gray-900/50 border-yellow-500/30 hover:border-yellow-500/50"
-            title="切换语言"
+            title={t('settings.language')}
           >
             <span className="text-xs text-gray-300">{currentLanguage === 'zh-CN' ? '中' : 'EN'}</span>
           </button>
@@ -156,7 +159,7 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
           <Link
             to="/dev-logs"
             className="flex items-center justify-center transition-all border rounded w-9 h-9 bg-gray-900/50 border-amber-500/30 hover:border-amber-500/50 hover:bg-amber-500/10 group"
-            title="开发者日志"
+            title={t('devLogs.title')}
           >
             <svg className="w-4 h-4 text-amber-400 group-hover:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />

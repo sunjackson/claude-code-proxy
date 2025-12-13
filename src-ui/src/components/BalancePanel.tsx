@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ApiConfig, BalanceInfo } from '../types/tauri';
 import * as balanceApi from '../api/balance';
 import { MessageDialog } from './ui/Dialog';
@@ -25,6 +26,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
   groupId,
   onRefresh,
 }) => {
+  const { t } = useTranslation();
   const [balanceInfos, setBalanceInfos] = useState<Map<number, BalanceInfo>>(new Map());
   const [querying, setQuerying] = useState<Set<number>>(new Set());
   const [queryingAll, setQueryingAll] = useState(false);
@@ -71,7 +73,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
       }
     } catch (error) {
       console.error(`查询余额失败 (config_id: ${configId}):`, error);
-      showMessage('error', '查询失败', error instanceof Error ? error.message : '未知错误');
+      showMessage('error', t('balance.queryFailed'), error instanceof Error ? error.message : t('common.unknownError'));
     } finally {
       setQuerying(prev => {
         const next = new Set(prev);
@@ -87,7 +89,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
     const enabledConfigs = configs.filter(c => c.auto_balance_check && c.balance_query_url);
 
     if (enabledConfigs.length === 0) {
-      showMessage('info', '无可用配置', '没有启用自动余额查询的配置');
+      showMessage('info', t('balance.noAvailableConfigs'), t('balance.noAutoBalanceEnabled'));
       return;
     }
 
@@ -104,7 +106,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
       }
     } catch (error) {
       console.error('批量查询余额失败:', error);
-      showMessage('error', '批量查询失败', error instanceof Error ? error.message : '未知错误');
+      showMessage('error', t('balance.batchQueryFailed'), error instanceof Error ? error.message : t('common.unknownError'));
     } finally {
       setQueryingAll(false);
     }
@@ -148,7 +150,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
     }
     try {
       const date = new Date(timestamp);
-      return date.toLocaleString('zh-CN', {
+      return date.toLocaleString(t('common.locale'), {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -187,7 +189,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
     <div className="space-y-4">
       {/* 头部：标题 + 查询全部按钮 */}
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-yellow-400">余额查询结果</h3>
+        <h3 className="text-lg font-semibold text-yellow-400">{t('balance.queryResult')}</h3>
         {groupId && configs.length > 0 && (() => {
           const enabledCount = configs.filter(c => c.auto_balance_check && c.balance_query_url).length;
           const hasEnabledConfigs = enabledCount > 0;
@@ -197,7 +199,7 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
               onClick={handleQueryAll}
               disabled={queryingAll || !hasEnabledConfigs}
               className="px-4 py-2 bg-yellow-500 text-black rounded-lg hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-              title={!hasEnabledConfigs ? '没有启用自动余额查询的配置' : `查询 ${enabledCount} 个配置的余额`}
+              title={!hasEnabledConfigs ? t('balance.noAutoBalanceEnabled') : t('balance.queryCountConfigs', { count: enabledCount })}
             >
             {queryingAll ? (
               <>
@@ -205,14 +207,14 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                查询中...
+                {t('balance.querying')}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                查询全部
+                {t('balance.queryAll')}
               </>
             )}
           </button>
@@ -226,8 +228,8 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
           <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p className="mt-4 text-gray-400">暂无配置</p>
-          <p className="mt-1 text-sm text-gray-500">请先添加API配置</p>
+          <p className="mt-4 text-gray-400">{t('common.noConfigs')}</p>
+          <p className="mt-1 text-sm text-gray-500">{t('balance.pleaseAddConfig')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -277,20 +279,20 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
                     {balanceInfo ? (
                       balanceInfo.status === 'success' ? (
                         <span className="inline-block px-2.5 py-1 bg-green-500/20 text-green-400 text-sm rounded-md border border-green-500/50">
-                          成功
+                          {t('balance.success')}
                         </span>
                       ) : balanceInfo.status === 'failed' ? (
                         <span className="inline-block px-2.5 py-1 bg-red-500/20 text-red-400 text-sm rounded-md border border-red-500/50">
-                          失败
+                          {t('balance.failed')}
                         </span>
                       ) : (
                         <span className="inline-block px-2.5 py-1 bg-gray-600/20 text-gray-500 text-sm rounded-md">
-                          待查询
+                          {t('balance.pending')}
                         </span>
                       )
                     ) : (
                       <span className="inline-block px-2.5 py-1 bg-gray-600/20 text-gray-500 text-sm rounded-md">
-                        未查询
+                        {t('balance.notQueried')}
                       </span>
                     )}
                   </div>
@@ -309,10 +311,10 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
                       }`}
                       title={
                         !config.balance_query_url
-                          ? '未配置余额查询URL'
+                          ? t('balance.noBalanceUrl')
                           : !config.auto_balance_check
-                          ? '余额查询已禁用（查询失败后自动禁用，请在配置编辑中重新启用）'
-                          : '查询余额'
+                          ? t('balance.balanceQueryDisabledHint')
+                          : t('balance.queryBalance')
                       }
                     >
                       {isQuerying ? (
@@ -321,14 +323,14 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          查询中
+                          {t('balance.querying')}
                         </>
                       ) : (
                         <>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          查询
+                          {t('balance.query')}
                         </>
                       )}
                     </button>
@@ -343,11 +345,11 @@ export const BalancePanel: React.FC<BalancePanelProps> = ({
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        最后查询: {formatTime(balanceInfo.checked_at)}
+                        {t('balance.lastQuery')}: {formatTime(balanceInfo.checked_at)}
                       </div>
                       {!config.auto_balance_check && (
                         <span className="inline-block px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded border border-orange-500/50">
-                          已禁用余额查询
+                          {t('balance.balanceQueryDisabled')}
                         </span>
                       )}
                     </div>

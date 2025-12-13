@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ApiConfig, ConfigHealthSummary, HealthCheckHourlyStats } from '../types/tauri';
 import * as proxyApi from '../api/proxy';
 import { showError } from '../services/toast';
@@ -60,6 +61,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
   onRefresh,
   checkIntervalSecs,
 }) => {
+  const { t } = useTranslation();
   const [summaries, setSummaries] = useState<ConfigHealthSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,9 +72,9 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
       setSummaries(data);
     } catch (err) {
       console.error('加载健康检查数据失败:', err);
-      showError('加载健康检查数据失败');
+      showError(t('errors.loadFailed'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setLoading(true);
@@ -100,7 +102,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
       onRefresh();
     } catch (err) {
       console.error('刷新失败:', err);
-      showError('刷新失败');
+      showError(t('errors.loadFailed'));
     } finally {
       setRefreshing(false);
     }
@@ -113,7 +115,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
           <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          加载中...
+          {t('common.loading')}
         </div>
       </div>
     );
@@ -125,8 +127,8 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
         <svg className="mx-auto h-12 w-12 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
-        <h3 className="mt-3 text-sm font-medium text-gray-400">暂无配置</h3>
-        <p className="mt-1 text-xs text-gray-600">添加配置后启用自动检测即可查看监控数据</p>
+        <h3 className="mt-3 text-sm font-medium text-gray-400">{t('healthCheck.noConfigs')}</h3>
+        <p className="mt-1 text-xs text-gray-600">{t('healthCheck.addConfigsFirst')}</p>
       </div>
     );
   }
@@ -137,7 +139,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">
-            显示今日 (0:00 - 23:00) 的连通性统计
+            {t('healthCheck.todayStats')}
           </span>
         </div>
         <button
@@ -148,7 +150,7 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
           <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          立即检测
+          {refreshing ? t('healthCheck.refreshing') : t('healthCheck.runNow')}
         </button>
       </div>
 
@@ -156,19 +158,19 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
       <div className="flex items-center gap-4 text-xs text-gray-500">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded bg-green-500" />
-          正常 (&gt;95%)
+          {t('healthCheck.normal')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded bg-yellow-500" />
-          警告 (50-95%)
+          {t('healthCheck.warning')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded bg-red-500" />
-          异常 (&lt;50%)
+          {t('healthCheck.error')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded bg-gray-800" />
-          无数据
+          {t('healthCheck.noData')}
         </span>
       </div>
 
@@ -178,13 +180,13 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
           <thead>
             <tr className="border-b border-gray-800">
               <th className="text-left py-2 px-3 text-gray-500 font-medium sticky left-0 bg-black z-10 min-w-[140px]">
-                服务商
+                {t('healthCheck.provider')}
               </th>
               <th className="text-center py-2 px-2 text-gray-500 font-medium min-w-[70px]">
-                可用率
+                {t('healthCheck.availabilityRate')}
               </th>
               <th className="text-center py-2 px-2 text-gray-500 font-medium min-w-[70px]">
-                平均延迟
+                {t('healthCheck.avgLatency')}
               </th>
               {hours.map((hour, i) => (
                 <th key={i} className="text-center py-2 px-0.5 text-gray-600 font-normal text-xs min-w-[20px]">
@@ -267,7 +269,11 @@ export const HealthMonitorPanel: React.FC<HealthMonitorPanelProps> = ({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <span>
-          启用自动检测后，系统每 {checkIntervalSecs >= 60 ? `${Math.floor(checkIntervalSecs / 60)} 分钟` : `${checkIntervalSecs} 秒`}模拟 Claude Code 请求检查服务商连通性
+          {t('healthCheck.autoDetectionHint', {
+            interval: checkIntervalSecs >= 60
+              ? `${Math.floor(checkIntervalSecs / 60)} ${t('dashboard.minutes')}`
+              : `${checkIntervalSecs} ${t('dashboard.seconds')}`
+          })}
         </span>
       </div>
     </div>

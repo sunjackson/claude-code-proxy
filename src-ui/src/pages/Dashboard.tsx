@@ -19,6 +19,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { useTranslation } from 'react-i18next';
 import type { ProxyService, ConfigGroup, ApiConfig, SwitchLog, ProxyConfig } from '../types/tauri';
 import * as proxyApi from '../api/proxy';
 import * as configApi from '../api/config';
@@ -40,6 +41,8 @@ import { needsAutoConfig, markAutoConfigDone } from '../utils/setupState';
 import { useAutoRefreshStore } from '../store/autoRefreshStore';
 
 const Dashboard: React.FC = () => {
+  const { t } = useTranslation();
+
   // 状态管理
   const [proxyStatus, setProxyStatus] = useState<ProxyService | null>(null);
   const [groups, setGroups] = useState<ConfigGroup[]>([]);
@@ -160,7 +163,7 @@ const Dashboard: React.FC = () => {
 
         // 标记自动配置完成
         markAutoConfigDone();
-        showSuccess('代理服务已自动配置并启动');
+        showSuccess(t('dashboard.autoConfigured'));
       } catch (err) {
         console.error('[Dashboard] 自动配置失败:', err);
         // 即使失败也标记完成，避免反复尝试
@@ -295,22 +298,22 @@ const Dashboard: React.FC = () => {
         const port = status.listen_port;
         await claudeCodeApi.enableClaudeCodeProxy(host, port);
         await loadClaudeCodeConfig();
-        showSuccess(`代理服务已启动并配置到 Claude Code (${host}:${port})`);
+        showSuccess(t('dashboard.proxyStartedAndConfigured'));
       } catch (claudeErr) {
         console.warn('Failed to configure Claude Code proxy:', claudeErr);
-        showSuccess('代理服务已启动，但 Claude Code 配置失败，请手动配置');
+        showSuccess(t('dashboard.proxyStartedConfigFailed'));
       }
     } catch (err: any) {
       console.error('Failed to start proxy:', err);
 
-      let errorMessage = '启动代理服务失败';
+      let errorMessage = t('errors.startProxyFailed');
       if (err && typeof err === 'object') {
         if (err.error === 'NoConfigAvailable') {
-          errorMessage = '当前分组中没有可用的配置。请先在配置列表中添加或启用配置。';
+          errorMessage = t('errors.noConfigAvailable');
         } else if (err.error === 'EmptyGroup') {
-          errorMessage = '当前分组为空。请先添加配置。';
+          errorMessage = t('errors.emptyGroup');
         } else if (err.error === 'PortInUse') {
-          errorMessage = '代理端口已被占用。请检查是否有其他程序使用了该端口，或修改代理配置的端口号。';
+          errorMessage = t('errors.portInUse');
         } else if (err.message) {
           errorMessage = err.message;
         }
@@ -341,9 +344,9 @@ const Dashboard: React.FC = () => {
 
       const status = await proxyApi.stopProxyService();
       setProxyStatus(status);
-      showSuccess('代理服务已停止');
+      showSuccess(t('dashboard.proxyStopped'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : '停止代理服务失败');
+      setError(err instanceof Error ? err.message : t('errors.stopProxyFailed'));
       console.error('Failed to stop proxy:', err);
     } finally {
       setActionLoading(false);
@@ -365,7 +368,7 @@ const Dashboard: React.FC = () => {
   // 切换健康检查（分组级别）
   const handleToggleHealthCheck = async () => {
     if (!currentGroup) {
-      showError('请先选择一个分组');
+      showError(t('dashboard.selectGroupForDetection'));
       return;
     }
 
@@ -404,15 +407,15 @@ const Dashboard: React.FC = () => {
 
       if (newEnabled) {
         const intervalText = currentGroup.health_check_interval_sec >= 60
-          ? `${Math.floor(currentGroup.health_check_interval_sec / 60)}分钟`
-          : `${currentGroup.health_check_interval_sec}秒`;
-        showSuccess(`已为「${currentGroup.name}」启用自动检测，每${intervalText}检测一次`);
+          ? `${Math.floor(currentGroup.health_check_interval_sec / 60)}${t('dashboard.minutes')}`
+          : `${currentGroup.health_check_interval_sec}${t('dashboard.seconds')}`;
+        showSuccess(t('dashboard.healthCheckEnabled', { name: currentGroup.name, interval: intervalText }));
       } else {
-        showSuccess(`已为「${currentGroup.name}」关闭自动检测`);
+        showSuccess(t('dashboard.healthCheckDisabled', { name: currentGroup.name }));
       }
     } catch (err) {
       console.error('Failed to toggle health check:', err);
-      showError('操作自动检测失败');
+      showError(t('errors.healthCheckFailed'));
     } finally {
       setHealthCheckLoading(false);
     }
@@ -421,7 +424,7 @@ const Dashboard: React.FC = () => {
   // 修改检测频率（分组级别）
   const handleIntervalChange = async (newInterval: number) => {
     if (!currentGroup) {
-      showError('请先选择一个分组');
+      showError(t('dashboard.selectGroupForDetection'));
       return;
     }
 
@@ -449,12 +452,12 @@ const Dashboard: React.FC = () => {
       await loadData();
 
       const intervalText = newInterval >= 60
-        ? `${Math.floor(newInterval / 60)}分钟`
-        : `${newInterval}秒`;
-      showSuccess(`已将「${currentGroup.name}」的检测频率更新为每${intervalText}`);
+        ? `${Math.floor(newInterval / 60)}${t('dashboard.minutes')}`
+        : `${newInterval}${t('dashboard.seconds')}`;
+      showSuccess(t('dashboard.intervalUpdated', { name: currentGroup.name, interval: intervalText }));
     } catch (err) {
       console.error('Failed to update interval:', err);
-      showError('更新检测频率失败');
+      showError(t('errors.updateIntervalFailed'));
     } finally {
       setHealthCheckLoading(false);
     }
@@ -465,10 +468,10 @@ const Dashboard: React.FC = () => {
     try {
       setHealthCheckLoading(true);
       await proxyApi.runHealthCheckNow();
-      showSuccess('健康检查已执行');
+      showSuccess(t('dashboard.healthCheckExecuted'));
     } catch (err) {
       console.error('Failed to run health check:', err);
-      showError('执行健康检查失败');
+      showError(t('errors.runHealthCheckFailed'));
     } finally {
       setHealthCheckLoading(false);
     }
@@ -481,7 +484,7 @@ const Dashboard: React.FC = () => {
       setError(null);
       const status = await proxyApi.switchProxyConfig(configId);
       setProxyStatus(status);
-      showSuccess('配置已切换');
+      showSuccess(t('dashboard.configSwitched'));
       // 只更新配置列表，不触发loading状态，避免页面跳转到顶部
       const [configsList, logs] = await Promise.all([
         configApi.listApiConfigs(null),
@@ -492,12 +495,12 @@ const Dashboard: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to switch config:', err);
 
-      let errorMessage = '切换配置失败';
+      let errorMessage = t('errors.switchConfigFailed');
       if (err && typeof err === 'object') {
         if (err.error === 'ConfigUnavailable') {
-          errorMessage = '该配置不可用。请先启用该配置。';
+          errorMessage = t('errors.configUnavailable');
         } else if (err.error === 'ConfigNotInGroup') {
-          errorMessage = '该配置不属于当前分组。请先切换到对应的分组。';
+          errorMessage = t('errors.configNotInGroup');
         } else if (err.message) {
           errorMessage = err.message;
         }
@@ -517,10 +520,10 @@ const Dashboard: React.FC = () => {
       setActionLoading(true);
       setShowClearLogsDialog(false);
       const deletedCount = await proxyApi.clearSwitchLogs();
-      showSuccess(`已清空 ${deletedCount} 条切换日志`);
+      showSuccess(t('dashboard.logsCleared', { count: deletedCount }));
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : '清空日志失败';
+      const message = err instanceof Error ? err.message : t('errors.clearLogsFailed');
       showError(message);
       console.error('Failed to clear logs:', err);
     } finally {
@@ -604,15 +607,15 @@ const Dashboard: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('保存配置失败:', err);
-      showMessage('error', '保存配置失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.saveConfigFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     }
   };
 
   const handleDeleteConfig = (config: ApiConfig) => {
     setConfirmDialog({
       isOpen: true,
-      title: '删除配置',
-      message: `确定要删除配置 "${config.name}" 吗?此操作无法撤销。`,
+      title: t('dialog.deleteTitle'),
+      message: t('dialog.deleteMessage', { name: config.name }),
       variant: 'danger',
       onConfirm: async () => {
         try {
@@ -621,7 +624,7 @@ const Dashboard: React.FC = () => {
           await loadData();
         } catch (err) {
           console.error('删除配置失败:', err);
-          showMessage('error', '删除配置失败', err instanceof Error ? err.message : '未知错误');
+          showMessage('error', t('errors.deleteConfigFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
         }
       },
     });
@@ -632,11 +635,11 @@ const Dashboard: React.FC = () => {
     try {
       setTogglingEnabledId(config.id);
       await configApi.setConfigEnabled(config.id, enabled);
-      showSuccess(enabled ? `配置 "${config.name}" 已启用` : `配置 "${config.name}" 已停用`);
+      showSuccess(enabled ? t('notifications.configEnabled', { name: config.name }) : t('notifications.configDisabled', { name: config.name }));
       await loadData();
     } catch (err) {
       console.error('切换配置启用状态失败:', err);
-      showError(err instanceof Error ? err.message : '切换配置启用状态失败');
+      showError(err instanceof Error ? err.message : t('notifications.toggleEnabledFailed'));
     } finally {
       setTogglingEnabledId(null);
     }
@@ -683,25 +686,25 @@ const Dashboard: React.FC = () => {
 
       showMessage(
         isAvailable ? 'success' : 'error',
-        '测试结果',
+        t('test.testResults'),
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">配置:</span>
+            <span className="text-gray-400">{t('config.configName')}:</span>
             <span className="text-gray-300">{config.name}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">状态:</span>
+            <span className="text-gray-400">{t('common.status')}:</span>
             <span className={isAvailable ? 'text-green-400' : 'text-red-400'}>
-              {isAvailable ? '✅ 可用' : '❌ 不可用'}
+              {isAvailable ? `✅ ${t('status.available')}` : `❌ ${t('status.unavailable')}`}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">延迟:</span>
+            <span className="text-gray-400">{t('test.latency')}:</span>
             <span className="text-gray-300">{result.latency_ms ? `${result.latency_ms} ms` : '-'}</span>
           </div>
           {result.error_message && (
             <div className="flex items-start gap-2">
-              <span className="text-gray-400 shrink-0">原因:</span>
+              <span className="text-gray-400 shrink-0">{t('test.reason')}:</span>
               <span className="text-red-400 break-all">{result.error_message}</span>
             </div>
           )}
@@ -710,7 +713,7 @@ const Dashboard: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('测试配置失败:', err);
-      showMessage('error', '测试失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.testFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     } finally {
       // 从测试集合中移除
       setTestingConfigIds(prev => {
@@ -733,21 +736,21 @@ const Dashboard: React.FC = () => {
 
       showMessage(
         isSuccess ? 'success' : 'error',
-        '余额查询结果',
+        t('balance.queryResult'),
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">状态:</span>
+            <span className="text-gray-400">{t('common.status')}:</span>
             <span className={isSuccess ? 'text-green-400' : 'text-red-400'}>
-              {isSuccess ? '✅ 成功' : '❌ 失败'}
+              {isSuccess ? `✅ ${t('test.success')}` : `❌ ${t('test.failed')}`}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">余额:</span>
+            <span className="text-gray-400">{t('balance.balance')}:</span>
             <span className="font-medium text-amber-400">{balanceText}</span>
           </div>
           {result.error_message && (
             <div className="flex items-start gap-2">
-              <span className="text-gray-400">错误:</span>
+              <span className="text-gray-400">{t('balance.error')}:</span>
               <span className="text-red-400">{result.error_message}</span>
             </div>
           )}
@@ -756,7 +759,7 @@ const Dashboard: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('查询余额失败:', err);
-      showMessage('error', '查询余额失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.queryBalanceFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     } finally {
       setQueryingBalanceId(null);
     }
@@ -808,15 +811,15 @@ const Dashboard: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('保存分组失败:', err);
-      showMessage('error', '保存分组失败', err instanceof Error ? err.message : '未知错误');
+      showMessage('error', t('errors.saveGroupFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
     }
   };
 
   const handleDeleteGroup = (group: ConfigGroup) => {
     setConfirmDialog({
       isOpen: true,
-      title: '删除分组',
-      message: `确定要删除分组 "${group.name}" 吗?\n\n请选择删除方式:\n- 确定: 将分组下的配置移到"未分组"\n- 取消后可选择同时删除配置`,
+      title: t('dialog.deleteGroupTitle'),
+      message: t('config.deleteGroupConfirmation', { name: group.name }),
       variant: 'danger',
       onConfirm: async () => {
         try {
@@ -825,7 +828,7 @@ const Dashboard: React.FC = () => {
           await loadData();
         } catch (err) {
           console.error('删除分组失败:', err);
-          showMessage('error', '删除分组失败', err instanceof Error ? err.message : '未知错误');
+          showMessage('error', t('errors.deleteGroupFailed'), err instanceof Error ? err.message : t('errors.unknownError'));
         }
       },
     });
@@ -885,7 +888,7 @@ const Dashboard: React.FC = () => {
 
     // 只允许同一分组内拖拽
     if (activeConfig.group_id !== overConfig.group_id) {
-      showError('只能在同一分组内调整顺序');
+      showError(t('errors.onlyReorderInSameGroup'));
       return;
     }
 
@@ -898,10 +901,10 @@ const Dashboard: React.FC = () => {
 
       // 重新加载数据
       await loadData();
-      showSuccess('配置顺序已更新');
+      showSuccess(t('dashboard.orderUpdated'));
     } catch (err) {
       console.error('更新配置顺序失败:', err);
-      showError('更新配置顺序失败');
+      showError(t('errors.reorderFailed'));
     }
   }, [sortedConfigs, loadData]);
 
@@ -912,7 +915,7 @@ const Dashboard: React.FC = () => {
     return (
       <CompactLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-400">加载中...</div>
+          <div className="text-gray-400">{t('common.loading')}</div>
         </div>
       </CompactLayout>
     );
@@ -978,7 +981,7 @@ const Dashboard: React.FC = () => {
                     <h1 className={`text-3xl font-black tracking-tight ${
                       proxyStatus?.status === 'running' ? 'text-green-400' : 'text-gray-400'
                     }`}>
-                      {proxyStatus?.status === 'running' ? '服务运行中' : '服务已停止'}
+                      {proxyStatus?.status === 'running' ? t('dashboard.serviceRunning') : t('dashboard.serviceStopped')}
                     </h1>
                   </div>
 
@@ -986,21 +989,21 @@ const Dashboard: React.FC = () => {
                     <div className="flex items-center gap-4 text-sm">
                       {activeConfig && (
                         <div className="flex items-center gap-2">
-                          <span className="text-gray-500">当前配置:</span>
+                          <span className="text-gray-500">{t('dashboard.currentConfig')}:</span>
                           <span className="px-2.5 py-1 bg-yellow-500/20 text-yellow-400 font-bold rounded-lg border border-yellow-500/40">
                             {activeConfig.name}
                           </span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500">监听地址:</span>
+                        <span className="text-gray-500">{t('dashboard.listenAddress')}:</span>
                         <code className="px-2.5 py-1 bg-gray-800/80 text-gray-300 font-mono text-xs rounded-lg border border-gray-700">
                           {proxyStatus.listen_host}:{proxyStatus.listen_port}
                         </code>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">点击启动按钮开始代理服务</p>
+                    <p className="text-sm text-gray-500">{t('dashboard.clickToStart')}</p>
                   )}
                 </div>
               </div>
@@ -1011,7 +1014,7 @@ const Dashboard: React.FC = () => {
                   onClick={handleRefreshStatus}
                   disabled={actionLoading}
                   className="flex items-center justify-center w-12 h-12 text-gray-400 transition-all border border-gray-700 bg-gray-800/80 hover:bg-gray-700 hover:border-yellow-500/50 hover:text-yellow-400 disabled:opacity-50 rounded-xl"
-                  title="刷新状态"
+                  title={t('dashboard.refreshStatus')}
                 >
                   <svg className={`w-5 h-5 ${actionLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1029,7 +1032,7 @@ const Dashboard: React.FC = () => {
                           ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30'
                           : 'bg-gray-800/80 border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-cyan-500/50 hover:text-cyan-400'
                       } disabled:opacity-50`}
-                      title={healthCheckStatus?.running ? '点击停止健康检查（每60秒）' : '点击启动健康检查（每60秒）'}
+                      title={healthCheckStatus?.running ? t('dashboard.healthCheckRunning') : t('dashboard.healthCheckStopped')}
                     >
                       {healthCheckLoading ? (
                         <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1045,7 +1048,7 @@ const Dashboard: React.FC = () => {
                       onClick={handleRunHealthCheckNow}
                       disabled={healthCheckLoading}
                       className="flex items-center justify-center w-12 h-12 text-gray-400 transition-all border border-gray-700 bg-gray-800/80 hover:bg-gray-700 hover:border-cyan-500/50 hover:text-cyan-400 disabled:opacity-50 rounded-xl"
-                      title="立即执行一次健康检查"
+                      title={t('dashboard.runHealthCheckNow')}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -1063,7 +1066,7 @@ const Dashboard: React.FC = () => {
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                       <rect x="6" y="6" width="12" height="12" rx="1" />
                     </svg>
-                    停止服务
+                    {t('dashboard.stopService')}
                   </button>
                 ) : (
                   <button
@@ -1074,7 +1077,7 @@ const Dashboard: React.FC = () => {
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />
                     </svg>
-                    启动服务
+                    {t('dashboard.startService')}
                   </button>
                 )}
               </div>
@@ -1095,8 +1098,8 @@ const Dashboard: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-yellow-400">快速开始指南</h3>
-                <p className="text-xs text-gray-500">按照以下步骤配置并开始使用</p>
+                <h3 className="text-lg font-bold text-yellow-400">{t('quickStart.title')}</h3>
+                <p className="text-xs text-gray-500">{t('quickStart.subtitle')}</p>
               </div>
             </div>
           </div>
@@ -1111,16 +1114,16 @@ const Dashboard: React.FC = () => {
                     1
                   </div>
                   <div className="flex-1 pt-1">
-                    <h4 className="mb-2 text-sm font-bold text-white">配置 API 服务商</h4>
+                    <h4 className="mb-2 text-sm font-bold text-white">{t('quickStart.step1Title')}</h4>
                     <p className="text-xs leading-relaxed text-gray-400">
-                      在下方配置列表中添加您的 API 服务商信息，包括 API Key 和服务器地址。支持添加多个服务商实现自动切换。
+                      {t('quickStart.step1Desc')}
                     </p>
                     <div className="flex items-center gap-2 mt-3">
                       <span className="px-2 py-1 text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded">
-                        已配置: {configs.length} 个
+                        {t('quickStart.configured')}: {configs.length} {t('quickStart.items')}
                       </span>
                       {configs.length === 0 && (
-                        <span className="text-xs text-yellow-500">← 请先添加配置</span>
+                        <span className="text-xs text-yellow-500">← {t('quickStart.pleaseAddConfig')}</span>
                       )}
                     </div>
                   </div>
@@ -1138,14 +1141,14 @@ const Dashboard: React.FC = () => {
                     2
                   </div>
                   <div className="flex-1 pt-1">
-                    <h4 className="mb-2 text-sm font-bold text-white">启动代理服务</h4>
+                    <h4 className="mb-2 text-sm font-bold text-white">{t('quickStart.step2Title')}</h4>
                     <p className="text-xs leading-relaxed text-gray-400">
-                      点击上方的「启动服务」按钮，启动本地代理服务器。服务启动后会自动配置 Claude Code 的代理设置。
+                      {t('quickStart.step2Desc')}
                     </p>
                     <div className="mt-3">
                       <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-lg">
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-xs text-green-400">默认监听 {DEFAULT_PROXY_HOST}:{DEFAULT_PROXY_PORT}</span>
+                        <span className="text-xs text-green-400">{t('quickStart.defaultListen')} {DEFAULT_PROXY_HOST}:{DEFAULT_PROXY_PORT}</span>
                       </div>
                     </div>
                   </div>
@@ -1163,9 +1166,9 @@ const Dashboard: React.FC = () => {
                     3
                   </div>
                   <div className="flex-1 pt-1">
-                    <h4 className="mb-2 text-sm font-bold text-white">重启 Claude Code</h4>
+                    <h4 className="mb-2 text-sm font-bold text-white">{t('quickStart.step3Title')}</h4>
                     <p className="text-xs leading-relaxed text-gray-400">
-                      在终端中重新运行 <code className="px-1.5 py-0.5 bg-gray-800 rounded text-yellow-400 font-mono">claude</code> 命令启动 Claude Code，即可开始愉快的 AI 编程之旅！
+                      {t('quickStart.step3Desc')}
                     </p>
                     <div className="mt-3 p-2.5 bg-gray-900/80 border border-gray-800 rounded-lg">
                       <code className="font-mono text-xs text-gray-300">
@@ -1184,19 +1187,19 @@ const Dashboard: React.FC = () => {
                   <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  <span>自动故障转移：服务异常时自动切换到备用服务商</span>
+                  <span>{t('quickStart.autoFailover')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
-                  <span>健康检查：自动检测服务商可用性</span>
+                  <span>{t('quickStart.healthCheckFeature')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  <span>服务商监控：实时查看各服务商状态和延迟</span>
+                  <span>{t('quickStart.providerMonitor')}</span>
                 </div>
               </div>
             </div>
@@ -1209,19 +1212,19 @@ const Dashboard: React.FC = () => {
         {/* 配置总数 */}
         <div className="p-4 transition-all border border-gray-800 bg-gradient-to-br from-gray-900 to-black rounded-xl hover:border-yellow-500/30">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500">配置总数</span>
+            <span className="text-xs font-medium text-gray-500">{t('dashboard.totalConfigs')}</span>
             <svg className="w-4 h-4 text-yellow-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           </div>
           <div className="text-2xl font-black text-white">{stats.total}</div>
-          <div className="mt-1 text-xs text-gray-600">{stats.groupCount} 个分组</div>
+          <div className="mt-1 text-xs text-gray-600">{stats.groupCount} {t('dashboard.groups')}</div>
         </div>
 
         {/* 在线率 */}
         <div className="p-4 transition-all border border-gray-800 bg-gradient-to-br from-gray-900 to-black rounded-xl hover:border-green-500/30">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500">在线率</span>
+            <span className="text-xs font-medium text-gray-500">{t('dashboard.onlineRate')}</span>
             <svg className="w-4 h-4 text-green-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -1231,17 +1234,17 @@ const Dashboard: React.FC = () => {
               {stats.onlineRate}%
             </span>
           </div>
-          <div className="mt-1 text-xs text-gray-600">{stats.online}/{stats.total} 在线</div>
+          <div className="mt-1 text-xs text-gray-600">{stats.online}/{stats.total} {t('common.online')}</div>
         </div>
 
         {/* 平均延迟 - 点击打开监控大屏 */}
         <div
           className="p-4 transition-all border border-gray-800 cursor-pointer bg-gradient-to-br from-gray-900 to-black rounded-xl hover:border-blue-500/30 group"
           onClick={() => setShowMonitor(true)}
-          title="点击查看服务商监控大屏"
+          title={t('dashboard.clickToViewMonitor')}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500">平均延迟</span>
+            <span className="text-xs font-medium text-gray-500">{t('dashboard.avgLatency')}</span>
             <svg className="w-4 h-4 transition-colors text-blue-500/50 group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
@@ -1256,7 +1259,7 @@ const Dashboard: React.FC = () => {
             </span>
             {stats.avgLatency !== null && <span className="text-sm text-gray-500">ms</span>}
           </div>
-          <div className="mt-1 text-xs text-gray-600 transition-colors group-hover:text-blue-400/70">点击查看监控</div>
+          <div className="mt-1 text-xs text-gray-600 transition-colors group-hover:text-blue-400/70">{t('dashboard.clickToViewMonitor')}</div>
         </div>
 
         {/* 切换历史 */}
@@ -1265,13 +1268,13 @@ const Dashboard: React.FC = () => {
           onClick={() => setShowSwitchHistory(!showSwitchHistory)}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500">切换记录</span>
+            <span className="text-xs font-medium text-gray-500">{t('dashboard.switchHistory')}</span>
             <svg className={`w-4 h-4 text-purple-500/50 transition-transform ${showSwitchHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
           <div className="text-2xl font-black text-white">{recentLogs.length}</div>
-          <div className="mt-1 text-xs text-gray-600">点击展开</div>
+          <div className="mt-1 text-xs text-gray-600">{t('dashboard.clickToExpand')}</div>
         </div>
       </div>
 
@@ -1279,13 +1282,13 @@ const Dashboard: React.FC = () => {
       {showSwitchHistory && recentLogs.length > 0 && (
         <div className="p-4 mb-6 duration-200 border bg-gradient-to-br from-gray-900/80 to-black border-purple-500/30 rounded-xl animate-in slide-in-from-top-2">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-purple-400">最近切换记录</h3>
+            <h3 className="text-sm font-bold text-purple-400">{t('dashboard.recentSwitchLogs')}</h3>
             <button
               onClick={() => setShowClearLogsDialog(true)}
               disabled={actionLoading}
               className="px-2 py-1 text-xs text-red-400 transition-all border rounded bg-red-600/10 border-red-600/30 hover:bg-red-600/20 disabled:opacity-50"
             >
-              清空
+              {t('dashboard.clearLogs')}
             </button>
           </div>
           <div className="space-y-2">
@@ -1296,7 +1299,7 @@ const Dashboard: React.FC = () => {
                     {new Date(log.switch_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                   <span className="text-gray-400">
-                    {log.source_config_name || '未知'}
+                    {log.source_config_name || t('common.unknown')}
                   </span>
                   <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -1310,10 +1313,10 @@ const Dashboard: React.FC = () => {
                   log.reason === 'high_latency' ? 'bg-orange-500/20 text-orange-400' :
                   'bg-red-500/20 text-red-400'
                 }`}>
-                  {log.reason === 'manual' ? '手动' :
-                   log.reason === 'high_latency' ? '高延迟' :
-                   log.reason === 'connection_failed' ? '连接失败' :
-                   log.reason === 'timeout' ? '超时' : log.reason}
+                  {log.reason === 'manual' ? t('dashboard.manual') :
+                   log.reason === 'high_latency' ? t('dashboard.highLatency') :
+                   log.reason === 'connection_failed' ? t('dashboard.connectionFailed') :
+                   log.reason === 'timeout' ? t('dashboard.timeout') : log.reason}
                 </span>
               </div>
             ))}
@@ -1327,11 +1330,11 @@ const Dashboard: React.FC = () => {
         <div className="lg:col-span-1">
           <div className="p-4 border bg-gradient-to-br from-black via-gray-950 to-black border-yellow-500/20 rounded-xl">
             <div className="flex items-center justify-between pb-2 mb-4 border-b border-yellow-500/20">
-              <h2 className="text-sm font-bold text-yellow-500">配置分组</h2>
+              <h2 className="text-sm font-bold text-yellow-500">{t('dashboard.configGroups')}</h2>
               <button
                 className="p-1.5 bg-yellow-500 text-black rounded-md hover:bg-yellow-400 transition-all"
                 onClick={handleCreateGroup}
-                title="新建分组"
+                title={t('dashboard.newGroup')}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -1350,7 +1353,7 @@ const Dashboard: React.FC = () => {
                 onClick={() => setSelectedGroupId(null)}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">全部配置</span>
+                  <span className="text-sm font-semibold">{t('dashboard.allConfigs')}</span>
                   <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
                     selectedGroupId === null ? 'bg-yellow-500/30 text-yellow-300' : 'bg-gray-800 text-gray-500'
                   }`}>
@@ -1396,7 +1399,7 @@ const Dashboard: React.FC = () => {
                       <button
                         onClick={(e) => { e.stopPropagation(); handleEditGroup(group); }}
                         className="p-1 text-gray-400 transition-all rounded bg-gray-800/70 hover:bg-gray-700 hover:text-white"
-                        title="编辑"
+                        title={t('common.edit')}
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1406,7 +1409,7 @@ const Dashboard: React.FC = () => {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group); }}
                           className="p-1 text-red-500 transition-all rounded bg-red-500/10 hover:bg-red-500/20"
-                          title="删除"
+                          title={t('common.delete')}
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1428,7 +1431,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between pb-4 mb-5 border-b border-yellow-500/20">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-bold text-yellow-500">
-                  {selectedGroupId === null ? '全部配置' : groups.find((g) => g.id === selectedGroupId)?.name || '配置列表'}
+                  {selectedGroupId === null ? t('dashboard.allConfigs') : groups.find((g) => g.id === selectedGroupId)?.name || t('dashboard.configList')}
                 </h2>
                 {/* 视图切换 */}
                 <div className="flex overflow-hidden border border-gray-800 rounded-lg bg-gray-900/70">
@@ -1438,7 +1441,7 @@ const Dashboard: React.FC = () => {
                     }`}
                     onClick={() => setViewMode('list')}
                   >
-                    列表
+                    {t('dashboard.listView')}
                   </button>
                   <button
                     className={`px-3 py-1 text-xs font-semibold transition-all ${
@@ -1446,7 +1449,7 @@ const Dashboard: React.FC = () => {
                     }`}
                     onClick={() => setViewMode('monitor')}
                   >
-                    监控
+                    {t('dashboard.monitorView')}
                   </button>
                 </div>
               </div>
@@ -1464,7 +1467,7 @@ const Dashboard: React.FC = () => {
                           ? 'bg-cyan-500'
                           : 'bg-gray-700'
                       } ${healthCheckLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                      title={currentGroup.health_check_enabled ? `「${currentGroup.name}」自动检测运行中` : `点击为「${currentGroup.name}」启用自动检测`}
+                      title={currentGroup.health_check_enabled ? `「${currentGroup.name}」${t('dashboard.healthCheckRunning')}` : `${t('dashboard.healthCheckStopped')}`}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -1472,7 +1475,7 @@ const Dashboard: React.FC = () => {
                         }`}
                       />
                     </button>
-                    <span className="text-xs text-gray-400">自动检测</span>
+                    <span className="text-xs text-gray-400">{t('dashboard.autoDetection')}</span>
 
                     {/* 频率选择下拉框 */}
                     <select
@@ -1481,12 +1484,12 @@ const Dashboard: React.FC = () => {
                       disabled={healthCheckLoading}
                       className="px-2 py-1 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded focus:border-cyan-500 focus:outline-none disabled:opacity-50"
                     >
-                      <option value={60}>1分钟</option>
-                      <option value={180}>3分钟</option>
-                      <option value={300}>5分钟</option>
-                      <option value={600}>10分钟</option>
-                      <option value={900}>15分钟</option>
-                      <option value={1800}>30分钟</option>
+                      <option value={60}>{t('healthCheck.1min')}</option>
+                      <option value={180}>{t('healthCheck.3min')}</option>
+                      <option value={300}>{t('healthCheck.5min')}</option>
+                      <option value={600}>{t('healthCheck.10min')}</option>
+                      <option value={900}>{t('healthCheck.15min')}</option>
+                      <option value={1800}>{t('healthCheck.30min')}</option>
                     </select>
 
                     {/* 问号提示 */}
@@ -1495,9 +1498,8 @@ const Dashboard: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <div className="absolute z-20 invisible w-64 px-3 py-2 mb-2 text-xs text-gray-300 transition-all transform -translate-x-1/2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl opacity-0 bottom-full left-1/2 group-hover:opacity-100 group-hover:visible">
-                        <div className="mb-1 font-medium text-cyan-400">分组级别自动检测</div>
-                        <p>为当前分组「{currentGroup.name}」配置独立的健康检查。</p>
-                        <p className="mt-1 text-gray-500">每个分组可以独立启用/禁用自动检测，并设置不同的检测频率。</p>
+                        <div className="mb-1 font-medium text-cyan-400">{t('healthCheck.groupLevelDetection')}</div>
+                        <p>{t('healthCheck.groupLevelHint')}</p>
                         {/* 小箭头 */}
                         <div className="absolute transform -translate-x-1/2 border-4 border-transparent top-full left-1/2 border-t-gray-700" />
                       </div>
@@ -1509,7 +1511,7 @@ const Dashboard: React.FC = () => {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    请选择一个分组以配置自动检测
+                    {t('dashboard.selectGroupForDetection')}
                   </div>
                 )}
 
@@ -1521,7 +1523,7 @@ const Dashboard: React.FC = () => {
                   className="px-4 py-2 text-sm font-bold text-black transition-all bg-yellow-500 rounded-lg hover:bg-yellow-400"
                   onClick={handleCreateConfig}
                 >
-                  + 新建配置
+                  + {t('dashboard.newConfig')}
                 </button>
               </div>
             </div>
@@ -1539,8 +1541,8 @@ const Dashboard: React.FC = () => {
                 <svg className="w-12 h-12 mx-auto text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <h3 className="mt-3 text-sm font-medium text-gray-400">暂无配置</h3>
-                <p className="mt-1 text-xs text-gray-600">点击"新建配置"按钮开始添加</p>
+                <h3 className="mt-3 text-sm font-medium text-gray-400">{t('dashboard.noConfigs')}</h3>
+                <p className="mt-1 text-xs text-gray-600">{t('dashboard.clickNewToAdd')}</p>
               </div>
             ) : (
               <DndContext
@@ -1557,7 +1559,7 @@ const Dashboard: React.FC = () => {
                     <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                     </svg>
-                    <span className="text-xs text-gray-500">拖拽调整顺序 · 顺序决定自动切换优先级（序号小的优先）</span>
+                    <span className="text-xs text-gray-500">{t('dashboard.dragToReorder')} · {t('dashboard.orderDeterminesPriority')}</span>
                   </div>
 
                   <div className="space-y-3">
@@ -1626,10 +1628,10 @@ const Dashboard: React.FC = () => {
 
       <ConfirmDialog
         isOpen={showClearLogsDialog}
-        title="确认清空日志"
-        message="此操作将清空所有切换日志，此操作不可恢复。确定要继续吗？"
-        confirmText="清空"
-        cancelText="取消"
+        title={t('dialog.clearLogsTitle')}
+        message={t('dialog.clearLogsMessage')}
+        confirmText={t('dialog.clearLogsConfirm')}
+        cancelText={t('dialog.cancel')}
         variant="danger"
         onConfirm={handleClearLogs}
         onCancel={() => setShowClearLogsDialog(false)}

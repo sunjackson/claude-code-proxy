@@ -4,7 +4,14 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { ProxyService, SwitchLog, ProxyRequestLog, ProxyRequestLogDetail, LogStats, HealthCheckStatusResponse } from '../types/tauri';
+import type {
+  ProxyService,
+  SwitchLog,
+  ProxyRequestLog,
+  ProxyRequestLogDetail,
+  LogStats,
+  HealthCheckStatusResponse,
+} from '../types/tauri';
 
 /**
  * 启动代理服务
@@ -203,7 +210,9 @@ export async function getHealthCheckStatus(): Promise<HealthCheckStatusResponse>
  * @param hours 统计的小时数，默认24小时
  * @returns 配置健康摘要列表
  */
-export async function getHealthCheckSummaries(hours?: number): Promise<import('../types/tauri').ConfigHealthSummary[]> {
+export async function getHealthCheckSummaries(
+  hours?: number
+): Promise<import('../types/tauri').ConfigHealthSummary[]> {
   return invoke<import('../types/tauri').ConfigHealthSummary[]>('get_health_check_summaries', {
     hours: hours ?? null,
   });
@@ -215,7 +224,10 @@ export async function getHealthCheckSummaries(hours?: number): Promise<import('.
  * @param intervalSecs 检查间隔（秒），默认300秒（5分钟）
  * @returns 健康检查状态
  */
-export async function toggleAutoHealthCheck(enabled: boolean, intervalSecs?: number): Promise<HealthCheckStatusResponse> {
+export async function toggleAutoHealthCheck(
+  enabled: boolean,
+  intervalSecs?: number
+): Promise<HealthCheckStatusResponse> {
   return invoke<HealthCheckStatusResponse>('toggle_auto_health_check', {
     enabled,
     intervalSecs: intervalSecs ?? null,

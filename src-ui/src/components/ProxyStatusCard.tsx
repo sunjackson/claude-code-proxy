@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { DEFAULT_PROXY_PORT } from '../config/ports';
 import type { ProxyService } from '../types/tauri';
 
@@ -27,6 +28,8 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
   onRefresh,
   actionLoading = false,
 }) => {
+  const { t } = useTranslation();
+
   // 获取状态指示灯颜色
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -48,17 +51,17 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
   const getStatusText = (status: string): string => {
     switch (status) {
       case 'running':
-        return '运行中';
+        return t('status.running');
       case 'starting':
-        return '启动中';
+        return t('status.starting');
       case 'stopping':
-        return '停止中';
+        return t('status.stopping');
       case 'stopped':
-        return '已停止';
+        return t('status.stopped');
       case 'error':
-        return '错误';
+        return t('status.error');
       default:
-        return '未知';
+        return t('common.unknown');
     }
   };
 
@@ -94,8 +97,8 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-amber-400">代理服务</h2>
-            <p className="text-xs text-gray-400">转发请求到配置的API端点</p>
+            <h2 className="text-xl font-semibold text-amber-400">{t('proxy.service')}</h2>
+            <p className="text-xs text-gray-400">{t('proxy.forwardRequests')}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -103,12 +106,12 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
             onClick={onRefresh}
             disabled={actionLoading}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-800 border border-amber-500/30 rounded-lg hover:bg-gray-700 hover:border-amber-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            title="刷新状态"
+            title={t('proxy.refreshStatus')}
           >
             <svg className={`w-4 h-4 ${actionLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span>刷新</span>
+            <span>{t('common.refresh')}</span>
           </button>
           <div
             className={`flex items-center gap-2 px-4 py-1.5 rounded-full ${getStatusBgColor(status)} border ${
@@ -136,7 +139,7 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
-            <div className="text-xs font-medium text-gray-400">监听地址</div>
+            <div className="text-xs font-medium text-gray-400">{t('proxy.listenAddress')}</div>
           </div>
           <div className="text-lg font-mono font-semibold text-amber-400">
             {proxyStatus?.listen_host || '127.0.0.1'}:{proxyStatus?.listen_port || DEFAULT_PROXY_PORT}
@@ -146,7 +149,7 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
-              <span>端口已自动切换</span>
+              <span>{t('proxy.portAutoSwitched')}</span>
             </div>
           )}
         </div>
@@ -155,11 +158,11 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
-            <div className="text-xs font-medium text-gray-400">活跃分组</div>
+            <div className="text-xs font-medium text-gray-400">{t('proxy.activeGroup')}</div>
           </div>
-          <div className="text-base font-semibold text-gray-200 truncate" title={proxyStatus?.active_group_name || '未选择'}>
+          <div className="text-base font-semibold text-gray-200 truncate" title={proxyStatus?.active_group_name || t('proxy.noGroupSelected')}>
             {proxyStatus?.active_group_name || (
-              <span className="text-gray-500 text-sm">未选择分组</span>
+              <span className="text-gray-500 text-sm">{t('proxy.noGroupSelected')}</span>
             )}
           </div>
         </div>
@@ -169,11 +172,11 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <div className="text-xs font-medium text-gray-400">活跃配置</div>
+            <div className="text-xs font-medium text-gray-400">{t('proxy.activeConfig')}</div>
           </div>
-          <div className="text-base font-semibold text-gray-200 truncate" title={proxyStatus?.active_config_name || '未选择'}>
+          <div className="text-base font-semibold text-gray-200 truncate" title={proxyStatus?.active_config_name || t('proxy.noConfigSelected')}>
             {proxyStatus?.active_config_name || (
-              <span className="text-gray-500 text-sm">未选择配置</span>
+              <span className="text-gray-500 text-sm">{t('proxy.noConfigSelected')}</span>
             )}
           </div>
         </div>
@@ -192,14 +195,14 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
                 <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>启动中...</span>
+                <span>{t('proxy.starting')}</span>
               </>
             ) : (
               <>
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                 </svg>
-                <span>启动代理服务</span>
+                <span>{t('proxy.startProxyService')}</span>
               </>
             )}
           </button>
@@ -214,14 +217,14 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
                 <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>停止中...</span>
+                <span>{t('proxy.stopping')}</span>
               </>
             ) : (
               <>
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
                 </svg>
-                <span>停止代理服务</span>
+                <span>{t('proxy.stopProxyService')}</span>
               </>
             )}
           </button>
@@ -233,7 +236,7 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
             <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span>处理中...</span>
+            <span>{t('proxy.processing')}</span>
           </button>
         )}
       </div>
@@ -246,9 +249,9 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
             <div>
-              <p className="text-sm font-medium text-yellow-400">请先完成配置</p>
+              <p className="text-sm font-medium text-yellow-400">{t('proxy.pleaseCompleteConfig')}</p>
               <p className="text-xs text-yellow-400/80 mt-1">
-                在"快捷操作"面板中选择一个分组和配置，即可启动代理服务
+                {t('proxy.selectGroupAndConfig')}
               </p>
             </div>
           </div>
@@ -262,9 +265,9 @@ export const ProxyStatusCard: React.FC<ProxyStatusCardProps> = ({
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
             <div>
-              <p className="text-sm font-medium text-red-400">服务异常</p>
+              <p className="text-sm font-medium text-red-400">{t('proxy.serviceError')}</p>
               <p className="text-xs text-red-400/80 mt-1">
-                代理服务发生错误，请检查日志或尝试重新启动服务
+                {t('proxy.serviceErrorDesc')}
               </p>
             </div>
           </div>

@@ -17,10 +17,7 @@ export async function listMcpServers(): Promise<McpServerInfo[]> {
  * @param name 服务器名称
  * @param serverConfig 服务器配置
  */
-export async function addMcpServer(
-  name: string,
-  serverConfig: McpServerConfig
-): Promise<void> {
+export async function addMcpServer(name: string, serverConfig: McpServerConfig): Promise<void> {
   return await invoke<void>('add_mcp_server', { name, serverConfig });
 }
 
@@ -29,10 +26,7 @@ export async function addMcpServer(
  * @param name 服务器名称
  * @param serverConfig 服务器配置
  */
-export async function updateMcpServer(
-  name: string,
-  serverConfig: McpServerConfig
-): Promise<void> {
+export async function updateMcpServer(name: string, serverConfig: McpServerConfig): Promise<void> {
   return await invoke<void>('update_mcp_server', { name, serverConfig });
 }
 
@@ -82,9 +76,7 @@ export async function testMcpServer(name: string): Promise<string> {
  * 批量导入 MCP 服务器
  * @param servers 服务器配置映射
  */
-export async function importMcpServers(
-  servers: Record<string, McpServerConfig>
-): Promise<void> {
+export async function importMcpServers(servers: Record<string, McpServerConfig>): Promise<void> {
   return await invoke<void>('import_mcp_servers', { servers });
 }
 

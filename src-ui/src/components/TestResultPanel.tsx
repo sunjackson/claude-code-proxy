@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ApiConfig, TestResult } from '../types/tauri';
 import * as testApi from '../api/test';
 import { useTestResults } from '../hooks/useTestResults';
@@ -26,6 +27,7 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
   groupId,
   onRefresh,
 }) => {
+  const { t } = useTranslation();
   const [testResults, setTestResults] = useState<Map<number, TestResult>>(new Map());
   const [testing, setTesting] = useState<Set<number>>(new Set());
   const [testingAll, setTestingAll] = useState(false);
@@ -125,7 +127,7 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
     <div className="space-y-4">
       {/* 头部：标题 + 测速全部按钮 */}
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-yellow-400">端点测速结果</h3>
+        <h3 className="text-lg font-semibold text-yellow-400">{t('test.endpointTest')}</h3>
         {groupId && configs.length > 0 && (
           <button
             onClick={handleTestAll}
@@ -138,14 +140,14 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                测速中...
+                {t('test.testAllProgress')}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                测速全部
+                {t('test.testAll')}
               </>
             )}
           </button>
@@ -158,8 +160,8 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
           <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p className="mt-4 text-gray-400">暂无配置</p>
-          <p className="mt-1 text-sm text-gray-500">请先添加API配置</p>
+          <p className="mt-4 text-gray-400">{t('test.noConfigs')}</p>
+          <p className="mt-1 text-sm text-gray-500">{t('test.pleaseAddConfig')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -227,16 +229,16 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
                     {result ? (
                       result.status === 'success' ? (
                         <span className="inline-block px-2.5 py-1 bg-green-500/20 text-green-400 text-sm rounded-md border border-green-500/50">
-                          可用
+                          {t('common.available')}
                         </span>
                       ) : (
                         <span className="inline-block px-2.5 py-1 bg-red-500/20 text-red-400 text-sm rounded-md border border-red-500/50">
-                          不可用
+                          {t('common.unavailable')}
                         </span>
                       )
                     ) : (
                       <span className="inline-block px-2.5 py-1 bg-gray-600/20 text-gray-500 text-sm rounded-md">
-                        未测试
+                        {t('status.pending')}
                       </span>
                     )}
                   </div>
@@ -258,14 +260,14 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          测速中
+                          {t('test.testSingleProgress')}
                         </>
                       ) : (
                         <>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                           </svg>
-                          测速
+                          {t('test.testSingle')}
                         </>
                       )}
                     </button>
@@ -278,7 +280,7 @@ export const TestResultPanel: React.FC<TestResultPanelProps> = ({
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    最后测试: {formatTime(new Date(result.test_at).getTime() / 1000)}
+                    {t('test.lastTest')}: {formatTime(new Date(result.test_at).getTime() / 1000)}
                   </div>
                 )}
               </div>

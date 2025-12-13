@@ -62,7 +62,9 @@ export async function getProviderPreset(id: string): Promise<ProviderPreset> {
 /**
  * 根据分类获取供应商预设
  */
-export async function getProviderPresetsByCategory(category: ProviderCategory): Promise<ProviderPreset[]> {
+export async function getProviderPresetsByCategory(
+  category: ProviderCategory
+): Promise<ProviderPreset[]> {
   return invoke<ProviderPreset[]>('get_provider_presets_by_category', { category });
 }
 

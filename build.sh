@@ -172,6 +172,63 @@ build_with_tauri_cli() {
     fi
 }
 
+# 安装应用到系统（macOS）
+install_app() {
+    print_info "安装应用..."
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        local app_path="$SCRIPT_DIR/src-tauri/target/release/bundle/macos/ClaudeCodeProxy.app"
+
+        if [ ! -d "$app_path" ]; then
+            print_error "未找到应用包，请先运行 ./build.sh 构建"
+            exit 1
+        fi
+
+        # 关闭正在运行的应用
+        print_info "关闭正在运行的 ClaudeCodeProxy..."
+        osascript -e 'quit app "ClaudeCodeProxy"' 2>/dev/null || true
+        pkill -f "ClaudeCodeProxy" 2>/dev/null || true
+        sleep 1
+
+        # 删除旧版本
+        if [ -d "/Applications/ClaudeCodeProxy.app" ]; then
+            print_info "删除旧版本..."
+            rm -rf "/Applications/ClaudeCodeProxy.app"
+        fi
+
+        # 复制新版本
+        print_info "复制应用到 /Applications..."
+        cp -R "$app_path" "/Applications/"
+
+        print_success "安装完成！"
+        print_info "应用已安装到: /Applications/ClaudeCodeProxy.app"
+
+        # 询问是否启动
+        read -p "是否立即启动应用？[Y/n] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+            print_info "启动应用..."
+            open "/Applications/ClaudeCodeProxy.app"
+        fi
+    elif [[ "$OSTYPE" == "linux"* ]]; then
+        local deb_path=$(ls "$SCRIPT_DIR/src-tauri/target/release/bundle/deb/"*.deb 2>/dev/null | head -1)
+
+        if [ -z "$deb_path" ]; then
+            print_error "未找到 .deb 安装包，请先运行 ./build.sh 构建"
+            exit 1
+        fi
+
+        print_info "安装 .deb 包..."
+        sudo dpkg -i "$deb_path" || sudo apt-get install -f -y
+
+        print_success "安装完成！"
+    else
+        print_error "不支持的操作系统: $OSTYPE"
+        print_info "请手动安装 src-tauri/target/release/bundle/ 目录下的安装包"
+        exit 1
+    fi
+}
+
 # 清理构建产物
 clean_build() {
     print_info "清理构建产物..."
@@ -193,10 +250,12 @@ Claude Code Proxy - 多平台编译脚本
     --deps                  只安装依赖
     --platform <平台>       构建指定平台 (macos, windows, linux, all)
     --current               只编译可执行文件（不打包）
+    --install               安装已构建的应用到系统
 
 示例:
     ./build.sh                      # 使用 Tauri CLI 构建安装包（默认，推荐）
     ./build.sh --current            # 只编译可执行文件（不打包）
+    ./build.sh --install            # 安装已构建的应用到系统
     ./build.sh --platform macos     # 交叉编译 macOS 版本
     ./build.sh --platform all       # 交叉编译所有平台
     ./build.sh --clean              # 清理构建产物
@@ -255,6 +314,9 @@ main() {
                 build_backend_current
                 print_success "构建完成！"
                 print_info "可执行文件位于: src-tauri/target/release/"
+                ;;
+            --install)
+                install_app
                 ;;
             *)
                 print_error "未知选项: $1"

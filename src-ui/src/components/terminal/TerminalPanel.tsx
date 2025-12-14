@@ -30,6 +30,8 @@ interface TerminalPanelProps {
   sessionId: string;
   /** Whether this terminal is currently active/visible */
   isActive?: boolean;
+  /** Whether this is a Claude Code session (only optimize output for Claude Code) */
+  isClaudeCode?: boolean;
   /** Callback when terminal closes */
   onClose?: () => void;
   /** Callback when terminal errors */
@@ -59,6 +61,7 @@ async function fileToBase64(file: Blob): Promise<string> {
 export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   sessionId,
   isActive = true,
+  isClaudeCode = false,
   onClose,
   onError,
 }) => {
@@ -368,15 +371,19 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           if (event.payload.session_id === sessionId && xtermRef.current) {
             let text = decodeOutput(event.payload.data);
 
-            // 优化：移除连续的多个空行（保留最多2个连续换行）
-            // 这样可以避免 Claude Code 输出时产生大量空白行
-            text = text.replace(/(\r?\n){3,}/g, '\n\n');
-            // 移除只包含空格的行
-            text = text.replace(/^[ \t]+$/gm, '');
-            // 移除行尾的多余空格
-            text = text.replace(/[ \t]+(\r?\n)/g, '$1');
-            // 处理 ANSI 清屏后的多余空行
-            text = text.replace(/(\x1b\[2J|\x1b\[H)[\r\n]*/g, '$1');
+            // 只对 Claude Code 会话应用输出优化
+            // 对普通终端会话，保持原始输出不变（包括空格和空行）
+            if (isClaudeCode) {
+              // 优化：移除连续的多个空行（保留最多2个连续换行）
+              // 这样可以避免 Claude Code 输出时产生大量空白行
+              text = text.replace(/(\r?\n){3,}/g, '\n\n');
+              // 移除只包含空格的行
+              text = text.replace(/^[ \t]+$/gm, '');
+              // 移除行尾的多余空格
+              text = text.replace(/[ \t]+(\r?\n)/g, '$1');
+              // 处理 ANSI 清屏后的多余空行
+              text = text.replace(/(\x1b\[2J|\x1b\[H)[\r\n]*/g, '$1');
+            }
 
             xtermRef.current.write(text);
             // Save to store for persistence

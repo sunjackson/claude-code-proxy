@@ -14,6 +14,8 @@ export interface TerminalTab {
   configId: number;
   configName?: string;
   isRunning: boolean;
+  /** Whether this is a Claude Code session (only optimize output for Claude Code) */
+  isClaudeCode?: boolean;
 }
 
 interface TerminalTabBarProps {

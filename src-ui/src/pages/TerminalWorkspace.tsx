@@ -128,6 +128,7 @@ const TerminalWorkspace: React.FC = () => {
           configId: s.config_id,
           configName: configList.find((c) => c.id === s.config_id)?.name,
           isRunning: s.running,
+          isClaudeCode: s.is_claude_code || false,
           workDir: s.work_dir,
         }));
 
@@ -166,6 +167,7 @@ const TerminalWorkspace: React.FC = () => {
           configId: session.config_id,
           configName: config?.name,
           isRunning: true,
+          isClaudeCode: false,
           workDir: session.work_dir,
         };
 
@@ -214,6 +216,7 @@ const TerminalWorkspace: React.FC = () => {
           configId: session.config_id,
           configName: config?.name,
           isRunning: true,
+          isClaudeCode: true,
           workDir: session.work_dir,
         };
 
@@ -464,6 +467,7 @@ const TerminalWorkspace: React.FC = () => {
           configId: session.config_id,
           configName: currentTab.configName,
           isRunning: true,
+          isClaudeCode: true,
           workDir: session.work_dir,
         };
 
@@ -491,6 +495,7 @@ const TerminalWorkspace: React.FC = () => {
           configId: session.config_id,
           configName: currentTab.configName,
           isRunning: true,
+          isClaudeCode: false,
           workDir: session.work_dir,
         };
 
@@ -646,14 +651,18 @@ const TerminalWorkspace: React.FC = () => {
               </div>
             ) : (
               <div className="h-full rounded-lg overflow-hidden border border-gray-800" key={forceResizeKey}>
-                {tabs.map((tab) => (
-                  <TerminalPanel
-                    key={tab.sessionId}
-                    sessionId={tab.sessionId}
-                    isActive={tab.sessionId === activeSessionId}
-                    onClose={() => handleTerminalClose(tab.sessionId)}
-                  />
-                ))}
+                {tabs.map((tab) => {
+                  const sessionInfo = sessionInfoMap.get(tab.sessionId);
+                  return (
+                    <TerminalPanel
+                      key={tab.sessionId}
+                      sessionId={tab.sessionId}
+                      isActive={tab.sessionId === activeSessionId}
+                      isClaudeCode={sessionInfo?.is_claude_code || false}
+                      onClose={() => handleTerminalClose(tab.sessionId)}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

@@ -213,6 +213,7 @@ mod tests {
             balance_query_error: None,
             auto_balance_check: false,
             balance_check_interval_sec: None,
+            organization_id: None,
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
         };
@@ -274,6 +275,7 @@ mod tests {
             balance_query_error: None,
             auto_balance_check: false,
             balance_check_interval_sec: None,
+            organization_id: None,
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
         };

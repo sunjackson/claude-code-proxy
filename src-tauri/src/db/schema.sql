@@ -230,6 +230,76 @@ CREATE INDEX IF NOT EXISTS idx_source_priority ON RecommendationSource(priority 
 CREATE INDEX IF NOT EXISTS idx_source_type ON RecommendationSource(source_type);
 
 -- ============================================
+-- 11. TerminalSession (终端会话)
+-- ============================================
+CREATE TABLE IF NOT EXISTS TerminalSession (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL UNIQUE,  -- UUID
+    config_id INTEGER NOT NULL,
+    name TEXT,
+    work_dir TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    closed_at DATETIME,
+    is_claude_code BOOLEAN NOT NULL DEFAULT 0,
+    claude_options TEXT,  -- JSON 格式存储 Claude Code 选项
+    running BOOLEAN NOT NULL DEFAULT 1,
+    rows INTEGER NOT NULL DEFAULT 24 CHECK(rows > 0 AND rows <= 500),
+    cols INTEGER NOT NULL DEFAULT 80 CHECK(cols > 0 AND cols <= 500),
+
+    FOREIGN KEY (config_id) REFERENCES ApiConfig(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_terminal_session_id ON TerminalSession(session_id);
+CREATE INDEX IF NOT EXISTS idx_terminal_config ON TerminalSession(config_id);
+CREATE INDEX IF NOT EXISTS idx_terminal_created ON TerminalSession(created_at);
+CREATE INDEX IF NOT EXISTS idx_terminal_running ON TerminalSession(running);
+
+-- ============================================
+-- 12. SessionHistory (会话历史记录)
+-- ============================================
+CREATE TABLE IF NOT EXISTS SessionHistory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,  -- 原会话 ID
+    config_id INTEGER NOT NULL,
+    name TEXT,
+    work_dir TEXT,
+    created_at DATETIME NOT NULL,
+    closed_at DATETIME NOT NULL,
+    exit_code INTEGER,
+    exited_normally BOOLEAN NOT NULL DEFAULT 1,
+
+    FOREIGN KEY (config_id) REFERENCES ApiConfig(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_session ON SessionHistory(session_id);
+CREATE INDEX IF NOT EXISTS idx_history_config ON SessionHistory(config_id);
+CREATE INDEX IF NOT EXISTS idx_history_closed ON SessionHistory(closed_at);
+
+-- ============================================
+-- 13. CommandAuditLog (命令审计日志 - 可选)
+-- ============================================
+CREATE TABLE IF NOT EXISTS CommandAuditLog (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    command TEXT NOT NULL,
+    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    allowed BOOLEAN NOT NULL DEFAULT 1,  -- 1=允许执行, 0=被拦截
+
+    FOREIGN KEY (session_id) REFERENCES TerminalSession(session_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_session ON CommandAuditLog(session_id);
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON CommandAuditLog(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_allowed ON CommandAuditLog(allowed);
+
+-- ============================================
 -- 触发器: 自动更新 updated_at 时间戳
 -- ============================================
 
@@ -259,4 +329,12 @@ CREATE TRIGGER IF NOT EXISTS update_appsettings_timestamp
 AFTER UPDATE ON AppSettings
 BEGIN
     UPDATE AppSettings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+-- TerminalSession 更新 last_used_at 时间戳
+CREATE TRIGGER IF NOT EXISTS update_terminalsession_last_used
+AFTER UPDATE ON TerminalSession
+WHEN NEW.running = 1
+BEGIN
+    UPDATE TerminalSession SET last_used_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;

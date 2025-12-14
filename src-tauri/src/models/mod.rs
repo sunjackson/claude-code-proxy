@@ -10,12 +10,14 @@ pub mod error_classifier;
 pub mod failure_counter;
 pub mod health_check;
 pub mod mcp;
+pub mod model_mapping;
 pub mod node_environment;
 pub mod provider_preset;
 pub mod proxy_status;
 pub mod recommended_service;
 pub mod retry_strategy;
 pub mod switch_log;
+pub mod terminal_session;
 pub mod test_result;
 
 // 注意: node_environment 类型在 services/env_detection.rs 中重新导出使用

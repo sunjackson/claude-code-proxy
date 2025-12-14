@@ -17,7 +17,10 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
+use crate::db::DbPool;
+use crate::models::terminal_session::NewTerminalSession;
 use crate::services::session_config::SESSION_CONFIG_MAP;
+use crate::services::terminal_session_service::TerminalSessionService;
 
 /// Claude Code startup options
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -81,6 +84,8 @@ pub struct PtyManager {
     handles: StdMutex<HashMap<String, PtyHandle>>,
     /// Default proxy port
     proxy_port: u16,
+    /// Terminal session persistence service (optional)
+    session_service: Option<Arc<TerminalSessionService>>,
 }
 
 // Safe because we only access handles through StdMutex
@@ -94,6 +99,56 @@ impl PtyManager {
             sessions: Mutex::new(HashMap::new()),
             handles: StdMutex::new(HashMap::new()),
             proxy_port,
+            session_service: None,
+        }
+    }
+
+    /// Create a new PTY manager with database persistence
+    pub fn with_persistence(proxy_port: u16, db_pool: DbPool) -> Self {
+        Self {
+            sessions: Mutex::new(HashMap::new()),
+            handles: StdMutex::new(HashMap::new()),
+            proxy_port,
+            session_service: Some(Arc::new(TerminalSessionService::new(db_pool))),
+        }
+    }
+
+    /// 从数据库恢复持久化会话
+    ///
+    /// 注意: 此方法仅恢复会话元数据到 SessionConfigMap，不会重新创建 PTY 实例
+    /// PTY 会话在应用重启后无法恢复，需要用户手动重新创建
+    pub async fn load_persisted_sessions(&self) -> Result<usize, String> {
+        if let Some(service) = &self.session_service {
+            match service.get_active_sessions().await {
+                Ok(sessions) => {
+                    let mut count = 0;
+                    for session in sessions {
+                        // 将会话信息恢复到 SessionConfigMap
+                        SESSION_CONFIG_MAP.register(
+                            session.session_id.clone(),
+                            session.config_id,
+                            session.name.clone(),
+                        );
+
+                        // 更新会话状态为未运行（因为 PTY 无法恢复）
+                        if let Err(e) = service.update_running_status(&session.session_id, false).await {
+                            log::error!("更新会话运行状态失败: {}", e);
+                        }
+
+                        count += 1;
+                    }
+
+                    log::info!("从数据库恢复了 {} 个会话元数据", count);
+                    Ok(count)
+                }
+                Err(e) => {
+                    log::error!("从数据库加载会话失败: {}", e);
+                    Err(format!("加载持久化会话失败: {}", e))
+                }
+            }
+        } else {
+            log::debug!("未启用会话持久化，跳过恢复");
+            Ok(0)
         }
     }
 
@@ -222,24 +277,45 @@ impl PtyManager {
         let meta = PtySessionMeta {
             session_id: session_id.clone(),
             config_id,
-            name,
-            work_dir,
+            name: name.clone(),
+            work_dir: work_dir.clone(),
             running: true,
             rows,
             cols,
             is_claude_code,
-            claude_options,
+            claude_options: claude_options.clone(),
         };
 
         {
             let mut sessions = self.sessions.lock().await;
-            sessions.insert(session_id.clone(), meta);
+            sessions.insert(session_id.clone(), meta.clone());
         }
 
         // Store PTY handle
         {
             let mut handles = self.handles.lock().unwrap();
-            handles.insert(session_id, PtyHandle { master, writer });
+            handles.insert(session_id.clone(), PtyHandle { master, writer });
+        }
+
+        // 持久化到数据库（如果启用）
+        if let Some(service) = &self.session_service {
+            let new_session = NewTerminalSession {
+                session_id: session_id.clone(),
+                config_id,
+                name,
+                work_dir,
+                is_claude_code,
+                claude_options: claude_options.as_ref().map(|opts| {
+                    serde_json::to_string(opts).unwrap_or_default()
+                }),
+                rows: rows as i32,
+                cols: cols as i32,
+            };
+
+            if let Err(e) = service.create_session(new_session).await {
+                log::error!("持久化会话失败: {}", e);
+                // 不影响会话创建，仅记录错误
+            }
         }
 
         Ok(())
@@ -274,6 +350,13 @@ impl PtyManager {
                 log::debug!("Resized PTY {} to {}x{}", session_id, cols, rows);
             } else {
                 return Err(format!("PTY handle not found: {}", session_id));
+            }
+        }
+
+        // 更新数据库中的终端尺寸
+        if let Some(service) = &self.session_service {
+            if let Err(e) = service.update_terminal_size(session_id, rows as i32, cols as i32).await {
+                log::error!("更新数据库中的终端尺寸失败: {}", e);
             }
         }
 
@@ -317,6 +400,14 @@ impl PtyManager {
 
         // Also remove from SessionConfigMap
         SESSION_CONFIG_MAP.remove(session_id);
+
+        // 关闭数据库中的会话记录
+        if let Some(service) = &self.session_service {
+            if let Err(e) = service.close_session(session_id, None).await {
+                log::error!("关闭数据库会话记录失败: {}", e);
+            }
+        }
+
         log::info!("Closed terminal session: {}", session_id);
         Ok(())
     }
@@ -344,6 +435,10 @@ impl PtyManager {
     }
 
     /// Switch the config ID for a session (runtime provider switch)
+    /// 
+    /// This method updates the session's config mapping in SESSION_CONFIG_MAP,
+    /// which is used by the proxy server for routing decisions.
+    /// No terminal commands are sent - the switch is completely silent.
     pub async fn switch_config(&self, session_id: &str, new_config_id: i64) -> Result<(), String> {
         // Update SessionConfigMap (proxy routing will use this)
         if SESSION_CONFIG_MAP.switch(session_id, new_config_id) {
@@ -351,6 +446,12 @@ impl PtyManager {
             let mut sessions = self.sessions.lock().await;
             if let Some(session) = sessions.get_mut(session_id) {
                 session.config_id = new_config_id;
+                
+                log::info!(
+                    "Switched session {} to config_id={} (silent switch - no terminal commands sent)", 
+                    session_id, 
+                    new_config_id
+                );
             }
             Ok(())
         } else {
@@ -408,6 +509,7 @@ impl PtyManager {
 
         env
     }
+
 
     /// Detect the default shell for the current platform
     fn detect_default_shell() -> String {

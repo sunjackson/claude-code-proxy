@@ -29,7 +29,10 @@ interface ConfigEditorProps {
     serverUrl: string;
     serverPort: number;
     groupId: number | null;
-    // 新增字段
+    // API 提供商类型和组织 ID
+    providerType?: 'claude' | 'gemini' | 'openai';
+    organizationId?: string;
+    // 模型配置字段
     defaultModel?: string;
     haikuModel?: string;
     sonnetModel?: string;
@@ -78,6 +81,10 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
   const [balanceQueryUrl, setBalanceQueryUrl] = useState('');
   const [autoBalanceCheck, setAutoBalanceCheck] = useState(true);
   const [balanceCheckIntervalSec, setBalanceCheckIntervalSec] = useState(3600);
+
+  // 新增：API 提供商类型
+  const [providerType, setProviderType] = useState<'claude' | 'gemini' | 'openai'>('claude');
+  const [organizationId, setOrganizationId] = useState('');
 
   // 新增：UI 状态
   const [showPresets, setShowPresets] = useState(true); // 默认展开预设
@@ -149,6 +156,9 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       setBalanceQueryUrl(config.balance_query_url || '');
       setAutoBalanceCheck(config.auto_balance_check);
       setBalanceCheckIntervalSec(config.balance_check_interval_sec || 3600);
+      // 加载 API 提供商类型和组织 ID
+      setProviderType(config.provider_type || 'claude');
+      setOrganizationId(config.organization_id || '');
     } else {
       // 新建模式重置表单
       setName('');
@@ -166,6 +176,9 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       setBalanceQueryUrl('');
       setAutoBalanceCheck(true);
       setBalanceCheckIntervalSec(3600);
+      // 重置 API 提供商类型
+      setProviderType('claude');
+      setOrganizationId('');
     }
     setErrors({});
     setShowApiKey(false);
@@ -298,6 +311,9 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
       serverUrl: serverUrl.trim(),
       serverPort,
       groupId,
+      // API 提供商类型和组织 ID
+      providerType,
+      organizationId: organizationId.trim() || undefined,
       // 新增字段（仅当非空时传递）
       defaultModel: defaultModel.trim() || undefined,
       haikuModel: haikuModel.trim() || undefined,
@@ -686,7 +702,53 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
               ))}
             </select>
           </div>
-              </>
+
+          {/* API 提供商类型 */}
+          <div>
+            <label
+              htmlFor="providerType"
+              className="block text-sm font-medium text-gray-300 mb-2"
+            >
+              API 提供商类型 <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="providerType"
+              value={providerType}
+              onChange={(e) => setProviderType(e.target.value as 'claude' | 'gemini' | 'openai')}
+              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-yellow-500 transition-colors"
+            >
+              <option value="claude">Anthropic Claude</option>
+              <option value="openai">OpenAI GPT</option>
+              <option value="gemini">Google Gemini</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              选择此配置使用的 API 提供商
+            </p>
+          </div>
+
+          {/* OpenAI Organization ID - 仅当选择 OpenAI 时显示 */}
+          {providerType === 'openai' && (
+            <div className="bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/30 rounded-lg p-4">
+              <label
+                htmlFor="organizationId"
+                className="block text-sm font-medium text-blue-300 mb-2"
+              >
+                OpenAI Organization ID <span className="text-gray-500">(可选)</span>
+              </label>
+              <input
+                type="text"
+                id="organizationId"
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-900 border border-blue-500/50 rounded text-white focus:outline-none focus:border-blue-500 transition-colors"
+                placeholder="org-..."
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                用于多组织账号场景，如果您的账号只属于一个组织，可以留空
+              </p>
+            </div>
+          )}
+</>
             )}
 
           {/* 高级配置 */}

@@ -307,10 +307,10 @@ const TerminalWorkspace: React.FC = () => {
         const config = configs.find((c) => c.id === newConfigId);
         updateTab(sessionId, { configId: newConfigId, configName: config?.name });
 
-        toast.success(`Switched to ${config?.name || 'new provider'}`);
+        toast.success(`已切换到 ${config?.name || '新服务商'}，路由已自动生效`);
       } catch (error) {
         console.error('Failed to switch provider:', error);
-        toast.error(`Failed to switch provider: ${error}`);
+        toast.error(`切换服务商失败: ${error}`);
       }
     },
     [configs, updateTab]

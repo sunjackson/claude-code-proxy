@@ -67,6 +67,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [isReady, setIsReady] = useState(false);
 
+  // Auto-scroll timer ref
+  const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastInteractionRef = useRef<number>(Date.now());
+
   // Get store methods
   const { appendOutput, getOutputBuffer } = useTerminalStore();
 
@@ -86,6 +90,35 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
   // Drag state for visual feedback
   const [isDragging, setIsDragging] = useState(false);
+
+  /**
+   * Scroll terminal to bottom
+   */
+  const scrollToBottom = useCallback(() => {
+    if (xtermRef.current) {
+      xtermRef.current.scrollToBottom();
+    }
+  }, []);
+
+  /**
+   * Reset auto-scroll timer - called on user interaction
+   */
+  const resetAutoScrollTimer = useCallback(() => {
+    lastInteractionRef.current = Date.now();
+
+    // Clear existing timer
+    if (autoScrollTimerRef.current) {
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+
+    // Set new timer for 5 seconds
+    autoScrollTimerRef.current = setTimeout(() => {
+      if (isActiveRef.current && xtermRef.current) {
+        scrollToBottom();
+      }
+    }, 5000);
+  }, [scrollToBottom]);
 
   /**
    * Process an image file and send to PTY via iTerm2 protocol
@@ -291,13 +324,17 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     const previousOutput = getOutputBuffer(sessionId);
     if (previousOutput) {
       term.write(previousOutput);
+      // Scroll to bottom after restoring output
+      term.scrollToBottom();
     }
 
-    // Fit to container after a short delay
+    // Fit to container after a short delay and scroll to bottom
     setTimeout(() => {
       if (isMounted && fitAddon) {
         fitAddon.fit();
         setIsReady(true);
+        // Ensure we're at the bottom after fit
+        term.scrollToBottom();
       }
     }, 100);
 
@@ -305,11 +342,18 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     // PTY handles echoing, we don't do local echo
     const inputHandler = term.onData(async (data) => {
       if (!isMounted || !isActiveRef.current) return;
+      // Reset auto-scroll timer on user input
+      resetAutoScrollTimer();
       try {
         await ptyWriteInput(sessionId, encodeInput(data));
       } catch (error) {
         console.error('Failed to send input:', error);
       }
+    });
+
+    // Handle scroll events - reset auto-scroll timer when user scrolls
+    const scrollHandler = term.onScroll(() => {
+      resetAutoScrollTimer();
     });
 
     // Set up event listeners for PTY output
@@ -326,14 +370,24 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
             // 优化：移除连续的多个空行（保留最多2个连续换行）
             // 这样可以避免 Claude Code 输出时产生大量空白行
-            text = text.replace(/(\r?\n){4,}/g, '\n\n\n');
-
-            // 移除行尾的多余空格（可选）
-            // text = text.replace(/[ \t]+(\r?\n)/g, '$1');
+            text = text.replace(/(\r?\n){3,}/g, '\n\n');
+            // 移除只包含空格的行
+            text = text.replace(/^[ \t]+$/gm, '');
+            // 移除行尾的多余空格
+            text = text.replace(/[ \t]+(\r?\n)/g, '$1');
+            // 处理 ANSI 清屏后的多余空行
+            text = text.replace(/(\x1b\[2J|\x1b\[H)[\r\n]*/g, '$1');
 
             xtermRef.current.write(text);
             // Save to store for persistence
             appendOutput(sessionId, text);
+
+            // Auto-scroll to bottom on new output
+            // Only if user hasn't scrolled recently (within 2 seconds)
+            const timeSinceInteraction = Date.now() - lastInteractionRef.current;
+            if (timeSinceInteraction > 2000) {
+              xtermRef.current.scrollToBottom();
+            }
           }
         }
       );
@@ -373,14 +427,20 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     return () => {
       isMounted = false;
       inputHandler.dispose();
+      scrollHandler.dispose();
       unlistenOutput?.();
       unlistenClosed?.();
       unlistenError?.();
+      // Clear auto-scroll timer
+      if (autoScrollTimerRef.current) {
+        clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = null;
+      }
       term.dispose();
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, appendOutput, getOutputBuffer]); // Only re-run if sessionId changes
+  }, [sessionId, appendOutput, getOutputBuffer, resetAutoScrollTimer]); // Only re-run if sessionId changes
 
   // Set up paste and drag-drop event listeners
   useEffect(() => {
@@ -464,6 +524,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       xtermRef.current.focus();
       // Trigger resize to sync dimensions
       handleResize();
+      // Scroll to bottom when terminal becomes active
+      setTimeout(() => {
+        xtermRef.current?.scrollToBottom();
+      }, 50);
     }
   }, [isActive, isReady, handleResize]);
 

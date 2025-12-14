@@ -6,6 +6,16 @@
 
 ## 变更记录 (Changelog)
 
+### 2025-12-14 - 终端 Web 共享管理服务完成
+- ✅ 完成终端会话管理系统 (v17 数据库迁移)
+- ✅ 添加 TerminalSession, SessionHistory, CommandAuditLog 三个数据表
+- ✅ 实现 PTY 管理器和终端会话服务
+- ✅ 集成 xterm.js 终端面板和多 Tab 界面
+- ✅ 支持 Claude Code 专用启动模式
+- ✅ 实现运行时服务商切换 (Silent Switch)
+- ✅ 跨平台 Shell 自动检测和适配
+- 📝 参见: [终端功能完成总结](./docs/terminal-feature-completion.md)
+
 ### 2025-12-10 - AI 上下文初始化
 - 生成项目级和模块级 CLAUDE.md 文档
 - 建立完整的模块索引和导航结构
@@ -34,7 +44,7 @@
 
 ### 当前版本
 
-**v1.2.0** (生产就绪)
+**v1.2.1** (开发中 - 终端功能完成)
 
 ---
 

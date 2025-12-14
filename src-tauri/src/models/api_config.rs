@@ -14,13 +14,15 @@ fn default_weight() -> f64 {
 }
 
 /// API 提供商类型
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderType {
     /// Claude API
     Claude,
     /// Gemini API
     Gemini,
+    /// OpenAI API (包括 Azure OpenAI)
+    OpenAI,
 }
 
 impl Default for ProviderType {
@@ -34,6 +36,7 @@ impl std::fmt::Display for ProviderType {
         match self {
             ProviderType::Claude => write!(f, "claude"),
             ProviderType::Gemini => write!(f, "gemini"),
+            ProviderType::OpenAI => write!(f, "openai"),
         }
     }
 }
@@ -158,6 +161,10 @@ pub struct ApiConfig {
     #[serde(default)]
     pub provider_type: ProviderType,
 
+    /// OpenAI Organization ID (可选)
+    /// 用于多组织账号场景
+    pub organization_id: Option<String>,
+
     /// 供应商分类
     #[serde(default)]
     pub category: VendorCategory,
@@ -235,6 +242,9 @@ pub struct CreateApiConfigInput {
     // API 提供商类型
     pub provider_type: Option<ProviderType>,
 
+    // OpenAI Organization ID（用于多组织账号场景）
+    pub organization_id: Option<String>,
+
     // 供应商配置
     pub category: Option<VendorCategory>,
     pub is_partner: Option<bool>,
@@ -284,6 +294,9 @@ pub struct UpdateApiConfigInput {
 
     // API 提供商类型
     pub provider_type: Option<ProviderType>,
+
+    // OpenAI Organization ID（用于多组织账号场景）
+    pub organization_id: Option<String>,
 
     // 供应商配置
     pub category: Option<VendorCategory>,
@@ -529,6 +542,7 @@ mod tests {
             balance_query_error: None,
             auto_balance_check: false,
             balance_check_interval_sec: None,
+            organization_id: None,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };
@@ -575,6 +589,7 @@ mod tests {
             balance_query_error: None,
             auto_balance_check: false,
             balance_check_interval_sec: None,
+            organization_id: None,
             created_at: "2025-11-09".to_string(),
             updated_at: "2025-11-09".to_string(),
         };

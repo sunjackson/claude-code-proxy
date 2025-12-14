@@ -114,9 +114,9 @@ export const ProviderSwitchMenu: React.FC<ProviderSwitchMenuProps> = ({
     >
       {/* Header */}
       <div className="px-3 py-2 bg-gray-800/50 border-b border-gray-700">
-        <div className="text-sm font-medium text-gray-300">Switch Provider</div>
+        <div className="text-sm font-medium text-gray-300">切换服务商</div>
         <div className="text-xs text-gray-500">
-          Changes take effect immediately
+          完全静默切换，无终端干扰
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export const ProviderSwitchMenu: React.FC<ProviderSwitchMenuProps> = ({
           </div>
         ) : configs.length === 0 ? (
           <div className="px-3 py-6 text-center text-gray-500 text-sm">
-            No providers available
+            暂无可用服务商
           </div>
         ) : (
           <div className="py-1">
@@ -164,7 +164,7 @@ export const ProviderSwitchMenu: React.FC<ProviderSwitchMenuProps> = ({
                   </div>
                   {isCurrent && (
                     <span className="text-xs text-yellow-500 flex-shrink-0">
-                      Current
+                      当前
                     </span>
                   )}
                 </button>

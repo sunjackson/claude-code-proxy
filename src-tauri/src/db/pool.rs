@@ -6,7 +6,8 @@ use std::sync::{Arc, Mutex};
 
 /// 数据库连接池
 /// 使用简单的单连接模式,因为 SQLite 对并发写入的支持有限
-/// ���于更高并发需求,可以考虑使用 r2d2 或其他连接池库
+/// 对于更高并发需求,可以考虑使用 r2d2 或其他连接池库
+#[derive(Clone)]
 pub struct DbPool {
     connection: Arc<Mutex<Connection>>,
 }
@@ -25,6 +26,31 @@ impl DbPool {
         Arc::clone(&self.connection)
     }
 
+    /// 获取数据库连接（返回 MutexGuard）
+    /// 用于需要直接访问连接的场景
+    pub fn get(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AppError> {
+        self.connection.lock().map_err(|e| AppError::DatabaseError {
+            message: format!("获取数据库连接锁失败: {}", e),
+        })
+    }
+
+    /// 创建内存数据库连接池（用于测试）
+    #[cfg(test)]
+    pub fn new_in_memory() -> AppResult<Self> {
+        let conn = Connection::open_in_memory()
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("创建内存数据库失败: {}", e),
+            })?;
+
+        // 启用外键约束
+        conn.execute("PRAGMA foreign_keys = ON;", [])
+            .map_err(|e| AppError::DatabaseError {
+                message: format!("启用外键约束失败: {}", e),
+            })?;
+
+        Ok(Self::new(conn))
+    }
+
     /// 执行只读操作
     /// 接受一个闭包,传入连接引用
     pub fn with_connection<F, T>(&self, f: F) -> AppResult<T>
@@ -34,7 +60,6 @@ impl DbPool {
         let conn = self.connection.lock().map_err(|e| AppError::DatabaseError {
             message: format!("获取数据库连接锁失败: {}", e),
         })?;
-
         f(&conn)
     }
 

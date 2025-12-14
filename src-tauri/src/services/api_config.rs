@@ -73,8 +73,9 @@ fn map_row_to_config(row: &Row) -> rusqlite::Result<ApiConfig> {
         balance_query_error: row.get(33)?,
         auto_balance_check: row.get::<_, i32>(34)? != 0,
         balance_check_interval_sec: row.get(35)?,
-        created_at: row.get(36)?,
-        updated_at: row.get(37)?,
+        organization_id: row.get(36).ok(), // OpenAI Organization ID (可选)
+        created_at: row.get(37)?,
+        updated_at: row.get(38)?,
     })
 }
 
@@ -174,13 +175,13 @@ impl ApiConfigService {
         // 使用命名参数以避免 Rusqlite 的 16 参数限制
         conn.execute(
             "INSERT INTO ApiConfig (name, api_key, server_url, server_port, group_id, sort_order,
-                                    provider_type, category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
+                                    provider_type, organization_id, category, is_partner, theme_icon, theme_bg_color, theme_text_color, meta,
                                     default_model, haiku_model, sonnet_model, opus_model, small_fast_model,
                                     api_timeout_ms, max_output_tokens,
                                     balance_query_url, auto_balance_check, balance_check_interval_sec, balance_currency,
                                     created_at, updated_at)
              VALUES (:name, :api_key, :server_url, :server_port, :group_id, :sort_order,
-                     :provider_type, :category, :is_partner, :theme_icon, :theme_bg_color, :theme_text_color, :meta,
+                     :provider_type, :organization_id, :category, :is_partner, :theme_icon, :theme_bg_color, :theme_text_color, :meta,
                      :default_model, :haiku_model, :sonnet_model, :opus_model, :small_fast_model,
                      :api_timeout_ms, :max_output_tokens,
                      :balance_query_url, :auto_balance_check, :balance_check_interval_sec, :balance_currency,
@@ -193,6 +194,7 @@ impl ApiConfigService {
                 ":group_id": &input.group_id,
                 ":sort_order": sort_order,
                 ":provider_type": &provider_type,
+                ":organization_id": &input.organization_id,
                 ":category": &category,
                 ":is_partner": is_partner,
                 ":theme_icon": &input.theme_icon,
@@ -234,7 +236,7 @@ impl ApiConfigService {
                     api_timeout_ms, max_output_tokens,
                     balance_query_url, last_balance, balance_currency, last_balance_check_at,
                     balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
-                    created_at, updated_at
+                    organization_id, created_at, updated_at
              FROM ApiConfig WHERE id = ?1",
             [id],
             map_row_to_config,
@@ -269,7 +271,7 @@ impl ApiConfigService {
                         api_timeout_ms, max_output_tokens,
                         balance_query_url, last_balance, balance_currency, last_balance_check_at,
                         balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
-                        created_at, updated_at
+                        organization_id, created_at, updated_at
                  FROM ApiConfig WHERE group_id = ?1 ORDER BY sort_order ASC".to_string(),
                 vec![Some(gid)],
             )
@@ -283,7 +285,7 @@ impl ApiConfigService {
                         api_timeout_ms, max_output_tokens,
                         balance_query_url, last_balance, balance_currency, last_balance_check_at,
                         balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
-                        created_at, updated_at
+                        organization_id, created_at, updated_at
                  FROM ApiConfig ORDER BY group_id ASC, sort_order ASC".to_string(),
                 vec![],
             )
@@ -480,6 +482,12 @@ impl ApiConfigService {
         if let Some(ref provider_type) = input.provider_type {
             updates.push("provider_type = ?");
             params.push(Box::new(provider_type.to_string()));
+        }
+
+        // OpenAI Organization ID
+        if let Some(ref organization_id) = input.organization_id {
+            updates.push("organization_id = ?");
+            params.push(Box::new(organization_id.clone()));
         }
 
         if let Some(ref category) = input.category {
@@ -912,7 +920,7 @@ impl ApiConfigService {
                         api_timeout_ms, max_output_tokens,
                         balance_query_url, last_balance, balance_currency, last_balance_check_at,
                         balance_query_status, balance_query_error, auto_balance_check, balance_check_interval_sec,
-                        created_at, updated_at
+                        organization_id, created_at, updated_at
                  FROM ApiConfig
                  WHERE group_id = ?1 AND is_enabled = 1 AND is_available = 1
                  ORDER BY weight_score DESC, sort_order ASC",

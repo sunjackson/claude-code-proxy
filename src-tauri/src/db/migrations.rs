@@ -4,7 +4,7 @@ use crate::models::error::{AppError, AppResult};
 use rusqlite::{Connection, OptionalExtension};
 
 /// 数据库版本
-const CURRENT_DB_VERSION: i32 = 13;
+const CURRENT_DB_VERSION: i32 = 17;
 
 /// 获取当前数据库版本
 pub fn get_db_version(conn: &Connection) -> AppResult<i32> {
@@ -112,6 +112,22 @@ pub fn migrate_database(conn: &Connection) -> AppResult<()> {
             13 => {
                 // v12 -> v13: Node 环境配置表
                 migrate_v12_to_v13(conn)?;
+            }
+            14 => {
+                // v13 -> v14: OpenAI API 支持
+                migrate_v13_to_v14(conn)?;
+            }
+            15 => {
+                // v14 -> v15: 模型映射配置表
+                migrate_v14_to_v15(conn)?;
+            }
+            16 => {
+                // v15 -> v16: 扩展模型映射支持 Gemini
+                migrate_v15_to_v16(conn)?;
+            }
+            17 => {
+                // v16 -> v17: 终端会话管理支持
+                migrate_v16_to_v17(conn)?;
             }
             _ => {
                 return Err(AppError::DatabaseError {
@@ -591,6 +607,130 @@ fn migrate_v12_to_v13(conn: &Connection) -> AppResult<()> {
         })?;
 
     log::info!("v12 -> v13 迁移完成: 已添加 Node 环境配置表");
+    Ok(())
+}
+
+/// 迁移: v13 -> v14 - OpenAI API 支持
+/// 添加 organization_id 字段支持 OpenAI API
+fn migrate_v13_to_v14(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v13 -> v14 迁移: OpenAI API 支持");
+
+    // 检查 organization_id 列是否已存在
+    let column_exists: bool = conn
+        .prepare("PRAGMA table_info(ApiConfig)")
+        .and_then(|mut stmt| {
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            Ok(columns.contains(&"organization_id".to_string()))
+        })
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查列是否存在失败: {}", e),
+        })?;
+
+    if column_exists {
+        log::info!("v13 -> v14 迁移: organization_id 列已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v14_openai_support.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v13->v14 迁移失败: {}", e),
+        })?;
+
+    log::info!("v13 -> v14 迁移完成: 已添加 organization_id 字段");
+    Ok(())
+}
+
+/// 迁移: v14 -> v15 - 模型映射配置表
+/// 添加自定义模型映射配置支持
+fn migrate_v14_to_v15(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v14 -> v15 迁移: 模型映射配置表");
+
+    // 检查 ModelMapping 表是否已存在
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ModelMapping')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查表是否存在失败: {}", e),
+        })?;
+
+    if table_exists {
+        log::info!("v14 -> v15 迁移: ModelMapping 表已存在，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v15_model_mapping.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v14->v15 迁移失败: {}", e),
+        })?;
+
+    log::info!("v14 -> v15 迁移完成: 已添加模型映射配置表");
+    Ok(())
+}
+
+/// 迁移: v15 -> v16 - 扩展模型映射支持 Gemini
+/// 添加 Gemini 方向的模型映射支持和更多默认映射
+fn migrate_v15_to_v16(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v15 -> v16 迁移: 扩展模型映射支持 Gemini");
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v16_gemini_model_mapping.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v15->v16 迁移失败: {}", e),
+        })?;
+
+    log::info!("v15 -> v16 迁移完成: 已扩展模型映射支持 Gemini");
+    Ok(())
+}
+
+/// 迁移: v16 -> v17 - 终端会话管理支持
+/// 添加 TerminalSession, SessionHistory, CommandAuditLog 三个表
+fn migrate_v16_to_v17(conn: &Connection) -> AppResult<()> {
+    log::info!("执行 v16 -> v17 迁移: 终端会话管理支持");
+
+    // 检查 TerminalSession 表是否已存在
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='TerminalSession')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("检查 TerminalSession 表是否存在失败: {}", e),
+        })?;
+
+    if table_exists {
+        log::info!("v16 -> v17 迁移: TerminalSession 表已存在，schema.sql 已包含 v17 变更，跳过迁移");
+        return Ok(());
+    }
+
+    // 加载迁移 SQL 文件
+    let migration_sql = include_str!("migrations/migration_v17_terminal_sessions.sql");
+
+    // 执行迁移 SQL
+    conn.execute_batch(migration_sql)
+        .map_err(|e| AppError::DatabaseError {
+            message: format!("v16->v17 迁移失败: {}", e),
+        })?;
+
+    log::info!("v16 -> v17 迁移完成: 已添加终端会话管理相关表");
     Ok(())
 }
 

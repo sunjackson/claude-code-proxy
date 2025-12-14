@@ -100,7 +100,7 @@ export type ProviderCategory = VendorCategory;
 /**
  * API 提供商类型
  */
-export type ProviderType = 'claude' | 'gemini';
+export type ProviderType = 'claude' | 'gemini' | 'openai';
 
 /**
  * API 配置
@@ -137,6 +137,8 @@ export interface ApiConfig {
 
   /** API 提供商类型 */
   provider_type: ProviderType;
+  /** OpenAI Organization ID (可选) */
+  organization_id: string | null;
   /** 供应商分类 */
   category: VendorCategory;
   /** 是否为合作伙伴 */
@@ -208,6 +210,8 @@ export interface CreateApiConfigInput {
 
   // API 提供商类型
   provider_type?: ProviderType;
+  // OpenAI Organization ID
+  organization_id?: string;
   // 供应商分类和主题
   category?: VendorCategory;
   is_partner?: boolean;
@@ -249,6 +253,8 @@ export interface UpdateApiConfigInput {
 
   // API 提供商类型
   provider_type?: ProviderType;
+  // OpenAI Organization ID
+  organization_id?: string;
   // 供应商分类和主题
   category?: VendorCategory;
   is_partner?: boolean;
@@ -943,4 +949,157 @@ export interface NodeEnvironmentConfig {
   claude_path: string | null;
   /** Claude Code 版本 */
   claude_version: string | null;
+}
+
+/**
+ * 模型映射方向
+ */
+export type MappingDirection =
+  | 'claude_to_openai'
+  | 'openai_to_claude'
+  | 'claude_to_gemini'
+  | 'gemini_to_claude'
+  | 'openai_to_gemini'
+  | 'gemini_to_openai'
+  | 'bidirectional';
+
+/**
+ * 映射类型
+ */
+export type MappingType = 'builtin' | 'user_defined';
+
+/**
+ * 模型提供商
+ */
+export type ModelProvider = 'Claude' | 'OpenAI' | 'Gemini';
+
+/**
+ * 映射分组键（用于 UI 分组显示）
+ */
+export type MappingGroupKey = 'claude_openai' | 'claude_gemini' | 'openai_gemini' | 'bidirectional';
+
+/**
+ * 模型映射配置
+ */
+export interface ModelMapping {
+  /** 映射 ID */
+  id: number;
+  /** 源模型名称 */
+  source_model: string;
+  /** 目标模型名称 */
+  target_model: string;
+  /** 映射方向 */
+  direction: MappingDirection;
+  /** 映射类型 */
+  mapping_type: MappingType;
+  /** 源模型提供商 */
+  source_provider: ModelProvider | null;
+  /** 目标模型提供商 */
+  target_provider: ModelProvider | null;
+  /** 优先级 (0-100) */
+  priority: number;
+  /** 描述 */
+  description: string | null;
+  /** 备注 */
+  notes: string | null;
+  /** 是否启用 */
+  is_enabled: boolean;
+  /** 是否为自定义映射 */
+  is_custom: boolean;
+  /** 创建时间 */
+  created_at: string;
+  /** 更新时间 */
+  updated_at: string;
+}
+
+/**
+ * 创建模型映射请求
+ */
+export interface CreateModelMappingRequest {
+  /** 源模型名称 */
+  source_model: string;
+  /** 目标模型名称 */
+  target_model: string;
+  /** 映射方向 */
+  direction: MappingDirection;
+  /** 源模型提供商 */
+  source_provider?: ModelProvider;
+  /** 目标模型提供商 */
+  target_provider?: ModelProvider;
+  /** 优先级 (默认: 50) */
+  priority?: number;
+  /** 描述 */
+  description?: string;
+  /** 备注 */
+  notes?: string;
+  /** 是否启用 (默认: true) */
+  is_enabled?: boolean;
+}
+
+/**
+ * 更新模型映射请求
+ */
+export interface UpdateModelMappingRequest {
+  /** 目标模型名称 */
+  target_model?: string;
+  /** 优先级 */
+  priority?: number;
+  /** 描述 */
+  description?: string;
+  /** 备注 */
+  notes?: string;
+  /** 是否启用 */
+  is_enabled?: boolean;
+}
+
+/**
+ * 模型映射查询参数
+ */
+export interface ModelMappingQuery {
+  /** 源模型名称筛选 */
+  source_model?: string;
+  /** 目标模型名称筛选 */
+  target_model?: string;
+  /** 映射方向筛选 */
+  direction?: MappingDirection;
+  /** 映射类型筛选 */
+  mapping_type?: MappingType;
+  /** 是否启用筛选 */
+  is_enabled?: boolean;
+  /** 是否为自定义映射筛选 */
+  is_custom?: boolean;
+}
+
+/**
+ * 模型映射导出项
+ */
+export interface ModelMappingExportItem {
+  /** 源模型名称 */
+  source_model: string;
+  /** 目标模型名称 */
+  target_model: string;
+  /** 映射方向 */
+  direction: MappingDirection;
+  /** 源模型提供商 */
+  source_provider: ModelProvider | null;
+  /** 目标模型提供商 */
+  target_provider: ModelProvider | null;
+  /** 优先级 */
+  priority: number;
+  /** 描述 */
+  description: string | null;
+  /** 备注 */
+  notes: string | null;
+}
+
+/**
+ * 模型映射导出数据
+ */
+export interface ModelMappingExport {
+  /** 版本号 */
+  version: string;
+  /** 导出时间 */
+  exported_at: string;
+  /** 映射列表 */
+  mappings: ModelMappingExportItem[];
 }

@@ -10,11 +10,12 @@ import { EnvironmentVariableManager } from '../components/EnvironmentVariableMan
 import { ClaudeCodePathDetector } from '../components/ClaudeCodePathDetector';
 import { BackupList } from '../components/BackupList';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ModelMappingManager } from '../components/ModelMappingManager';
 import { useLanguage } from '../hooks/useLanguage';
 import { CompactLayout } from '../components/CompactLayout';
 import type { ClaudeCodePath, ConfigBackup } from '../types/tauri';
 
-type SettingsTab = 'general' | 'environment' | 'backup';
+type SettingsTab = 'general' | 'environment' | 'backup' | 'modelMapping';
 
 export const Settings: React.FC = () => {
   const { t } = useTranslation();
@@ -143,6 +144,22 @@ export const Settings: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           {t('settings.environment')}
+        </button>
+        <button
+          onClick={() => setActiveTab('modelMapping')}
+          className={`flex-1 px-4 py-2.5 text-sm rounded-lg font-semibold flex items-center justify-center gap-2 ${
+            activeTab === 'modelMapping'
+              ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black'
+              : 'bg-transparent text-gray-300 hover:bg-gray-900/50 hover:text-white border border-transparent'
+          }`}
+          style={{
+            transition: 'color 0.15s ease-in-out, background-color 0.15s ease-in-out',
+          }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+          {t('modelMapping.title')}
         </button>
       </div>
 
@@ -370,6 +387,8 @@ export const Settings: React.FC = () => {
         )}
 
         {activeTab === 'environment' && <EnvironmentVariableManager />}
+
+        {activeTab === 'modelMapping' && <ModelMappingManager />}
       </div>
 
       {/* 确认对话框 */}

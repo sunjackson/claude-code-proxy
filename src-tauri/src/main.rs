@@ -49,9 +49,14 @@ use commands::{
     // PTY 管理
     create_pty_session, create_claude_code_session, pty_write_input, close_pty_session,
     list_pty_sessions, get_pty_session_count, switch_pty_provider, pty_resize,
+    // 模型映射配置
+    list_model_mappings, get_model_mapping, create_model_mapping, update_model_mapping,
+    delete_model_mapping, batch_delete_model_mappings, export_model_mappings,
+    import_model_mappings, reset_to_default_mappings, ModelMappingServiceState,
 };
 use db::{initialize_database, DbPool};
 use services::balance_scheduler::BalanceScheduler;
+use services::model_mapping_service::ModelMappingService;
 use services::proxy_service::ProxyService;
 use services::PtyManagerState;
 use std::sync::Arc;
@@ -108,6 +113,12 @@ fn main() {
 
     log::info!("PTY 管理器已初始化");
 
+    // 初始化模型映射服务
+    let model_mapping_service = ModelMappingService::new(db_pool.clone());
+    let model_mapping_state = ModelMappingServiceState::new(model_mapping_service);
+
+    log::info!("模型映射服务已初始化");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
@@ -119,6 +130,7 @@ fn main() {
         .manage(env_var_state)
         .manage(health_check_state)
         .manage(pty_state)
+        .manage(model_mapping_state)
         .setup(move |app| {
             let handle = app.handle().clone();
             // Set app handle for proxy service (for event emission)
@@ -286,6 +298,16 @@ fn main() {
             get_pty_session_count,
             switch_pty_provider,
             pty_resize,
+            // 模型映射配置
+            list_model_mappings,
+            get_model_mapping,
+            create_model_mapping,
+            update_model_mapping,
+            delete_model_mapping,
+            batch_delete_model_mappings,
+            export_model_mappings,
+            import_model_mappings,
+            reset_to_default_mappings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

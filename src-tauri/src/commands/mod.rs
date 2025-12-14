@@ -9,6 +9,7 @@ pub mod config_group;
 pub mod env_var;
 pub mod health_check;
 pub mod mcp;
+pub mod model_mapping;
 pub mod permissions;
 pub mod provider_preset;
 pub mod proxy_log;
@@ -104,4 +105,10 @@ pub use terminal::{
     // PTY commands
     create_pty_session, create_claude_code_session, pty_write_input, close_pty_session,
     list_pty_sessions, get_pty_session_count, switch_pty_provider, pty_resize,
+};
+
+pub use model_mapping::{
+    list_model_mappings, get_model_mapping, create_model_mapping, update_model_mapping,
+    delete_model_mapping, batch_delete_model_mappings, export_model_mappings,
+    import_model_mappings, reset_to_default_mappings, ModelMappingServiceState,
 };

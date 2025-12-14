@@ -120,6 +120,8 @@ export const ConfigManagement: React.FC = () => {
     serverUrl: string;
     serverPort: number;
     groupId: number | null;
+    providerType?: 'claude' | 'gemini' | 'openai';
+    organizationId?: string;
     defaultModel?: string;
     haikuModel?: string;
     sonnetModel?: string;
@@ -141,6 +143,8 @@ export const ConfigManagement: React.FC = () => {
           server_url: data.serverUrl,
           server_port: data.serverPort,
           group_id: data.groupId,
+          provider_type: data.providerType,
+          organization_id: data.organizationId,
           default_model: data.defaultModel,
           haiku_model: data.haikuModel,
           sonnet_model: data.sonnetModel,
@@ -163,6 +167,8 @@ export const ConfigManagement: React.FC = () => {
           server_url: data.serverUrl,
           server_port: data.serverPort,
           group_id: data.groupId,
+          provider_type: data.providerType,
+          organization_id: data.organizationId,
           default_model: data.defaultModel,
           haiku_model: data.haikuModel,
           sonnet_model: data.sonnetModel,

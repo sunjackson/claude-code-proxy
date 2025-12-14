@@ -11,14 +11,16 @@
 use crate::db::DbPool;
 use crate::models::error::{AppError, AppResult};
 use crate::models::switch_log::SwitchReason;
-use crate::models::api_config::ProviderType;
 // use crate::proxy::error_handler::{ProxyErrorHandler, ProxyErrorType};
 use crate::services::api_config::ApiConfigService;
 use crate::services::auto_switch::AutoSwitchService;
+use crate::services::model_mapping_service::ModelMappingService;
 use crate::converters::claude_types::ClaudeRequest;
 use crate::converters::claude_to_gemini::convert_claude_request_to_gemini;
 use crate::converters::gemini_to_claude::{convert_gemini_response_to_claude, convert_gemini_stream_chunk_to_claude_events};
 use crate::converters::gemini_types::GeminiResponse;
+use crate::converters::openai_types::OpenAIRequest;
+use super::smart_router::{RoutingContext, ConversionDirection};
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
@@ -72,8 +74,10 @@ pub struct ForwardDetails {
     pub is_streaming: bool,
     /// 流式 chunk 数量
     pub stream_chunk_count: u32,
-    /// 提取的模型名称
+    /// 提取的模型名称（原始）
     pub model: Option<String>,
+    /// 映射后的模型名称
+    pub mapped_model: Option<String>,
     /// 目标 URL
     pub target_url: Option<String>,
 }
@@ -399,6 +403,21 @@ impl RequestRouter {
         log::debug!("Client request path: {}", client_path_and_query);
         log::info!("原始请求头 Original request headers: {:?}", req.headers());
 
+        // 2.1 创建智能路由上下文 - 检测客户端类型并决定转换方向
+        let routing_ctx = RoutingContext::new(
+            req.headers(),
+            client_path_and_query,
+            config.provider_type,
+        );
+        log::info!(
+            "Smart routing: client={}, client_format={:?}, provider={:?}, request_conv={}, response_conv={}",
+            routing_ctx.client_type,
+            routing_ctx.client_format,
+            routing_ctx.provider_type,
+            routing_ctx.request_conversion,
+            routing_ctx.response_conversion
+        );
+
         // 3. Parse target address first (needed for Host header)
         // 4. Parse target address and path from server_url
         // Extract host, port, and path prefix from the full URL
@@ -583,51 +602,44 @@ impl RequestRouter {
             details.request_body = Some(body_str.to_string());
 
             // 尝试从请求体提取模型名称
+            let mut source_model: Option<String> = None;
             if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                 if let Some(model) = json.get("model").and_then(|m| m.as_str()) {
+                    source_model = Some(model.to_string());
                     details.model = Some(model.to_string());
                 }
             }
 
-            // Check provider type and perform conversion if needed
-            let processed_bytes = match config.provider_type {
-                ProviderType::Gemini => {
-                    log::info!("Converting Claude request to Gemini format");
+            // 查询模型映射（如果需要转换）
+            let mapped_model: Option<String> = if routing_ctx.request_conversion != ConversionDirection::NoConversion {
+                if let Some(ref src_model) = source_model {
+                    let direction_str = routing_ctx.request_conversion.to_string();
+                    let db_pool = self.db_pool.clone();
+                    db_pool.with_connection(|conn| {
+                        Ok(ModelMappingService::lookup_target_model(conn, src_model, &direction_str))
+                    }).unwrap_or(None)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
-                    // Parse Claude request
-                    let claude_req: ClaudeRequest = serde_json::from_slice(&body_bytes)
-                        .map_err(|e| AppError::ConversionError {
-                            message: format!("Failed to parse Claude request: {}", e),
-                        })?;
+            // 记录映射后的模型名称
+            if mapped_model.is_some() {
+                details.mapped_model = mapped_model.clone();
+                log::info!(
+                    "Model mapping applied: {} -> {}",
+                    source_model.as_deref().unwrap_or("unknown"),
+                    mapped_model.as_deref().unwrap_or("unknown")
+                );
+            }
 
-                    // Convert to Gemini format
-                    // Extract model name from config or use default
-                    let gemini_model = config.default_model
-                        .as_ref()
-                        .filter(|m| !m.is_empty())
-                        .map(|m| m.as_str())
-                        .unwrap_or("gemini-pro");
-
-                    let (gemini_req, gemini_path) = convert_claude_request_to_gemini(&claude_req, gemini_model)?;
-
-                    // Update target path to Gemini API endpoint
-                    // Gemini API expects path like /v1beta/models/{model}:generateContent
-                    let gemini_uri = gemini_path.parse::<hyper::Uri>()
-                        .map_err(|e| AppError::ServiceError {
-                            message: format!("Failed to parse Gemini URI: {}", e),
-                        })?;
-                    parts.uri = gemini_uri;
-
-                    log::info!("Updated request URI to Gemini endpoint: {}", gemini_path);
-
-                    // Serialize Gemini request
-                    serde_json::to_vec(&gemini_req)
-                        .map_err(|e| AppError::ConversionError {
-                            message: format!("Failed to serialize Gemini request: {}", e),
-                        })?
-                },
-                ProviderType::Claude => {
-                    // For Claude API, filter unsupported fields
+            // Check conversion direction and perform conversion if needed
+            let processed_bytes = match routing_ctx.request_conversion {
+                ConversionDirection::NoConversion => {
+                    // 无需转换 - 过滤不支持的字段后直接转发
+                    log::info!("No request conversion needed, forwarding as-is");
                     match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                         Ok(mut json) => {
                             // Remove unsupported fields
@@ -642,19 +654,138 @@ impl RequestRouter {
                                     log::debug!("Filtered unsupported field from request: {}", field);
                                 }
                             }
-
-                            // Serialize back to bytes
                             serde_json::to_vec(&json)
                                 .map_err(|e| AppError::ServiceError {
                                     message: format!("Failed to serialize filtered request: {}", e),
                                 })?
                         }
                         Err(_) => {
-                            // Not JSON or parsing failed, use original body
                             log::debug!("Request body is not JSON, forwarding as-is");
                             body_bytes.to_vec()
                         }
                     }
+                },
+                ConversionDirection::ClaudeToOpenAI => {
+                    log::info!("Converting Claude request to OpenAI format");
+                    let claude_req: ClaudeRequest = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Claude request: {}", e),
+                        })?;
+
+                    let mut openai_req = crate::converters::openai_claude::convert_claude_request_to_openai(&claude_req);
+
+                    // 应用模型映射
+                    if let Some(ref target_model) = mapped_model {
+                        openai_req.model = target_model.clone();
+                    }
+
+                    // Update target path to OpenAI API endpoint
+                    let openai_path = "/v1/chat/completions";
+                    let openai_uri = openai_path.parse::<hyper::Uri>()
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to parse OpenAI URI: {}", e),
+                        })?;
+                    parts.uri = openai_uri;
+
+                    log::info!("Updated request URI to OpenAI endpoint: {}", openai_path);
+
+                    serde_json::to_vec(&openai_req)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize OpenAI request: {}", e),
+                        })?
+                },
+                ConversionDirection::OpenAIToClaude => {
+                    log::info!("Converting OpenAI request to Claude format");
+                    let openai_req: OpenAIRequest = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse OpenAI request: {}", e),
+                        })?;
+
+                    let mut claude_req = crate::converters::openai_claude::convert_openai_request_to_claude(&openai_req);
+
+                    // 应用模型映射
+                    if let Some(ref target_model) = mapped_model {
+                        claude_req.model = target_model.clone();
+                    }
+
+                    // Update target path to Claude API endpoint
+                    let claude_path = "/v1/messages";
+                    let claude_uri = claude_path.parse::<hyper::Uri>()
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to parse Claude URI: {}", e),
+                        })?;
+                    parts.uri = claude_uri;
+
+                    log::info!("Updated request URI to Claude endpoint: {}", claude_path);
+
+                    serde_json::to_vec(&claude_req)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Claude request: {}", e),
+                        })?
+                },
+                ConversionDirection::ClaudeToGemini => {
+                    log::info!("Converting Claude request to Gemini format");
+                    let claude_req: ClaudeRequest = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Claude request: {}", e),
+                        })?;
+
+                    // 优先使用映射后的模型名，否则使用配置的默认模型
+                    let gemini_model = mapped_model
+                        .as_deref()
+                        .or_else(|| config.default_model.as_ref().filter(|m| !m.is_empty()).map(|m| m.as_str()))
+                        .unwrap_or("gemini-pro");
+
+                    let (gemini_req, gemini_path) = convert_claude_request_to_gemini(&claude_req, gemini_model)?;
+
+                    let gemini_uri = gemini_path.parse::<hyper::Uri>()
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to parse Gemini URI: {}", e),
+                        })?;
+                    parts.uri = gemini_uri;
+
+                    log::info!("Updated request URI to Gemini endpoint: {}", gemini_path);
+
+                    serde_json::to_vec(&gemini_req)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Gemini request: {}", e),
+                        })?
+                },
+                ConversionDirection::OpenAIToGemini => {
+                    log::info!("Converting OpenAI request to Gemini format");
+                    // 先将 OpenAI 转为 Claude，再转为 Gemini
+                    let openai_req: OpenAIRequest = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse OpenAI request: {}", e),
+                        })?;
+
+                    let claude_req = crate::converters::openai_claude::convert_openai_request_to_claude(&openai_req);
+
+                    // 优先使用映射后的模型名，否则使用配置的默认模型
+                    let gemini_model = mapped_model
+                        .as_deref()
+                        .or_else(|| config.default_model.as_ref().filter(|m| !m.is_empty()).map(|m| m.as_str()))
+                        .unwrap_or("gemini-pro");
+
+                    let (gemini_req, gemini_path) = convert_claude_request_to_gemini(&claude_req, gemini_model)?;
+
+                    let gemini_uri = gemini_path.parse::<hyper::Uri>()
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to parse Gemini URI: {}", e),
+                        })?;
+                    parts.uri = gemini_uri;
+
+                    log::info!("Updated request URI to Gemini endpoint: {}", gemini_path);
+
+                    serde_json::to_vec(&gemini_req)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Gemini request: {}", e),
+                        })?
+                },
+                ConversionDirection::GeminiToClaude | ConversionDirection::GeminiToOpenAI => {
+                    // Gemini 客户端通常不会发送请求到代理，暂时不支持
+                    log::warn!("Gemini-originated requests are not yet supported, forwarding as-is");
+                    body_bytes.to_vec()
                 }
             };
 
@@ -822,138 +953,28 @@ impl RequestRouter {
             });
         }
 
-        // 11. Success response - Handle conversion for Gemini responses
-        match config.provider_type {
-            ProviderType::Gemini => {
-                log::info!("Converting Gemini response to Claude format");
-
-                // Check if response is streaming based on content-type
-                let is_streaming = headers
-                    .get(hyper::header::CONTENT_TYPE)
-                    .and_then(|v| v.to_str().ok())
-                    .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
-                    .unwrap_or(false);
-
-                if is_streaming {
-                    // Handle streaming Gemini responses
-                    log::info!("Converting Gemini streaming response to Claude SSE format");
-
-                    // Extract model name for conversion
-                    let claude_model = "claude-sonnet-4-5-20250929".to_string();
-
-                    // Get the response body as a stream
-                    let body = response.into_body();
-
-                    // Create a stream that converts Gemini JSON lines to Claude SSE events
-                    // The stream never fails - errors are converted to SSE error events
-                    let converted_stream = Self::convert_gemini_stream(body, claude_model);
-
-                    // Map Infallible to hyper::Error (this never actually produces an error)
-                    use futures_util::TryStreamExt;
-                    let mapped_stream = converted_stream.map_err(|e: Infallible| match e {});
-
-                    // Wrap the stream in a StreamBody and box it using BodyExt
-                    let stream_body = StreamBody::new(mapped_stream);
-                    let boxed_body = BodyExt::boxed(stream_body);
-
-                    // Build response with SSE headers
-                    let mut resp = Response::new(boxed_body);
-                    *resp.status_mut() = status;
-                    *resp.headers_mut() = headers;
-
-                    // Ensure Content-Type is set to SSE
-                    resp.headers_mut().insert(
-                        hyper::header::CONTENT_TYPE,
-                        "text/event-stream".parse().unwrap()
-                    );
-
-                    log::info!("Streaming Gemini response conversion started");
-                    // Gemini 流式响应暂时不捕获响应体（需要单独处理转换逻辑）
-                    Ok((resp, details, None))
-                } else {
-                    // Non-streaming response: collect, convert, and return
-                    let body_bytes = response.into_body()
-                        .collect()
-                        .await
-                        .map_err(|e| AppError::ServiceError {
-                            message: format!("Failed to read Gemini response body: {}", e),
-                        })?
-                        .to_bytes();
-
-                    // Parse Gemini response
-                    let gemini_resp: GeminiResponse = serde_json::from_slice(&body_bytes)
-                        .map_err(|e| AppError::ConversionError {
-                            message: format!("Failed to parse Gemini response: {}", e),
-                        })?;
-
-                    // Convert to Claude format
-                    // Use the original Claude model name from the request
-                    let claude_model = "claude-sonnet-4-5-20250929"; // Default, could be extracted from original request
-                    let claude_resp = convert_gemini_response_to_claude(&gemini_resp, claude_model)?;
-
-                    // Serialize Claude response
-                    let claude_bytes = serde_json::to_vec(&claude_resp)
-                        .map_err(|e| AppError::ConversionError {
-                            message: format!("Failed to serialize Claude response: {}", e),
-                        })?;
-
-                    log::info!("Successfully converted Gemini response to Claude format");
-
-                    // 记录非流式响应体
-                    details.response_body_size = claude_bytes.len() as u64;
-                    let response_str = String::from_utf8_lossy(&claude_bytes);
-                    details.response_body = Some(if response_str.len() > 8192 {
-                        format!("{}...(truncated)", &response_str[..8192])
-                    } else {
-                        response_str.to_string()
-                    });
-
-                    // Save length before moving claude_bytes
-                    let content_length = claude_bytes.len();
-
-                    // Return converted response
-                    use http_body_util::Full;
-                    let body = Full::new(Bytes::from(claude_bytes))
-                        .map_err(|e| match e {})
-                        .boxed();
-
-                    let mut resp = Response::new(body);
-                    *resp.status_mut() = status;
-                    // Keep original headers but update Content-Length
-                    *resp.headers_mut() = headers;
-                    resp.headers_mut().insert(
-                        hyper::header::CONTENT_LENGTH,
-                        content_length.to_string().parse().unwrap()
-                    );
-
-                    Ok((resp, details, None))
-                }
-            },
-            ProviderType::Claude => {
-                // Claude API response - 使用包装器捕获流式响应数据
+        // 11. Success response - Handle conversion based on response_conversion direction
+        match routing_ctx.response_conversion {
+            ConversionDirection::NoConversion => {
+                // 无需响应转换 - 直接透传响应
+                log::info!("No response conversion needed, forwarding as-is");
                 let body = response.into_body();
 
                 // 为流式响应创建通道
-                let stream_rx = if details.is_streaming {
+                if details.is_streaming {
                     let (tx, rx) = mpsc::channel::<StreamCompletionData>(1);
-
-                    // 使用包装器包装响应体
                     let wrapped_body = StreamingBodyWrapper::new(body, tx);
                     let boxed_body = wrapped_body.boxed();
 
-                    // 12. Construct streaming response
                     let mut resp = Response::new(boxed_body);
                     *resp.status_mut() = status;
                     *resp.headers_mut() = headers;
 
                     log::info!("Streaming response with capture wrapper (status: {})", status);
-
                     return Ok((resp, details, Some(rx)));
-                } else {
-                    None
-                };
+                }
 
-                // 非流式响应 - 读取完整响应体后返回
+                // 非流式响应
                 let body_bytes = body
                     .collect()
                     .await
@@ -962,7 +983,6 @@ impl RequestRouter {
                     })?
                     .to_bytes();
 
-                // 记录响应体
                 details.response_body_size = body_bytes.len() as u64;
                 let response_str = String::from_utf8_lossy(&body_bytes);
                 details.response_body = Some(if response_str.len() > 8192 {
@@ -972,17 +992,334 @@ impl RequestRouter {
                 });
 
                 use http_body_util::Full;
-                let boxed_body = Full::new(body_bytes)
-                    .map_err(|e| match e {})
-                    .boxed();
-
+                let boxed_body = Full::new(body_bytes).map_err(|e| match e {}).boxed();
                 let mut resp = Response::new(boxed_body);
                 *resp.status_mut() = status;
                 *resp.headers_mut() = headers;
 
-                log::info!("Non-streaming Claude response (status: {}, size: {} bytes)", status, details.response_body_size);
+                log::info!("Non-streaming pass-through response (status: {}, size: {} bytes)", status, details.response_body_size);
+                Ok((resp, details, None))
+            },
+            ConversionDirection::OpenAIToClaude => {
+                // OpenAI 响应 → Claude 格式 (客户端是 Claude Code)
+                log::info!("Converting OpenAI response to Claude format");
 
-                Ok((resp, details, stream_rx))
+                let is_streaming = headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
+                    .unwrap_or(false);
+
+                if is_streaming {
+                    log::info!("Converting OpenAI streaming response to Claude SSE format");
+                    let claude_model = "claude-sonnet-4-5-20250929".to_string();
+                    let body = response.into_body();
+
+                    let converted_stream = Self::convert_openai_stream(body, claude_model);
+                    use futures_util::TryStreamExt;
+                    let mapped_stream = converted_stream.map_err(|e: Infallible| match e {});
+
+                    let stream_body = StreamBody::new(mapped_stream);
+                    let boxed_body = BodyExt::boxed(stream_body);
+
+                    let mut resp = Response::new(boxed_body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_TYPE,
+                        "text/event-stream".parse().unwrap()
+                    );
+
+                    log::info!("Streaming OpenAI→Claude response conversion started");
+                    Ok((resp, details, None))
+                } else {
+                    let body_bytes = response.into_body()
+                        .collect()
+                        .await
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to read OpenAI response body: {}", e),
+                        })?
+                        .to_bytes();
+
+                    let openai_resp: crate::converters::openai_types::OpenAIResponse =
+                        serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse OpenAI response: {}", e),
+                        })?;
+
+                    let claude_model = "claude-sonnet-4-5-20250929";
+                    let claude_resp = crate::converters::openai_claude::convert_openai_response_to_claude(
+                        &openai_resp,
+                        claude_model
+                    );
+
+                    let claude_bytes = serde_json::to_vec(&claude_resp)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Claude response: {}", e),
+                        })?;
+
+                    log::info!("Successfully converted OpenAI response to Claude format");
+
+                    details.response_body_size = claude_bytes.len() as u64;
+                    let response_str = String::from_utf8_lossy(&claude_bytes);
+                    details.response_body = Some(if response_str.len() > 8192 {
+                        format!("{}...(truncated)", &response_str[..8192])
+                    } else {
+                        response_str.to_string()
+                    });
+
+                    let content_length = claude_bytes.len();
+                    use http_body_util::Full;
+                    let body = Full::new(Bytes::from(claude_bytes)).map_err(|e| match e {}).boxed();
+                    let mut resp = Response::new(body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_LENGTH,
+                        content_length.to_string().parse().unwrap()
+                    );
+
+                    Ok((resp, details, None))
+                }
+            },
+            ConversionDirection::ClaudeToOpenAI => {
+                // Claude 响应 → OpenAI 格式 (客户端是 Codex/Cursor)
+                log::info!("Converting Claude response to OpenAI format");
+
+                let is_streaming = headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
+                    .unwrap_or(false);
+
+                if is_streaming {
+                    log::info!("Converting Claude streaming response to OpenAI SSE format");
+                    let body = response.into_body();
+
+                    // 使用 Claude → OpenAI 流转换器
+                    let converted_stream = Self::convert_claude_to_openai_stream(body);
+                    use futures_util::TryStreamExt;
+                    let mapped_stream = converted_stream.map_err(|e: Infallible| match e {});
+
+                    let stream_body = StreamBody::new(mapped_stream);
+                    let boxed_body = BodyExt::boxed(stream_body);
+
+                    let mut resp = Response::new(boxed_body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_TYPE,
+                        "text/event-stream".parse().unwrap()
+                    );
+
+                    log::info!("Streaming Claude→OpenAI response conversion started");
+                    Ok((resp, details, None))
+                } else {
+                    let body_bytes = response.into_body()
+                        .collect()
+                        .await
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to read Claude response body: {}", e),
+                        })?
+                        .to_bytes();
+
+                    let claude_resp: crate::converters::claude_types::ClaudeResponse =
+                        serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Claude response: {}", e),
+                        })?;
+
+                    let openai_resp = crate::converters::openai_claude::convert_claude_response_to_openai(&claude_resp, "gpt-4");
+
+                    let openai_bytes = serde_json::to_vec(&openai_resp)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize OpenAI response: {}", e),
+                        })?;
+
+                    log::info!("Successfully converted Claude response to OpenAI format");
+
+                    details.response_body_size = openai_bytes.len() as u64;
+                    let response_str = String::from_utf8_lossy(&openai_bytes);
+                    details.response_body = Some(if response_str.len() > 8192 {
+                        format!("{}...(truncated)", &response_str[..8192])
+                    } else {
+                        response_str.to_string()
+                    });
+
+                    let content_length = openai_bytes.len();
+                    use http_body_util::Full;
+                    let body = Full::new(Bytes::from(openai_bytes)).map_err(|e| match e {}).boxed();
+                    let mut resp = Response::new(body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_LENGTH,
+                        content_length.to_string().parse().unwrap()
+                    );
+
+                    Ok((resp, details, None))
+                }
+            },
+            ConversionDirection::GeminiToClaude => {
+                // Gemini 响应 → Claude 格式
+                log::info!("Converting Gemini response to Claude format");
+
+                let is_streaming = headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
+                    .unwrap_or(false);
+
+                if is_streaming {
+                    log::info!("Converting Gemini streaming response to Claude SSE format");
+                    let claude_model = "claude-sonnet-4-5-20250929".to_string();
+                    let body = response.into_body();
+
+                    let converted_stream = Self::convert_gemini_stream(body, claude_model);
+                    use futures_util::TryStreamExt;
+                    let mapped_stream = converted_stream.map_err(|e: Infallible| match e {});
+
+                    let stream_body = StreamBody::new(mapped_stream);
+                    let boxed_body = BodyExt::boxed(stream_body);
+
+                    let mut resp = Response::new(boxed_body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_TYPE,
+                        "text/event-stream".parse().unwrap()
+                    );
+
+                    log::info!("Streaming Gemini→Claude response conversion started");
+                    Ok((resp, details, None))
+                } else {
+                    let body_bytes = response.into_body()
+                        .collect()
+                        .await
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to read Gemini response body: {}", e),
+                        })?
+                        .to_bytes();
+
+                    let gemini_resp: GeminiResponse = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Gemini response: {}", e),
+                        })?;
+
+                    let claude_model = "claude-sonnet-4-5-20250929";
+                    let claude_resp = convert_gemini_response_to_claude(&gemini_resp, claude_model)?;
+
+                    let claude_bytes = serde_json::to_vec(&claude_resp)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize Claude response: {}", e),
+                        })?;
+
+                    log::info!("Successfully converted Gemini response to Claude format");
+
+                    details.response_body_size = claude_bytes.len() as u64;
+                    let response_str = String::from_utf8_lossy(&claude_bytes);
+                    details.response_body = Some(if response_str.len() > 8192 {
+                        format!("{}...(truncated)", &response_str[..8192])
+                    } else {
+                        response_str.to_string()
+                    });
+
+                    let content_length = claude_bytes.len();
+                    use http_body_util::Full;
+                    let body = Full::new(Bytes::from(claude_bytes)).map_err(|e| match e {}).boxed();
+                    let mut resp = Response::new(body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_LENGTH,
+                        content_length.to_string().parse().unwrap()
+                    );
+
+                    Ok((resp, details, None))
+                }
+            },
+            ConversionDirection::GeminiToOpenAI => {
+                // Gemini 响应 → OpenAI 格式 (客户端是 Codex/Cursor，后端是 Gemini)
+                log::info!("Converting Gemini response to OpenAI format");
+
+                let is_streaming = headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.contains("text/event-stream") || ct.contains("stream"))
+                    .unwrap_or(false);
+
+                if is_streaming {
+                    log::info!("Converting Gemini streaming response to OpenAI SSE format");
+                    // 先转为 Claude，再转为 OpenAI (两阶段转换)
+                    // TODO: 实现直接的 Gemini → OpenAI 流转换器
+                    let body = response.into_body();
+
+                    // 暂时先透传，后续实现双阶段流转换
+                    let boxed_body = body.boxed();
+                    let mut resp = Response::new(boxed_body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+
+                    log::warn!("Gemini→OpenAI streaming conversion not yet implemented, passing through");
+                    Ok((resp, details, None))
+                } else {
+                    let body_bytes = response.into_body()
+                        .collect()
+                        .await
+                        .map_err(|e| AppError::ServiceError {
+                            message: format!("Failed to read Gemini response body: {}", e),
+                        })?
+                        .to_bytes();
+
+                    // 先转 Gemini → Claude
+                    let gemini_resp: GeminiResponse = serde_json::from_slice(&body_bytes)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to parse Gemini response: {}", e),
+                        })?;
+
+                    let claude_model = "claude-sonnet-4-5-20250929";
+                    let claude_resp = convert_gemini_response_to_claude(&gemini_resp, claude_model)?;
+
+                    // 再转 Claude → OpenAI
+                    let openai_resp = crate::converters::openai_claude::convert_claude_response_to_openai(&claude_resp, "gpt-4");
+
+                    let openai_bytes = serde_json::to_vec(&openai_resp)
+                        .map_err(|e| AppError::ConversionError {
+                            message: format!("Failed to serialize OpenAI response: {}", e),
+                        })?;
+
+                    log::info!("Successfully converted Gemini response to OpenAI format (via Claude)");
+
+                    details.response_body_size = openai_bytes.len() as u64;
+                    let response_str = String::from_utf8_lossy(&openai_bytes);
+                    details.response_body = Some(if response_str.len() > 8192 {
+                        format!("{}...(truncated)", &response_str[..8192])
+                    } else {
+                        response_str.to_string()
+                    });
+
+                    let content_length = openai_bytes.len();
+                    use http_body_util::Full;
+                    let body = Full::new(Bytes::from(openai_bytes)).map_err(|e| match e {}).boxed();
+                    let mut resp = Response::new(body);
+                    *resp.status_mut() = status;
+                    *resp.headers_mut() = headers;
+                    resp.headers_mut().insert(
+                        hyper::header::CONTENT_LENGTH,
+                        content_length.to_string().parse().unwrap()
+                    );
+
+                    Ok((resp, details, None))
+                }
+            },
+            ConversionDirection::ClaudeToGemini | ConversionDirection::OpenAIToGemini => {
+                // 响应不应该需要转换到 Gemini 格式（Gemini 客户端不常见）
+                log::warn!("Unexpected response conversion direction: {}, passing through", routing_ctx.response_conversion);
+                let body = response.into_body().boxed();
+                let mut resp = Response::new(body);
+                *resp.status_mut() = status;
+                *resp.headers_mut() = headers;
+                Ok((resp, details, None))
             }
         }
     }
@@ -1076,6 +1413,270 @@ impl RequestRouter {
                         None => {
                             // Stream ended
                             log::info!("Gemini stream conversion completed");
+                            return None;
+                        }
+                    }
+                }
+            },
+        ))
+    }
+
+    /// Convert OpenAI streaming response to Claude SSE format
+    ///
+    /// OpenAI streams SSE events with "data: {json}\n\n", we convert them to Claude SSE format
+    /// This stream never fails - all errors are converted to SSE error events
+    fn convert_openai_stream(
+        body: Incoming,
+        claude_model: String,
+    ) -> Pin<Box<dyn Stream<Item = Result<Frame<Bytes>, Infallible>> + Send + Sync>> {
+        Box::pin(futures_util::stream::unfold(
+            (body, claude_model, Vec::new(), true, String::new()),
+            |(mut body, claude_model, mut buffer, mut is_first_chunk, mut chunk_id)| async move {
+                loop {
+                    // Try to get the next frame from the body
+                    match body.frame().await {
+                        Some(Ok(frame)) => {
+                            // Only process data frames
+                            if let Some(data) = frame.data_ref() {
+                                buffer.extend_from_slice(data);
+
+                                // Process complete SSE lines (delimited by \n\n)
+                                while let Some(double_newline_pos) = buffer.windows(2).position(|w| w == b"\n\n") {
+                                    // Extract the SSE event
+                                    let event_bytes = buffer.drain(..double_newline_pos + 2).collect::<Vec<_>>();
+                                    let event_str = String::from_utf8_lossy(&event_bytes).trim().to_string();
+
+                                    // Skip empty events
+                                    if event_str.is_empty() {
+                                        continue;
+                                    }
+
+                                    // Check for [DONE] marker
+                                    if event_str.contains("[DONE]") {
+                                        log::info!("OpenAI stream completed with [DONE] marker");
+                                        return None;
+                                    }
+
+                                    // Parse "data: {json}" format
+                                    if let Some(json_str) = event_str.strip_prefix("data: ") {
+                                        // Parse OpenAI stream chunk
+                                        match serde_json::from_str::<crate::converters::openai_types::OpenAIStreamChunk>(json_str) {
+                                            Ok(openai_chunk) => {
+                                                // Generate chunk ID on first chunk
+                                                if chunk_id.is_empty() {
+                                                    chunk_id = openai_chunk.id.clone();
+                                                }
+
+                                                // Convert to Claude SSE events
+                                                let claude_events = crate::converters::openai_claude::convert_claude_stream_to_openai(
+                                                    &crate::converters::claude_types::ClaudeStreamEvent::ContentBlockDelta {
+                                                        index: 0,
+                                                        delta: crate::converters::claude_types::ClaudeContentDelta {
+                                                            delta_type: "text_delta".to_string(),
+                                                            text: openai_chunk.choices.first()
+                                                                .and_then(|c| c.delta.content.clone()),
+                                                        },
+                                                    },
+                                                    &claude_model,
+                                                    &chunk_id,
+                                                );
+
+                                                is_first_chunk = false;
+
+                                                // Return Claude SSE events if any
+                                                if let Some(event_str) = claude_events {
+                                                    let frame = Frame::data(Bytes::from(event_str));
+                                                    return Some((
+                                                        Ok(frame),
+                                                        (body, claude_model, buffer, is_first_chunk, chunk_id),
+                                                    ));
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::error!("Failed to parse OpenAI stream chunk: {}", e);
+                                                // Continue to next chunk instead of failing
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Some(Err(e)) => {
+                            log::error!("Error reading OpenAI stream: {}", e);
+                            // Return error as SSE event and end stream
+                            let error_msg = format!("event: error\ndata: {{\"error\": \"Stream error: {}\"}}\n\n", e);
+                            let frame = Frame::data(Bytes::from(error_msg));
+                            return Some((
+                                Ok(frame),
+                                (body, claude_model, Vec::new(), false, chunk_id),
+                            ));
+                        }
+                        None => {
+                            // Stream ended
+                            log::info!("OpenAI stream conversion completed");
+                            return None;
+                        }
+                    }
+                }
+            },
+        ))
+    }
+
+    /// Convert Claude streaming response to OpenAI SSE format
+    ///
+    /// Claude streams SSE events, we convert them to OpenAI SSE format
+    /// This stream never fails - all errors are converted to SSE error events
+    fn convert_claude_to_openai_stream(
+        body: Incoming,
+    ) -> Pin<Box<dyn Stream<Item = Result<Frame<Bytes>, Infallible>> + Send + Sync>> {
+        Box::pin(futures_util::stream::unfold(
+            (body, Vec::new(), String::new(), 0u32),
+            |(mut body, mut buffer, mut request_id, mut chunk_index)| async move {
+                loop {
+                    match body.frame().await {
+                        Some(Ok(frame)) => {
+                            if let Some(data) = frame.data_ref() {
+                                buffer.extend_from_slice(data);
+
+                                // Process complete SSE lines (delimited by \n\n)
+                                while let Some(double_newline_pos) = buffer.windows(2).position(|w| w == b"\n\n") {
+                                    let event_bytes = buffer.drain(..double_newline_pos + 2).collect::<Vec<_>>();
+                                    let event_str = String::from_utf8_lossy(&event_bytes).trim().to_string();
+
+                                    if event_str.is_empty() {
+                                        continue;
+                                    }
+
+                                    // Parse Claude SSE event
+                                    let mut event_type = String::new();
+                                    let mut event_data = String::new();
+
+                                    for line in event_str.lines() {
+                                        if let Some(t) = line.strip_prefix("event: ") {
+                                            event_type = t.to_string();
+                                        } else if let Some(d) = line.strip_prefix("data: ") {
+                                            event_data = d.to_string();
+                                        }
+                                    }
+
+                                    // Generate request_id on first event
+                                    if request_id.is_empty() {
+                                        request_id = format!("chatcmpl-{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..24].to_string());
+                                    }
+
+                                    // Convert based on event type
+                                    let openai_sse = match event_type.as_str() {
+                                        "message_start" | "content_block_start" => {
+                                            // Send initial chunk
+                                            let chunk = crate::converters::openai_types::OpenAIStreamChunk {
+                                                id: request_id.clone(),
+                                                object: "chat.completion.chunk".to_string(),
+                                                created: std::time::SystemTime::now()
+                                                    .duration_since(std::time::UNIX_EPOCH)
+                                                    .unwrap_or_default()
+                                                    .as_secs() as i64,
+                                                model: "gpt-4".to_string(),
+                                                choices: vec![crate::converters::openai_types::OpenAIStreamChoice {
+                                                    index: 0,
+                                                    delta: crate::converters::openai_types::OpenAIDelta {
+                                                        role: Some("assistant".to_string()),
+                                                        content: None,
+                                                    },
+                                                    finish_reason: None,
+                                                    logprobs: None,
+                                                }],
+                                                usage: None,
+                                                system_fingerprint: None,
+                                            };
+                                            Some(format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default()))
+                                        }
+                                        "content_block_delta" => {
+                                            // Parse delta and send content
+                                            if let Ok(delta) = serde_json::from_str::<serde_json::Value>(&event_data) {
+                                                let text = delta.get("delta")
+                                                    .and_then(|d| d.get("text"))
+                                                    .and_then(|t| t.as_str())
+                                                    .unwrap_or("");
+
+                                                if !text.is_empty() {
+                                                    let chunk = crate::converters::openai_types::OpenAIStreamChunk {
+                                                        id: request_id.clone(),
+                                                        object: "chat.completion.chunk".to_string(),
+                                                        created: std::time::SystemTime::now()
+                                                            .duration_since(std::time::UNIX_EPOCH)
+                                                            .unwrap_or_default()
+                                                            .as_secs() as i64,
+                                                        model: "gpt-4".to_string(),
+                                                        choices: vec![crate::converters::openai_types::OpenAIStreamChoice {
+                                                            index: 0,
+                                                            delta: crate::converters::openai_types::OpenAIDelta {
+                                                                role: None,
+                                                                content: Some(text.to_string()),
+                                                            },
+                                                            finish_reason: None,
+                                                            logprobs: None,
+                                                        }],
+                                                        usage: None,
+                                                        system_fingerprint: None,
+                                                    };
+                                                    chunk_index += 1;
+                                                    Some(format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default()))
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        "message_stop" => {
+                                            // Send final chunk with finish_reason
+                                            let chunk = crate::converters::openai_types::OpenAIStreamChunk {
+                                                id: request_id.clone(),
+                                                object: "chat.completion.chunk".to_string(),
+                                                created: std::time::SystemTime::now()
+                                                    .duration_since(std::time::UNIX_EPOCH)
+                                                    .unwrap_or_default()
+                                                    .as_secs() as i64,
+                                                model: "gpt-4".to_string(),
+                                                choices: vec![crate::converters::openai_types::OpenAIStreamChoice {
+                                                    index: 0,
+                                                    delta: crate::converters::openai_types::OpenAIDelta {
+                                                        role: None,
+                                                        content: None,
+                                                    },
+                                                    finish_reason: Some("stop".to_string()),
+                                                    logprobs: None,
+                                                }],
+                                                usage: None,
+                                                system_fingerprint: None,
+                                            };
+                                            Some(format!("data: {}\n\ndata: [DONE]\n\n", serde_json::to_string(&chunk).unwrap_or_default()))
+                                        }
+                                        _ => None,
+                                    };
+
+                                    if let Some(sse) = openai_sse {
+                                        let frame = Frame::data(Bytes::from(sse));
+                                        return Some((
+                                            Ok(frame),
+                                            (body, buffer, request_id, chunk_index),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        Some(Err(e)) => {
+                            log::error!("Error reading Claude stream: {}", e);
+                            let error_msg = format!("data: {{\"error\": \"Stream error: {}\"}}\n\n", e);
+                            let frame = Frame::data(Bytes::from(error_msg));
+                            return Some((
+                                Ok(frame),
+                                (body, Vec::new(), request_id, chunk_index),
+                            ));
+                        }
+                        None => {
+                            log::info!("Claude→OpenAI stream conversion completed");
                             return None;
                         }
                     }

@@ -34,47 +34,50 @@ export const TerminalQuickActions: React.FC<TerminalQuickActionsProps> = ({
   // If no active session, show placeholder
   if (!sessionId) {
     return (
-      <div className="h-12 bg-gray-900/50 border-t border-gray-800 flex items-center justify-center px-4">
+      <div className="h-14 bg-gray-900/50 border-t border-gray-800 flex items-center justify-center px-4">
         <p className="text-sm text-gray-500">{t('terminal.quickActions.noActiveSession')}</p>
       </div>
     );
   }
 
   return (
-    <div className="h-12 bg-gray-900/50 border-t border-gray-800 flex items-center justify-between px-4">
-      {/* Left: Current working directory */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <FolderOpen className="w-4 h-4" />
-        <span className="truncate max-w-md" title={workDir || t('terminal.quickActions.noWorkDir')}>
+    <div className="h-14 bg-gray-900/50 border-t border-gray-800 flex items-center justify-between px-4 gap-4">
+      {/* Left: Current working directory - 允许收缩但保持最小宽度 */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <FolderOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <span
+          className="text-sm text-gray-400 truncate"
+          title={workDir || t('terminal.quickActions.noWorkDir')}
+        >
           {workDir || t('terminal.quickActions.noWorkDir')}
         </span>
       </div>
 
-      {/* Right: Quick action buttons */}
-      <div className="flex items-center gap-2">
+      {/* Right: Quick action buttons - 不允许收缩，确保文字完整显示 */}
+      <div className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={onEditProjectPath}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-300 hover:text-yellow-400 hover:bg-gray-800 rounded-lg transition-colors whitespace-nowrap"
           title={t('terminal.quickActions.editProjectPath')}
         >
-          <FolderOpen className="w-4 h-4" />
-          <span>{t('terminal.quickActions.projectPath')}</span>
+          <FolderOpen className="w-4 h-4 flex-shrink-0" />
+          <span className="inline-block">项目路径</span>
         </button>
 
         <button
           onClick={onEditProjectMemory}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-300 hover:text-yellow-400 hover:bg-gray-800 rounded-lg transition-colors whitespace-nowrap"
           title={t('terminal.quickActions.editProjectMemory')}
         >
-          <BookOpen className="w-4 h-4" />
-          <span>{t('terminal.quickActions.projectMemory')}</span>
+          <BookOpen className="w-4 h-4 flex-shrink-0" />
+          <span className="inline-block">项目记忆</span>
         </button>
 
-        <div className="w-px h-6 bg-gray-700 mx-1" />
+        <div className="w-px h-6 bg-gray-700 mx-1 flex-shrink-0" />
 
         <button
           onClick={onOpenSettings}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+          className="p-2 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
           title={t('terminal.quickActions.settings')}
         >
           <Settings className="w-4 h-4" />
@@ -82,7 +85,7 @@ export const TerminalQuickActions: React.FC<TerminalQuickActionsProps> = ({
 
         <button
           onClick={onShowInfo}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+          className="p-2 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
           title={t('terminal.quickActions.sessionInfo')}
         >
           <Info className="w-4 h-4" />

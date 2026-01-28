@@ -1,10 +1,19 @@
 #![allow(dead_code)]
 
 use crate::models::error::{AppError, AppResult};
+#[cfg(not(test))]
 use keyring::Entry;
+
+#[cfg(test)]
+use std::collections::HashMap;
+#[cfg(test)]
+use std::sync::{Mutex as StdMutex, OnceLock};
 
 /// 密钥链服务标识符
 const SERVICE_NAME: &str = "claude-code-proxy";
+
+#[cfg(test)]
+static TEST_KEYCHAIN_STORE: OnceLock<StdMutex<HashMap<String, String>>> = OnceLock::new();
 
 /// 密钥链管理器
 /// 提供跨平台的密钥存储和检索功能
@@ -14,6 +23,16 @@ const SERVICE_NAME: &str = "claude-code-proxy";
 pub struct KeychainManager;
 
 impl KeychainManager {
+    #[cfg(test)]
+    fn test_store_key(account: &str) -> String {
+        format!("{}:{}", SERVICE_NAME, account)
+    }
+
+    #[cfg(test)]
+    fn test_store() -> &'static StdMutex<HashMap<String, String>> {
+        TEST_KEYCHAIN_STORE.get_or_init(|| StdMutex::new(HashMap::new()))
+    }
+
     /// 存储 API 密钥到系统密钥链
     ///
     /// # 参数
@@ -28,19 +47,31 @@ impl KeychainManager {
 
         log::info!("正在存储 API 密钥到系统密钥链: {}", account);
 
-        let entry = Entry::new(SERVICE_NAME, &account)
-            .map_err(|e| AppError::KeychainError {
+        #[cfg(test)]
+        {
+            let key = Self::test_store_key(&account);
+            let mut store = Self::test_store().lock().map_err(|_| AppError::KeychainError {
+                message: "存储 API 密钥失败: 测试密钥链存储锁定失败".to_string(),
+            })?;
+            store.insert(key, api_key.to_string());
+            return Ok(());
+        }
+
+        #[cfg(not(test))]
+        {
+            let entry = Entry::new(SERVICE_NAME, &account).map_err(|e| AppError::KeychainError {
                 message: format!("创建密钥链条目失败: {}", e),
             })?;
 
-        entry
-            .set_password(api_key)
-            .map_err(|e| AppError::KeychainError {
-                message: format!("存储 API 密钥失败: {}", e),
-            })?;
+            entry
+                .set_password(api_key)
+                .map_err(|e| AppError::KeychainError {
+                    message: format!("存储 API 密钥失败: {}", e),
+                })?;
 
-        log::info!("API 密钥已成功存储到系统密钥链");
-        Ok(())
+            log::info!("API 密钥已成功存储到系统密钥链");
+            Ok(())
+        }
     }
 
     /// 从系统密钥链读取 API 密钥
@@ -56,19 +87,32 @@ impl KeychainManager {
 
         log::debug!("正在从系统密钥链读取 API 密钥: {}", account);
 
-        let entry = Entry::new(SERVICE_NAME, &account)
-            .map_err(|e| AppError::KeychainError {
+        #[cfg(test)]
+        {
+            let key = Self::test_store_key(&account);
+            let store = Self::test_store().lock().map_err(|_| AppError::KeychainError {
+                message: "读取 API 密钥失败: 测试密钥链存储锁定失败".to_string(),
+            })?;
+            return store.get(&key).cloned().ok_or_else(|| AppError::KeychainError {
+                message: "读取 API 密钥失败: 密钥可能不存在".to_string(),
+            });
+        }
+
+        #[cfg(not(test))]
+        {
+            let entry = Entry::new(SERVICE_NAME, &account).map_err(|e| AppError::KeychainError {
                 message: format!("创建密钥链条目失败: {}", e),
             })?;
 
-        let api_key = entry
-            .get_password()
-            .map_err(|e| AppError::KeychainError {
-                message: format!("读取 API 密钥失败: {}. 密钥可能不存在", e),
-            })?;
+            let api_key = entry
+                .get_password()
+                .map_err(|e| AppError::KeychainError {
+                    message: format!("读取 API 密钥失败: {}. 密钥可能不存在", e),
+                })?;
 
-        log::debug!("成功从系统密钥链读取 API 密钥");
-        Ok(api_key)
+            log::debug!("成功从系统密钥链读取 API 密钥");
+            Ok(api_key)
+        }
     }
 
     /// 从系统密钥链删除 API 密钥
@@ -84,19 +128,35 @@ impl KeychainManager {
 
         log::info!("正在从系统密钥链删除 API 密钥: {}", account);
 
-        let entry = Entry::new(SERVICE_NAME, &account)
-            .map_err(|e| AppError::KeychainError {
+        #[cfg(test)]
+        {
+            let key = Self::test_store_key(&account);
+            let mut store = Self::test_store().lock().map_err(|_| AppError::KeychainError {
+                message: "删除 API 密钥失败: 测试密钥链存储锁定失败".to_string(),
+            })?;
+            if store.remove(&key).is_some() {
+                return Ok(());
+            }
+            return Err(AppError::KeychainError {
+                message: "删除 API 密钥失败: 密钥可能不存在".to_string(),
+            });
+        }
+
+        #[cfg(not(test))]
+        {
+            let entry = Entry::new(SERVICE_NAME, &account).map_err(|e| AppError::KeychainError {
                 message: format!("创建密钥链条目失败: {}", e),
             })?;
 
-        entry
-            .delete_password()
-            .map_err(|e| AppError::KeychainError {
-                message: format!("删除 API 密钥失败: {}", e),
-            })?;
+            entry
+                .delete_password()
+                .map_err(|e| AppError::KeychainError {
+                    message: format!("删除 API 密钥失败: {}", e),
+                })?;
 
-        log::info!("API 密钥已成功从系统密钥链删除");
-        Ok(())
+            log::info!("API 密钥已成功从系统密钥链删除");
+            Ok(())
+        }
     }
 
     /// 检查 API 密钥是否存在

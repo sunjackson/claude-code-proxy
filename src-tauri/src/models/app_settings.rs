@@ -199,7 +199,7 @@ mod tests {
     fn test_validate_latency_threshold() {
         assert!(AppSettings::validate_latency_threshold(3000).is_ok());
         assert!(AppSettings::validate_latency_threshold(0).is_err());
-        assert!(AppSettings::validate_latency_threshold(60001).is_err());
+        assert!(AppSettings::validate_latency_threshold(100001).is_err());
     }
 
     #[test]

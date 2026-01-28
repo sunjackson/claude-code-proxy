@@ -21,15 +21,22 @@ pub fn get_db_path() -> AppResult<PathBuf> {
 /// 初始化数据库
 /// 创建所有表结构并插入默认数据
 pub fn initialize_database() -> AppResult<Connection> {
-    let db_path = get_db_path()?;
-
-    log::info!("正在初始化数据库: {:?}", db_path);
-
-    // 打开数据库连接
-    let conn = Connection::open(&db_path)
-        .map_err(|e| AppError::DatabaseError {
+    #[cfg(test)]
+    let conn = {
+        log::info!("正在初始化测试数据库: in-memory");
+        Connection::open_in_memory().map_err(|e| AppError::DatabaseError {
             message: format!("打开数据库失败: {}", e),
-        })?;
+        })?
+    };
+
+    #[cfg(not(test))]
+    let conn = {
+        let db_path = get_db_path()?;
+        log::info!("正在初始化数据库: {:?}", db_path);
+        Connection::open(&db_path).map_err(|e| AppError::DatabaseError {
+            message: format!("打开数据库失败: {}", e),
+        })?
+    };
 
     // 启用外键约束
     conn.execute("PRAGMA foreign_keys = ON;", [])

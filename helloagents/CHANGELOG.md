@@ -10,3 +10,4 @@
 - Windows 终端适配：PTY 默认优先使用 PowerShell/pwsh，并注入 UTF-8 初始化（减少中文/Unicode 乱码）。
 - Claude Code 配置页进一步收敛：移除安装/更新/验证/环境检测页内逻辑，仅保留快速检测与配置管理入口。
 - Windows 启动体验：避免安装版启动时弹出黑色控制台窗口（强制 GUI 子系统）。
+- 修复构建 doctest：`ProtocolDetector` 文档示例使用正确的 crate 路径。

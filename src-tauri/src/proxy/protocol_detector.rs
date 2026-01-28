@@ -70,7 +70,7 @@ impl ProtocolDetector {
     ///
     /// # Examples
     /// ```
-    /// use proxy::protocol_detector::{ProtocolDetector, RequestFormat};
+    /// use claude_code_proxy::proxy::protocol_detector::{ProtocolDetector, RequestFormat};
     ///
     /// let uri: hyper::Uri = "/v1/messages".parse().unwrap();
     /// assert_eq!(ProtocolDetector::detect(&uri), RequestFormat::Claude);

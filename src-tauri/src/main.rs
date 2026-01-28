@@ -1,5 +1,5 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Prevents additional console window on Windows (including debug builds).
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 mod commands;
 mod converters;
@@ -11,14 +11,14 @@ mod tray;
 mod utils;
 
 use commands::{
-    add_mcp_server, add_mcp_server_from_template, add_skill, apply_config_to_env,
+    add_mcp_server, add_mcp_server_from_template, apply_config_to_env,
     check_anthropic_env, check_app_updates, check_can_install, check_can_install_enhanced,
     check_for_updates, clear_all_claude_code_backups, clear_anthropic_env,
     clear_permissions_config, clear_switch_logs, cleanup_proxy_request_logs,
     count_configs_in_group, create_api_config, create_claude_code_backup, create_config_group,
     delete_api_config, delete_claude_code_backup, delete_config_group, detect_claude_code_path,
     detect_environment, detect_environment_enhanced, disable_claude_code_proxy,
-    download_app_update, enable_claude_code_proxy, export_mcp_servers, export_skills,
+    download_app_update, enable_claude_code_proxy, export_mcp_servers,
     generate_environment_report, get_all_balance_info, get_all_proxy_request_logs,
     get_api_config, get_api_key, get_app_version, get_claude_code_proxy, get_claude_code_settings,
     get_claude_version, get_config_group, get_default_node_environment, get_environment_variable,
@@ -26,33 +26,39 @@ use commands::{
     get_provider_presets_by_category, get_proxy_request_log_count, get_proxy_request_log_detail,
     get_proxy_request_log_stats, get_proxy_request_logs, get_proxy_status,
     get_recommended_provider_presets, get_switch_logs, get_test_results, get_health_check_status,
-    get_health_check_summaries, toggle_auto_health_check, import_mcp_servers, import_skills,
+    get_health_check_summaries, toggle_auto_health_check, import_mcp_servers,
     install_claude_code, list_api_configs, list_claude_code_backups, list_config_groups,
-    list_environment_variables, list_mcp_servers, list_provider_presets, list_skills,
+    list_environment_variables, list_mcp_servers, list_provider_presets,
     load_recommended_services, open_release_page, preview_claude_code_backup, query_all_balances,
-    query_balance, quick_test_config_url, read_skill_prompt, refresh_recommended_services,
-    remove_mcp_server, remove_skill, reorder_api_config, restore_claude_code_backup,
+    query_balance, quick_test_config_url, refresh_recommended_services,
+    remove_mcp_server, reorder_api_config, restore_claude_code_backup,
     restore_claude_code_config, run_claude_doctor, run_health_check_now, set_config_enabled,
     set_default_node_environment, set_environment_variable, set_environment_variables,
     start_health_check, start_proxy_service, stop_health_check, stop_proxy_service,
     switch_proxy_config, switch_proxy_group, test_api_config, test_api_endpoints,
     test_group_configs, test_mcp_server, toggle_auto_switch, uninstall_claude_code,
     unset_environment_variable, update_api_config, update_claude_code, update_config_group,
-    update_mcp_server, update_permissions_config, update_skill, verify_claude_installation,
+    update_mcp_server, update_permissions_config, verify_claude_installation,
     check_system_configured, EnvironmentVariableState, HealthCheckState, ProxyServiceState,
     RecommendationServiceState,
     // 终端会话管理
-    register_terminal_session, switch_terminal_provider, get_terminal_session,
+    register_terminal_session, get_terminal_session,
     list_terminal_sessions, remove_terminal_session, get_terminal_session_count,
     cleanup_stale_terminal_sessions, clear_all_terminal_sessions, get_terminal_proxy_url,
     build_terminal_env_vars,
     // PTY 管理
     create_pty_session, create_claude_code_session, pty_write_input, close_pty_session,
-    list_pty_sessions, get_pty_session_count, switch_pty_provider, pty_resize,
+    list_pty_sessions, get_pty_session_count, pty_resize,
     // 模型映射配置
     list_model_mappings, get_model_mapping, create_model_mapping, update_model_mapping,
     delete_model_mapping, batch_delete_model_mappings, export_model_mappings,
     import_model_mappings, reset_to_default_mappings, ModelMappingServiceState,
+    // 斜杠命令管理 (新版 Claude Code 规范)
+    list_slash_commands, get_slash_command, create_slash_command, update_slash_command,
+    delete_slash_command, read_slash_command_body, migrate_skills_to_commands,
+    // 项目上下文信息
+    get_project_context, list_project_memories, read_memory_content,
+    read_project_claude_md, save_project_claude_md, save_memory_content, delete_memory,
 };
 use db::{initialize_database, DbPool};
 use services::balance_scheduler::BalanceScheduler;
@@ -265,14 +271,14 @@ fn main() {
             get_permissions_config,
             update_permissions_config,
             clear_permissions_config,
-            // Skills 配置管理
-            list_skills,
-            add_skill,
-            update_skill,
-            remove_skill,
-            read_skill_prompt,
-            import_skills,
-            export_skills,
+            // 斜杠命令管理 (新版 Claude Code 规范)
+            list_slash_commands,
+            get_slash_command,
+            create_slash_command,
+            update_slash_command,
+            delete_slash_command,
+            read_slash_command_body,
+            migrate_skills_to_commands,
             // 应用更新
             check_app_updates,
             get_app_version,
@@ -280,7 +286,6 @@ fn main() {
             open_release_page,
             // 终端会话管理
             register_terminal_session,
-            switch_terminal_provider,
             get_terminal_session,
             list_terminal_sessions,
             remove_terminal_session,
@@ -296,7 +301,6 @@ fn main() {
             close_pty_session,
             list_pty_sessions,
             get_pty_session_count,
-            switch_pty_provider,
             pty_resize,
             // 模型映射配置
             list_model_mappings,
@@ -308,6 +312,14 @@ fn main() {
             export_model_mappings,
             import_model_mappings,
             reset_to_default_mappings,
+            // 项目上下文信息
+            get_project_context,
+            list_project_memories,
+            read_memory_content,
+            read_project_claude_md,
+            save_project_claude_md,
+            save_memory_content,
+            delete_memory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,14 +2,13 @@
  * ClaudeCodeDialog Component
  *
  * Dialog for creating a new Claude Code terminal session with project directory
- * selection and startup options.
+ * selection and startup options. Uses application proxy automatically.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   FolderOpen,
-  Check,
   Zap,
   RefreshCw,
   Terminal as TerminalIcon,
@@ -59,7 +58,6 @@ export const ClaudeCodeDialog: React.FC<ClaudeCodeDialogProps> = ({
   );
   const [workDir, setWorkDir] = useState(defaultWorkDir || '');
   const [terminalName, setTerminalName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Claude Code options
@@ -69,34 +67,33 @@ export const ClaudeCodeDialog: React.FC<ClaudeCodeDialogProps> = ({
   const [customModel, setCustomModel] = useState('');
   const [initialPrompt, setInitialPrompt] = useState('');
 
-  // Load API configs (separate from form reset to avoid circular dependency)
+  // Load API configs silently to get a default config for proxy
   const loadConfigs = useCallback(async () => {
-    setIsLoading(true);
     try {
       const result = await listApiConfigs();
       const enabledConfigs = result.filter((c) => c.is_enabled);
       setConfigs(enabledConfigs);
 
-      // Set default selection only if not already selected
+      // Auto-select first enabled config
       if (defaultConfigId && enabledConfigs.some((c) => c.id === defaultConfigId)) {
         setSelectedConfigId(defaultConfigId);
       } else if (enabledConfigs.length > 0) {
-        // Only set first config as default if no selection exists
-        setSelectedConfigId((prev) => prev ?? enabledConfigs[0].id);
+        setSelectedConfigId(enabledConfigs[0].id);
+      } else {
+        // Use 0 as fallback if no configs available
+        setSelectedConfigId(0);
       }
     } catch (error) {
       console.error('Failed to load configs:', error);
-    } finally {
-      setIsLoading(false);
+      setSelectedConfigId(0);
     }
   }, [defaultConfigId]);
 
   // Load API configs and reset form when dialog opens
-  // Important: Only trigger on isOpen change, not on loadConfigs change
   useEffect(() => {
     if (isOpen) {
       loadConfigs();
-      // Reset form state (only once when dialog opens)
+      // Reset form state
       setWorkDir(defaultWorkDir || '');
       setTerminalName('');
       setSkipPermissions(false);
@@ -130,7 +127,8 @@ export const ClaudeCodeDialog: React.FC<ClaudeCodeDialogProps> = ({
   };
 
   const handleCreate = () => {
-    if (selectedConfigId !== null && workDir) {
+    if (workDir) {
+      const configId = selectedConfigId ?? configs[0]?.id ?? 0;
       const options: ClaudeCodeOptions = {
         skip_permissions: skipPermissions,
         resume: resumeSession,
@@ -139,13 +137,13 @@ export const ClaudeCodeDialog: React.FC<ClaudeCodeDialogProps> = ({
         initial_prompt: initialPrompt || undefined,
         extra_args: [],
       };
-      onCreate(selectedConfigId, workDir, options, terminalName || undefined);
+      onCreate(configId, workDir, options, terminalName || undefined);
       onClose();
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && selectedConfigId !== null && workDir) {
+    if (e.key === 'Enter' && workDir) {
       handleCreate();
     } else if (e.key === 'Escape') {
       onClose();
@@ -154,7 +152,7 @@ export const ClaudeCodeDialog: React.FC<ClaudeCodeDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const canCreate = selectedConfigId !== null && workDir;
+  const canCreate = !!workDir;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -352,60 +350,6 @@ export const ClaudeCodeDialog: React.FC<ClaudeCodeDialogProps> = ({
               </div>
             </div>
           )}
-
-          {/* Provider selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {t('claudeCode.serviceProvider', '服务商')}
-            </label>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : configs.length === 0 ? (
-              <div className="text-center py-6 text-gray-400 bg-gray-800/50 rounded-lg border border-gray-700">
-                <p>{t('claudeCode.noConfigs', '暂无可用配置')}</p>
-                <p className="text-sm mt-1">
-                  {t('claudeCode.addConfigHint', '请先在设置中添加并启用服务商配置')}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {configs.map((config) => (
-                  <button
-                    key={config.id}
-                    onClick={() => setSelectedConfigId(config.id)}
-                    className={`
-                      w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left
-                      ${
-                        selectedConfigId === config.id
-                          ? 'bg-orange-500/10 border-orange-500/50 text-white'
-                          : 'bg-gray-800/50 border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-gray-600'
-                      }
-                    `}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                        selectedConfigId === config.id
-                          ? 'border-orange-500 bg-orange-500'
-                          : 'border-gray-600'
-                      }`}
-                    >
-                      {selectedConfigId === config.id && (
-                        <Check className="w-2.5 h-2.5 text-black" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{config.name}</div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {config.server_url}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Footer */}

@@ -249,7 +249,7 @@ impl OpenAIRequestValidator {
                 }
 
                 // 验证内容不为空（除非是 function/tool 角色）
-                if msg.role != "function" && msg.role != "tool" && msg.content.as_text().is_empty()
+                if msg.role != "function" && msg.role != "tool" && msg.content_text().is_empty()
                 {
                     errors.push(ValidationError::required(&format!(
                         "messages[{}].content",
@@ -447,8 +447,10 @@ mod tests {
             model: "gpt-4".to_string(),
             messages: vec![OpenAIMessage {
                 role: "user".to_string(),
-                content: OpenAIMessageContent::Text("Hello".to_string()),
+                content: Some(OpenAIMessageContent::Text("Hello".to_string())),
                 name: None,
+                tool_calls: None,
+                tool_call_id: None,
             }],
             temperature: Some(0.7),
             max_tokens: Some(1000),
@@ -471,8 +473,10 @@ mod tests {
             model: "gpt-4".to_string(),
             messages: vec![OpenAIMessage {
                 role: "invalid_role".to_string(),
-                content: OpenAIMessageContent::Text("Hello".to_string()),
+                content: Some(OpenAIMessageContent::Text("Hello".to_string())),
                 name: None,
+                tool_calls: None,
+                tool_call_id: None,
             }],
             temperature: None,
             max_tokens: None,

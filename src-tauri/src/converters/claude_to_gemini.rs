@@ -2,10 +2,10 @@
  * Claude API 请求转换为 Gemini API 请求
  */
 
-use super::claude_types::{ClaudeRequest, ClaudeContent, ClaudeContentBlock, ClaudeMessageRole};
+use super::claude_types::{ClaudeContent, ClaudeContentBlock, ClaudeImageSource, ClaudeMessageRole, ClaudeRequest};
 #[cfg(test)]
 use super::claude_types::ClaudeMessage;
-use super::gemini_types::{GeminiRequest, GeminiContent, GeminiPart, GeminiGenerationConfig};
+use super::gemini_types::{GeminiContent, GeminiGenerationConfig, GeminiInlineData, GeminiPart, GeminiRequest};
 use crate::models::error::AppResult;
 
 /// 将 Claude API 请求转换为 Gemini API 请求
@@ -32,13 +32,11 @@ pub fn convert_claude_request_to_gemini(
             ClaudeMessageRole::Assistant => "model",
         };
 
-        let text = extract_text_from_content(&msg.content)?;
+        let parts = convert_content_to_gemini_parts(&msg.content)?;
 
         contents.push(GeminiContent {
             role: Some(role.to_string()),
-            parts: vec![GeminiPart {
-                text: Some(text),
-            }],
+            parts,
         });
     }
 
@@ -69,9 +67,7 @@ pub fn convert_claude_request_to_gemini(
     let system_instruction = if let Some(ref system_text) = claude_req.system {
         Some(GeminiContent {
             role: None,
-            parts: vec![GeminiPart {
-                text: Some(system_text.clone()),
-            }],
+            parts: vec![GeminiPart::text(system_text)],
         })
     } else {
         None
@@ -105,7 +101,52 @@ pub fn convert_claude_request_to_gemini(
     Ok((gemini_req, api_path))
 }
 
-/// 从 Claude 内容中提取文本
+/// 将 Claude 内容转换为 Gemini Parts 列表
+fn convert_content_to_gemini_parts(content: &ClaudeContent) -> AppResult<Vec<GeminiPart>> {
+    match content {
+        ClaudeContent::Text(text) => Ok(vec![GeminiPart::text(text)]),
+        ClaudeContent::Blocks(blocks) => {
+            let mut parts = Vec::new();
+            for block in blocks {
+                match block {
+                    ClaudeContentBlock::Text { text } => {
+                        parts.push(GeminiPart::text(text));
+                    }
+                    ClaudeContentBlock::Image { source } => {
+                        parts.push(convert_claude_image_to_gemini(source)?);
+                    }
+                    // Gemini 暂不支持工具调用，跳过
+                    ClaudeContentBlock::ToolUse { .. } => {}
+                    ClaudeContentBlock::ToolResult { .. } => {}
+                }
+            }
+            Ok(parts)
+        }
+    }
+}
+
+/// 将 Claude 图片转换为 Gemini Part
+fn convert_claude_image_to_gemini(source: &ClaudeImageSource) -> AppResult<GeminiPart> {
+    if source.is_base64() {
+        // Base64 格式直接使用
+        Ok(GeminiPart::image(&source.media_type, &source.data))
+    } else {
+        // URL 格式：Gemini 不直接支持 URL，需要记录警告
+        // 注意：实际生产中应该下载 URL 并转为 base64
+        log::warn!(
+            "Gemini API 不支持 URL 图片，需要先下载转换为 base64: {}",
+            source.data
+        );
+        // 返回一个占位文本
+        Ok(GeminiPart::text(&format!(
+            "[Image URL: {}]",
+            source.data
+        )))
+    }
+}
+
+/// 从 Claude 内容中提取纯文本（用于向后兼容）
+#[allow(dead_code)]
 fn extract_text_from_content(content: &ClaudeContent) -> AppResult<String> {
     match content {
         ClaudeContent::Text(text) => Ok(text.clone()),
@@ -116,6 +157,12 @@ fn extract_text_from_content(content: &ClaudeContent) -> AppResult<String> {
                     ClaudeContentBlock::Text { text } => {
                         texts.push(text.clone());
                     }
+                    ClaudeContentBlock::Image { .. } => {
+                        // 图片内容跳过
+                    }
+                    // 工具调用块跳过
+                    ClaudeContentBlock::ToolUse { .. } => {}
+                    ClaudeContentBlock::ToolResult { .. } => {}
                 }
             }
             Ok(texts.join("\n"))
@@ -160,9 +207,10 @@ mod tests {
         assert_eq!(path, "/v1beta/models/gemini-pro:generateContent");
         assert_eq!(gemini_req.contents.len(), 1);
         assert_eq!(gemini_req.contents[0].role, Some("user".to_string()));
+        assert!(gemini_req.contents[0].parts[0].is_text());
         assert_eq!(
-            gemini_req.contents[0].parts[0].text,
-            Some("Hello".to_string())
+            gemini_req.contents[0].parts[0].text.as_deref(),
+            Some("Hello")
         );
     }
 
@@ -189,9 +237,10 @@ mod tests {
         let (gemini_req, _) = result.unwrap();
         assert!(gemini_req.system_instruction.is_some());
         let system = gemini_req.system_instruction.unwrap();
+        assert!(system.parts[0].is_text());
         assert_eq!(
-            system.parts[0].text,
-            Some("You are a helpful assistant".to_string())
+            system.parts[0].text.as_deref(),
+            Some("You are a helpful assistant")
         );
     }
 

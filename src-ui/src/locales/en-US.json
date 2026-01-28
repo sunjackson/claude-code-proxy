@@ -738,8 +738,9 @@
   },
   "setup": {
     "title": "Claude Code Configuration",
-    "subtitle": "Environment Detection · MCP Services · Permissions · Skills",
+    "subtitle": "Quick Check · MCP Services · Permissions · Skills",
     "tabs": {
+      "quickCheck": "Quick Check",
       "environment": "Environment",
       "mcp": "MCP Services",
       "permissions": "Permissions",

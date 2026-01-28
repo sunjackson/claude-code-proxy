@@ -380,9 +380,33 @@ impl ProxyServer {
             log_builder = log_builder.with_content_type(ct);
         }
 
-        // Extract session_id from request URI path (e.g., /session/xxx)
-        // This allows terminal sessions to route to specific API configs
-        let session_id = Self::extract_session_id(&uri);
+        // Extract session_id from request
+        // Priority: 1. Authorization header (proxy-session:{session_id})
+        //           2. URL path (/session/{session_id})
+        let session_from_auth = req.headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|auth| {
+                // Check for "Bearer proxy-session:{session_id}" format
+                auth.strip_prefix("Bearer proxy-session:")
+                    .or_else(|| auth.strip_prefix("bearer proxy-session:"))
+            })
+            .map(|s| s.to_string());
+
+        let session_from_uri = Self::extract_session_id(&uri);
+
+        // Use session from auth header if available, otherwise try URL path
+        let session_id = session_from_auth.clone().or(session_from_uri);
+
+        // Debug logging for session routing
+        log::info!(
+            "[Session Routing] URI: {}, path: {}, session_from_auth: {:?}, session_from_uri: {:?}, final_session_id: {:?}",
+            uri,
+            uri.path(),
+            session_from_auth,
+            Self::extract_session_id(&uri),
+            session_id
+        );
 
         // Get active config ID and group ID
         // Priority: session-specific config > global config
@@ -395,15 +419,31 @@ impl ProxyServer {
         let (config_id, routing_source) = if let Some(ref sid) = session_id {
             // Try to get session-specific config
             if let Some(session_config_id) = SESSION_CONFIG_MAP.get_config_id(sid) {
-                log::debug!("Using session config: session={}, config_id={}", sid, session_config_id);
+                log::info!(
+                    "[Session Routing] Found session config: session={}, config_id={}",
+                    sid, session_config_id
+                );
                 (Some(session_config_id), format!("session:{}", sid))
             } else {
                 // Session not found, fall back to global
-                log::debug!("Session {} not found, using global config", sid);
+                log::warn!(
+                    "[Session Routing] Session {} not found in SESSION_CONFIG_MAP, falling back to global config_id={:?}",
+                    sid, global_config_id
+                );
+                // Log all registered sessions for debugging
+                let sessions = SESSION_CONFIG_MAP.list_sessions();
+                log::info!(
+                    "[Session Routing] Registered sessions: {:?}",
+                    sessions.iter().map(|(id, e)| (id.clone(), e.config_id)).collect::<Vec<_>>()
+                );
                 (global_config_id, "global".to_string())
             }
         } else {
             // No session specified, use global config
+            log::info!(
+                "[Session Routing] No session_id in request, using global config_id={:?}",
+                global_config_id
+            );
             (global_config_id, "global".to_string())
         };
 

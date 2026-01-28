@@ -2,36 +2,24 @@
  * Client Detection Module
  * Detects client source from HTTP request headers
  *
- * Supported clients:
- * - Claude Code: Official Anthropic CLI (User-Agent contains "claude-code" or "anthropic")
- * - Codex: OpenAI Codex CLI (User-Agent contains "codex" or specific headers)
- * - Cursor: Cursor IDE (User-Agent contains "cursor")
- * - Continue: Continue.dev extension (User-Agent contains "continue")
- * - Generic OpenAI: Other OpenAI-compatible clients
- * - Generic Claude: Other Claude-compatible clients
- * - Unknown: Unable to determine
+ * NOTE: This proxy only supports Claude Code terminal requests.
+ * Other client types are detected for logging purposes but will
+ * use Claude API format by default.
  */
 
 use hyper::header::HeaderMap;
 
 /// Detected client type
+///
+/// This proxy is designed for Claude Code terminal requests.
+/// Other clients are detected for logging but will use Claude format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientType {
-    /// Claude Code CLI - expects Claude API format
+    /// Claude Code CLI - expects Claude API format (primary supported client)
     ClaudeCode,
-    /// OpenAI Codex CLI - expects OpenAI API format
-    Codex,
-    /// Cursor IDE - expects OpenAI API format
-    Cursor,
-    /// Continue.dev - can use either format
-    Continue,
-    /// Cline VS Code extension - expects Claude API format
-    Cline,
-    /// Generic OpenAI client - expects OpenAI API format
-    GenericOpenAI,
     /// Generic Claude client - expects Claude API format
     GenericClaude,
-    /// Unknown client
+    /// Unknown client - defaults to Claude API format
     Unknown,
 }
 
@@ -39,11 +27,6 @@ impl std::fmt::Display for ClientType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ClientType::ClaudeCode => write!(f, "claude_code"),
-            ClientType::Codex => write!(f, "codex"),
-            ClientType::Cursor => write!(f, "cursor"),
-            ClientType::Continue => write!(f, "continue"),
-            ClientType::Cline => write!(f, "cline"),
-            ClientType::GenericOpenAI => write!(f, "generic_openai"),
             ClientType::GenericClaude => write!(f, "generic_claude"),
             ClientType::Unknown => write!(f, "unknown"),
         }
@@ -52,37 +35,27 @@ impl std::fmt::Display for ClientType {
 
 impl ClientType {
     /// Check if client expects Claude API format
+    ///
+    /// NOTE: All clients default to Claude format since this proxy
+    /// is designed for Claude Code terminal requests.
     pub fn expects_claude_format(&self) -> bool {
-        matches!(
-            self,
-            ClientType::ClaudeCode | ClientType::Cline | ClientType::GenericClaude
-        )
-    }
-
-    /// Check if client expects OpenAI API format
-    pub fn expects_openai_format(&self) -> bool {
-        matches!(
-            self,
-            ClientType::Codex | ClientType::Cursor | ClientType::GenericOpenAI
-        )
+        true // All supported clients expect Claude format
     }
 
     /// Get the expected API format for this client
+    ///
+    /// Always returns Claude format as this proxy only supports
+    /// Claude Code terminal requests.
     pub fn expected_format(&self) -> super::protocol_detector::RequestFormat {
-        use super::protocol_detector::RequestFormat;
-        match self {
-            ClientType::ClaudeCode | ClientType::Cline | ClientType::GenericClaude => {
-                RequestFormat::Claude
-            }
-            ClientType::Codex | ClientType::Cursor | ClientType::GenericOpenAI => {
-                RequestFormat::OpenAI
-            }
-            ClientType::Continue | ClientType::Unknown => RequestFormat::Unknown,
-        }
+        super::protocol_detector::RequestFormat::Claude
     }
 }
 
 /// Client detector
+///
+/// Detects client type from HTTP request headers.
+/// Primary purpose: logging and debugging.
+/// All requests are treated as Claude format regardless of detected client.
 pub struct ClientDetector;
 
 impl ClientDetector {
@@ -91,8 +64,8 @@ impl ClientDetector {
     /// Detection priority:
     /// 1. Custom headers (X-Client-Type, X-Client-Name)
     /// 2. User-Agent patterns
-    /// 3. API key header format (x-api-key vs Authorization Bearer)
-    /// 4. Request path (fallback)
+    /// 3. API key header format (x-api-key indicates Claude)
+    /// 4. Default to Unknown
     pub fn detect(headers: &HeaderMap) -> ClientType {
         // 1. Check for custom client identification headers
         if let Some(client_type) = Self::check_custom_headers(headers) {
@@ -105,8 +78,8 @@ impl ClientDetector {
         }
 
         // 3. Check API key format
-        if let Some(client_type) = Self::check_api_key_format(headers) {
-            return client_type;
+        if Self::has_claude_api_key(headers) {
+            return ClientType::GenericClaude;
         }
 
         // 4. Default to Unknown
@@ -118,21 +91,15 @@ impl ClientDetector {
         // First try header-based detection
         let header_result = Self::detect(headers);
 
-        // If unknown, use path to determine format
+        // If unknown, check if path indicates Claude API
         if header_result == ClientType::Unknown {
-            // Use protocol detector to determine format from path
-            use super::protocol_detector::ProtocolDetector;
-            let format = ProtocolDetector::detect_from_path(path);
-
-            match format {
-                super::protocol_detector::RequestFormat::Claude => ClientType::GenericClaude,
-                super::protocol_detector::RequestFormat::OpenAI => ClientType::GenericOpenAI,
-                super::protocol_detector::RequestFormat::Gemini => ClientType::Unknown, // Gemini clients not yet supported
-                super::protocol_detector::RequestFormat::Unknown => ClientType::Unknown,
+            // Claude API paths: /v1/messages, /v1/complete
+            if path.contains("/messages") || path.contains("/complete") {
+                return ClientType::GenericClaude;
             }
-        } else {
-            header_result
         }
+
+        header_result
     }
 
     /// Check custom headers for client identification
@@ -144,21 +111,6 @@ impl ClientDetector {
                 if lower.contains("claude") || lower.contains("anthropic") {
                     return Some(ClientType::ClaudeCode);
                 }
-                if lower.contains("codex") {
-                    return Some(ClientType::Codex);
-                }
-                if lower.contains("cursor") {
-                    return Some(ClientType::Cursor);
-                }
-                if lower.contains("continue") {
-                    return Some(ClientType::Continue);
-                }
-                if lower.contains("cline") {
-                    return Some(ClientType::Cline);
-                }
-                if lower.contains("openai") {
-                    return Some(ClientType::GenericOpenAI);
-                }
             }
         }
 
@@ -169,19 +121,13 @@ impl ClientDetector {
                 if lower.contains("claude-code") || lower.contains("claude code") {
                     return Some(ClientType::ClaudeCode);
                 }
-                if lower.contains("codex") {
-                    return Some(ClientType::Codex);
-                }
-                if lower.contains("cursor") {
-                    return Some(ClientType::Cursor);
-                }
             }
         }
 
         None
     }
 
-    /// Check User-Agent header for known client patterns
+    /// Check User-Agent header for Claude Code patterns
     fn check_user_agent(headers: &HeaderMap) -> Option<ClientType> {
         let user_agent = headers
             .get(hyper::header::USER_AGENT)
@@ -189,7 +135,7 @@ impl ClientDetector {
 
         let lower_ua = user_agent.to_lowercase();
 
-        // Claude Code patterns
+        // Claude Code patterns (primary supported client)
         if lower_ua.contains("claude-code")
             || lower_ua.contains("claude_code")
             || lower_ua.contains("anthropic-cli")
@@ -198,38 +144,11 @@ impl ClientDetector {
             return Some(ClientType::ClaudeCode);
         }
 
-        // Cline patterns
-        if lower_ua.contains("cline") || lower_ua.contains("claude-dev") {
-            return Some(ClientType::Cline);
-        }
-
-        // Codex patterns
-        if lower_ua.contains("codex") || lower_ua.contains("openai-codex") {
-            return Some(ClientType::Codex);
-        }
-
-        // Cursor patterns
-        if lower_ua.contains("cursor") {
-            return Some(ClientType::Cursor);
-        }
-
-        // Continue patterns
-        if lower_ua.contains("continue") || lower_ua.contains("continue.dev") {
-            return Some(ClientType::Continue);
-        }
-
-        // Generic OpenAI SDK patterns
-        if lower_ua.contains("openai-python")
-            || lower_ua.contains("openai-node")
-            || lower_ua.contains("openai/")
-        {
-            return Some(ClientType::GenericOpenAI);
-        }
-
         // Generic Anthropic SDK patterns
         if lower_ua.contains("anthropic-python")
             || lower_ua.contains("anthropic-node")
             || lower_ua.contains("anthropic-typescript")
+            || lower_ua.contains("anthropic")
         {
             return Some(ClientType::GenericClaude);
         }
@@ -237,37 +156,17 @@ impl ClientDetector {
         None
     }
 
-    /// Check API key format to infer client type
-    fn check_api_key_format(headers: &HeaderMap) -> Option<ClientType> {
+    /// Check if request has Claude API key format
+    fn has_claude_api_key(headers: &HeaderMap) -> bool {
         // Claude uses x-api-key header
         if headers.contains_key("x-api-key") {
-            // If also has anthropic-version, definitely Claude
-            if headers.contains_key("anthropic-version") {
-                return Some(ClientType::GenericClaude);
-            }
-            // x-api-key alone suggests Claude
-            return Some(ClientType::GenericClaude);
+            return true;
         }
-
-        // OpenAI uses Authorization: Bearer header
-        if let Some(auth) = headers.get(hyper::header::AUTHORIZATION) {
-            if let Ok(s) = auth.to_str() {
-                if s.starts_with("Bearer ") {
-                    // Check for OpenAI-specific headers
-                    if headers.contains_key("openai-organization")
-                        || headers.contains_key("openai-project")
-                    {
-                        return Some(ClientType::GenericOpenAI);
-                    }
-                    // Bearer token without Claude markers suggests OpenAI
-                    if !headers.contains_key("anthropic-version") {
-                        return Some(ClientType::GenericOpenAI);
-                    }
-                }
-            }
+        // anthropic-version header indicates Claude client
+        if headers.contains_key("anthropic-version") {
+            return true;
         }
-
-        None
+        false
     }
 }
 
@@ -340,9 +239,9 @@ impl ClientDetector {
         }
 
         // 3. Check API key format
-        if let Some(client_type) = Self::check_api_key_format(headers) {
+        if Self::has_claude_api_key(headers) {
             return ClientDetectionResult {
-                client_type,
+                client_type: ClientType::GenericClaude,
                 user_agent,
                 confidence: DetectionConfidence::Medium,
                 method: DetectionMethod::ApiKeyFormat,
@@ -350,22 +249,16 @@ impl ClientDetector {
         }
 
         // 4. Infer from path
-        use super::protocol_detector::ProtocolDetector;
-        let format = ProtocolDetector::detect_from_path(path);
-        let (client_type, confidence) = match format {
-            super::protocol_detector::RequestFormat::Claude => {
-                (ClientType::GenericClaude, DetectionConfidence::Low)
-            }
-            super::protocol_detector::RequestFormat::OpenAI => {
-                (ClientType::GenericOpenAI, DetectionConfidence::Low)
-            }
-            _ => (ClientType::Unknown, DetectionConfidence::Low),
+        let client_type = if path.contains("/messages") || path.contains("/complete") {
+            ClientType::GenericClaude
+        } else {
+            ClientType::Unknown
         };
 
         ClientDetectionResult {
             client_type,
             user_agent,
-            confidence,
+            confidence: DetectionConfidence::Low,
             method: if client_type == ClientType::Unknown {
                 DetectionMethod::Default
             } else {
@@ -386,22 +279,6 @@ mod tests {
         headers.insert(USER_AGENT, HeaderValue::from_static("claude-code/1.0.0"));
 
         assert_eq!(ClientDetector::detect(&headers), ClientType::ClaudeCode);
-    }
-
-    #[test]
-    fn test_detect_cursor() {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("Cursor/0.40.0"));
-
-        assert_eq!(ClientDetector::detect(&headers), ClientType::Cursor);
-    }
-
-    #[test]
-    fn test_detect_codex() {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("openai-codex/1.0"));
-
-        assert_eq!(ClientDetector::detect(&headers), ClientType::Codex);
     }
 
     #[test]
@@ -433,25 +310,40 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_with_path_openai() {
+    fn test_unknown_client() {
         let headers = HeaderMap::new();
-        let path = "/v1/chat/completions";
+        let path = "/v1/some/random/path";
 
         assert_eq!(
             ClientDetector::detect_with_path(&headers, path),
-            ClientType::GenericOpenAI
+            ClientType::Unknown
         );
+    }
+
+    #[test]
+    fn test_all_clients_expect_claude_format() {
+        // All client types should expect Claude format
+        assert!(ClientType::ClaudeCode.expects_claude_format());
+        assert!(ClientType::GenericClaude.expects_claude_format());
+        assert!(ClientType::Unknown.expects_claude_format());
     }
 
     #[test]
     fn test_client_expected_format() {
         use super::super::protocol_detector::RequestFormat;
 
+        // All clients should return Claude format
         assert_eq!(
             ClientType::ClaudeCode.expected_format(),
             RequestFormat::Claude
         );
-        assert_eq!(ClientType::Cursor.expected_format(), RequestFormat::OpenAI);
-        assert_eq!(ClientType::Codex.expected_format(), RequestFormat::OpenAI);
+        assert_eq!(
+            ClientType::GenericClaude.expected_format(),
+            RequestFormat::Claude
+        );
+        assert_eq!(
+            ClientType::Unknown.expected_format(),
+            RequestFormat::Claude
+        );
     }
 }

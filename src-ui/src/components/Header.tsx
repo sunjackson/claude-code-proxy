@@ -9,7 +9,6 @@ import { useLanguage } from '../hooks/useLanguage';
 import * as proxyApi from '../api/proxy';
 import * as configApi from '../api/config';
 import type { ProxyService, ApiConfig } from '../types/tauri';
-import { UpdateBadge } from './UpdateNotification';
 
 interface HeaderProps {
   title?: string;
@@ -285,7 +284,6 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
           </button>
 
           {/* 版本徽章 */}
-          <UpdateBadge />
         </div>
       </div>
     </header>

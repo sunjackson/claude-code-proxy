@@ -5,12 +5,74 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Gemini 内容部分
+/// Gemini 内联数据（用于图片等二进制内容）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeminiInlineData {
+    /// MIME 类型: "image/jpeg", "image/png", "image/gif", "image/webp"
+    pub mime_type: String,
+    /// Base64 编码的数据
+    pub data: String,
+}
+
+impl GeminiInlineData {
+    /// 创建新的内联数据
+    pub fn new(mime_type: &str, data: &str) -> Self {
+        Self {
+            mime_type: mime_type.to_string(),
+            data: data.to_string(),
+        }
+    }
+
+    /// 获取支持的 MIME 类型列表
+    pub fn supported_mime_types() -> &'static [&'static str] {
+        &["image/jpeg", "image/png", "image/gif", "image/webp"]
+    }
+
+    /// 验证 MIME 类型是否支持
+    pub fn is_valid_mime_type(&self) -> bool {
+        Self::supported_mime_types().contains(&self.mime_type.as_str())
+    }
+}
+
+/// Gemini 内容部分（支持文本和图片）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GeminiPart {
+    /// 文本内容
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    // 可扩展其他类型如图片等
+    /// 内联数据（图片等）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inline_data: Option<GeminiInlineData>,
+}
+
+impl GeminiPart {
+    /// 创建文本内容部分
+    pub fn text(text: &str) -> Self {
+        Self {
+            text: Some(text.to_string()),
+            inline_data: None,
+        }
+    }
+
+    /// 创建图片内容部分
+    pub fn image(mime_type: &str, data: &str) -> Self {
+        Self {
+            text: None,
+            inline_data: Some(GeminiInlineData::new(mime_type, data)),
+        }
+    }
+
+    /// 检查是否为文本部分
+    pub fn is_text(&self) -> bool {
+        self.text.is_some() && self.inline_data.is_none()
+    }
+
+    /// 检查是否为图片部分
+    pub fn is_image(&self) -> bool {
+        self.inline_data.is_some()
+    }
 }
 
 /// Gemini 内容

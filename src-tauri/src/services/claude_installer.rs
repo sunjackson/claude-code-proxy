@@ -3,7 +3,6 @@
 
 use serde::{Deserialize, Serialize};
 use tokio::process::Command as AsyncCommand;
-use crate::services::env_detection::EnvironmentStatus;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InstallMethod {
@@ -58,26 +57,13 @@ impl ClaudeInstaller {
         options: InstallOptions,
         progress_callback: impl Fn(InstallProgress) + Send + 'static,
     ) -> Result<(), String> {
-        // 1. 检测环境
+        // 1. 环境检测（已禁用）
         progress_callback(InstallProgress {
             stage: InstallStage::Detecting,
             progress: 0.0,
-            message: "检测系统环境...".to_string(),
+            message: "环境检测已禁用，跳过检查...".to_string(),
             success: true,
         });
-
-        let env = EnvironmentStatus::detect().map_err(|e| e.to_string())?;
-        let (can_install, missing) = env.can_install();
-
-        if !can_install {
-            progress_callback(InstallProgress {
-                stage: InstallStage::Failed,
-                progress: 0.0,
-                message: format!("环境检查失败: {:?}", missing),
-                success: false,
-            });
-            return Err(format!("缺少必要依赖: {:?}", missing));
-        }
 
         // 2. 根据安装方式执行安装
         progress_callback(InstallProgress {

@@ -2,9 +2,12 @@
  * Smart Router Module
  * 智能路由模块 - 基于客户端检测和后端提供商类型决定协议转换方向
  *
+ * NOTE: 此代理仅支持 Claude Code 终端请求。
+ * 客户端格式始终为 Claude API 格式。
+ *
  * 功能:
- * - 检测客户端类型 (Claude Code, Codex, Cursor 等)
- * - 根据客户端期望格式和后端提供商类型决定转换方向
+ * - 检测客户端类型 (Claude Code 或兼容客户端)
+ * - 根据后端提供商类型决定转换方向
  * - 集成模型映射查询
  */
 
@@ -51,7 +54,7 @@ impl std::fmt::Display for ConversionDirection {
 pub struct RoutingContext {
     /// 检测到的客户端类型
     pub client_type: ClientType,
-    /// 客户端期望的请求格式
+    /// 客户端期望的请求格式 (始终为 Claude 格式)
     pub client_format: RequestFormat,
     /// 后端提供商类型
     pub provider_type: ProviderType,
@@ -73,11 +76,11 @@ impl RoutingContext {
     /// - `path`: 请求路径
     /// - `provider_type`: 后端提供商类型
     pub fn new(headers: &HeaderMap, path: &str, provider_type: ProviderType) -> Self {
-        // 1. 检测客户端类型
+        // 1. 检测客户端类型 (仅用于日志)
         let client_type = ClientDetector::detect_with_path(headers, path);
 
-        // 2. 确定客户端期望格式
-        let client_format = Self::determine_client_format(&client_type, path);
+        // 2. 客户端格式始终为 Claude (此代理仅支持 Claude Code)
+        let client_format = RequestFormat::Claude;
 
         // 3. 确定后端格式
         let backend_format = Self::provider_to_format(provider_type);
@@ -107,24 +110,6 @@ impl RoutingContext {
         self.source_model = Some(source_model.clone());
         self.target_model = target_model.or(Some(source_model));
         self
-    }
-
-    /// 确定客户端期望的格式
-    fn determine_client_format(client_type: &ClientType, path: &str) -> RequestFormat {
-        // 首先根据客户端类型判断
-        match client_type {
-            ClientType::ClaudeCode | ClientType::Cline | ClientType::GenericClaude => {
-                RequestFormat::Claude
-            }
-            ClientType::Codex | ClientType::Cursor | ClientType::GenericOpenAI => {
-                RequestFormat::OpenAI
-            }
-            ClientType::Continue | ClientType::Unknown => {
-                // 对于未知客户端，使用路径判断
-                use super::protocol_detector::ProtocolDetector;
-                ProtocolDetector::detect_from_path(path)
-            }
-        }
     }
 
     /// 将 ProviderType 转换为 RequestFormat
@@ -189,7 +174,7 @@ mod tests {
     use hyper::header::{HeaderMap, HeaderValue, USER_AGENT};
 
     #[test]
-    fn test_claude_client_to_openai_backend() {
+    fn test_claude_code_to_openai_backend() {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static("claude-code/1.0.0"));
 
@@ -202,20 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_client_to_claude_backend() {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("openai-codex/1.0"));
-
-        let ctx = RoutingContext::new(&headers, "/v1/chat/completions", ProviderType::Claude);
-
-        assert_eq!(ctx.client_type, ClientType::Codex);
-        assert_eq!(ctx.client_format, RequestFormat::OpenAI);
-        assert_eq!(ctx.request_conversion, ConversionDirection::OpenAIToClaude);
-        assert_eq!(ctx.response_conversion, ConversionDirection::ClaudeToOpenAI);
-    }
-
-    #[test]
-    fn test_claude_client_to_claude_backend_no_conversion() {
+    fn test_claude_code_to_claude_backend_no_conversion() {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static("claude-code/1.0.0"));
 
@@ -227,28 +199,49 @@ mod tests {
     }
 
     #[test]
-    fn test_cursor_to_gemini() {
+    fn test_claude_code_to_gemini_backend() {
         let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("Cursor/0.40.0"));
+        headers.insert(USER_AGENT, HeaderValue::from_static("claude-code/1.0.0"));
 
-        let ctx = RoutingContext::new(&headers, "/v1/chat/completions", ProviderType::Gemini);
+        let ctx = RoutingContext::new(&headers, "/v1/messages", ProviderType::Gemini);
 
-        assert_eq!(ctx.client_type, ClientType::Cursor);
-        assert_eq!(ctx.client_format, RequestFormat::OpenAI);
-        assert_eq!(ctx.request_conversion, ConversionDirection::OpenAIToGemini);
-        assert_eq!(ctx.response_conversion, ConversionDirection::GeminiToOpenAI);
+        assert_eq!(ctx.client_type, ClientType::ClaudeCode);
+        assert_eq!(ctx.client_format, RequestFormat::Claude);
+        assert_eq!(ctx.request_conversion, ConversionDirection::ClaudeToGemini);
+        assert_eq!(ctx.response_conversion, ConversionDirection::GeminiToClaude);
     }
 
     #[test]
-    fn test_unknown_client_infer_from_path() {
+    fn test_unknown_client_defaults_to_claude_format() {
         let headers = HeaderMap::new();
 
-        // Claude path
-        let ctx1 = RoutingContext::new(&headers, "/v1/messages", ProviderType::OpenAI);
-        assert_eq!(ctx1.client_format, RequestFormat::Claude);
+        // Unknown client still uses Claude format
+        let ctx = RoutingContext::new(&headers, "/v1/messages", ProviderType::OpenAI);
+        assert_eq!(ctx.client_format, RequestFormat::Claude);
+        assert_eq!(ctx.request_conversion, ConversionDirection::ClaudeToOpenAI);
+    }
 
-        // OpenAI path
-        let ctx2 = RoutingContext::new(&headers, "/v1/chat/completions", ProviderType::Claude);
-        assert_eq!(ctx2.client_format, RequestFormat::OpenAI);
+    #[test]
+    fn test_generic_claude_client() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", HeaderValue::from_static("sk-ant-xxx"));
+        headers.insert("anthropic-version", HeaderValue::from_static("2024-01-01"));
+
+        let ctx = RoutingContext::new(&headers, "/v1/messages", ProviderType::OpenAI);
+
+        assert_eq!(ctx.client_type, ClientType::GenericClaude);
+        assert_eq!(ctx.client_format, RequestFormat::Claude);
+        assert_eq!(ctx.request_conversion, ConversionDirection::ClaudeToOpenAI);
+    }
+
+    #[test]
+    fn test_with_model() {
+        let headers = HeaderMap::new();
+        let ctx = RoutingContext::new(&headers, "/v1/messages", ProviderType::OpenAI)
+            .with_model("claude-3-opus".to_string(), Some("gpt-4".to_string()));
+
+        assert_eq!(ctx.source_model, Some("claude-3-opus".to_string()));
+        assert_eq!(ctx.target_model, Some("gpt-4".to_string()));
+        assert_eq!(ctx.effective_model(), Some("gpt-4"));
     }
 }

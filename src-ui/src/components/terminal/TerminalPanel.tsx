@@ -4,6 +4,11 @@
  * xterm.js based terminal panel for a single PTY session.
  * Handles terminal rendering, input/output, resize, and image paste.
  * Persists output to store for recovery after page navigation.
+ *
+ * Optimizations (v1.2.2):
+ * - Improved scroll handling to prevent disruption when user scrolls up
+ * - Removed harmful output regex processing that broke ANSI sequences
+ * - Better terminal configuration for stability
  */
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
@@ -30,7 +35,7 @@ interface TerminalPanelProps {
   sessionId: string;
   /** Whether this terminal is currently active/visible */
   isActive?: boolean;
-  /** Whether this is a Claude Code session (only optimize output for Claude Code) */
+  /** Whether this is a Claude Code session */
   isClaudeCode?: boolean;
   /** Callback when terminal closes */
   onClose?: () => void;
@@ -61,7 +66,7 @@ async function fileToBase64(file: Blob): Promise<string> {
 export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   sessionId,
   isActive = true,
-  isClaudeCode = false,
+  isClaudeCode: _isClaudeCode = false, // Kept for API compatibility, no longer used for output processing
   onClose,
   onError,
 }) => {
@@ -70,9 +75,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [isReady, setIsReady] = useState(false);
 
-  // Auto-scroll timer ref
-  const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastInteractionRef = useRef<number>(Date.now());
+  // Improved scroll tracking - track if user is actively scrolling/viewing history
+  const isUserScrollingRef = useRef(false);
+  const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get store methods
   const { appendOutput, getOutputBuffer } = useTerminalStore();
@@ -95,33 +100,38 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   /**
-   * Scroll terminal to bottom
+   * Check if terminal is scrolled to bottom
    */
-  const scrollToBottom = useCallback(() => {
-    if (xtermRef.current) {
-      xtermRef.current.scrollToBottom();
-    }
+  const isAtBottom = useCallback(() => {
+    if (!xtermRef.current) return true;
+    const term = xtermRef.current;
+    const buffer = term.buffer.active;
+    // Consider "at bottom" if within 3 lines of the end
+    return buffer.baseY + term.rows >= buffer.length - 3;
   }, []);
 
   /**
-   * Reset auto-scroll timer - called on user interaction
+   * Handle user scroll - mark as scrolling if moved away from bottom
    */
-  const resetAutoScrollTimer = useCallback(() => {
-    lastInteractionRef.current = Date.now();
-
-    // Clear existing timer
-    if (autoScrollTimerRef.current) {
-      clearTimeout(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = null;
+  const handleUserScroll = useCallback(() => {
+    // Clear any existing timeout
+    if (userScrollTimeoutRef.current) {
+      clearTimeout(userScrollTimeoutRef.current);
+      userScrollTimeoutRef.current = null;
     }
 
-    // Set new timer for 5 seconds
-    autoScrollTimerRef.current = setTimeout(() => {
-      if (isActiveRef.current && xtermRef.current) {
-        scrollToBottom();
-      }
-    }, 5000);
-  }, [scrollToBottom]);
+    // Check if user scrolled away from bottom
+    if (!isAtBottom()) {
+      isUserScrollingRef.current = true;
+      // Keep user scrolling state for 60 seconds (give user time to read history)
+      userScrollTimeoutRef.current = setTimeout(() => {
+        isUserScrollingRef.current = false;
+      }, 60000);
+    } else {
+      // User scrolled back to bottom, resume auto-scroll
+      isUserScrollingRef.current = false;
+    }
+  }, [isAtBottom]);
 
   /**
    * Process an image file and send to PTY via iTerm2 protocol
@@ -256,25 +266,37 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     let unlistenClosed: UnlistenFn | undefined;
     let unlistenError: UnlistenFn | undefined;
 
-    // Create terminal instance with Unicode support
+    const platform = typeof navigator !== 'undefined' ? navigator.platform : '';
+    const isWindows = /Win/i.test(platform);
+    const isMac = /Mac/i.test(platform);
+
+    // Create terminal instance with optimized configuration
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'bar',
       fontSize: 14,
-      fontFamily: '"MesloLGS NF", Menlo, Monaco, "Courier New", monospace',
+      fontFamily:
+        '"MesloLGS NF", "Cascadia Mono", "Cascadia Code", Consolas, Menlo, Monaco, "Courier New", monospace',
       lineHeight: 1.2,
       letterSpacing: 0,
       allowProposedApi: true,
-      scrollback: 10000, // Keep more scrollback history
-      // 优化滚动行为，减少空白行
+      scrollback: 10000,
+      // Improved scroll behavior
       fastScrollModifier: 'alt',
       fastScrollSensitivity: 5,
-      scrollSensitivity: 3,
-      // 优化渲染性能
-      windowsMode: false,
-      macOptionIsMeta: true,
-      // 处理回车换行
-      convertEol: false, // 不自动转换 EOL，让 PTY 处理
+      scrollSensitivity: 1, // Reduced for smoother scrolling
+      smoothScrollDuration: 0, // Disable smooth scroll for responsiveness
+      // Performance and rendering
+      windowsMode: isWindows,
+      macOptionIsMeta: isMac,
+      // Let PTY handle EOL conversion
+      convertEol: false,
+      // Improved rendering options
+      minimumContrastRatio: 1,
+      tabStopWidth: 4,
+      altClickMovesCursor: true,
+      // Scroll behavior
+      scrollOnUserInput: true,
       theme: {
         background: '#0a0a0a',
         foreground: '#e0e0e0',
@@ -323,9 +345,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     term.open(terminalRef.current);
     xtermRef.current = term;
 
-    // Restore previous output from store
+    // Restore previous output from store (if any)
     const previousOutput = getOutputBuffer(sessionId);
     if (previousOutput) {
+      // Reset terminal state before restoring to ensure clean state
+      term.reset();
+      // Write the restored content
       term.write(previousOutput);
       // Scroll to bottom after restoring output
       term.scrollToBottom();
@@ -342,11 +367,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }, 100);
 
     // Handle user input - only when active
-    // PTY handles echoing, we don't do local echo
+    // User input resets scroll state (user wants to interact, so resume auto-scroll)
     const inputHandler = term.onData(async (data) => {
       if (!isMounted || !isActiveRef.current) return;
-      // Reset auto-scroll timer on user input
-      resetAutoScrollTimer();
+      // User input means they want to interact - reset scroll state
+      isUserScrollingRef.current = false;
+      if (userScrollTimeoutRef.current) {
+        clearTimeout(userScrollTimeoutRef.current);
+        userScrollTimeoutRef.current = null;
+      }
       try {
         await ptyWriteInput(sessionId, encodeInput(data));
       } catch (error) {
@@ -354,9 +383,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       }
     });
 
-    // Handle scroll events - reset auto-scroll timer when user scrolls
+    // Handle scroll events - track user scrolling behavior
     const scrollHandler = term.onScroll(() => {
-      resetAutoScrollTimer();
+      handleUserScroll();
     });
 
     // Set up event listeners for PTY output
@@ -369,30 +398,18 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         (event) => {
           if (!isMounted) return;
           if (event.payload.session_id === sessionId && xtermRef.current) {
-            let text = decodeOutput(event.payload.data);
+            // Decode the output - DO NOT process/modify the text
+            // ANSI escape sequences must be preserved for proper terminal rendering
+            const text = decodeOutput(event.payload.data);
 
-            // 只对 Claude Code 会话应用输出优化
-            // 对普通终端会话，保持原始输出不变（包括空格和空行）
-            if (isClaudeCode) {
-              // 优化：移除连续的多个空行（保留最多2个连续换行）
-              // 这样可以避免 Claude Code 输出时产生大量空白行
-              text = text.replace(/(\r?\n){3,}/g, '\n\n');
-              // 移除只包含空格的行
-              text = text.replace(/^[ \t]+$/gm, '');
-              // 移除行尾的多余空格
-              text = text.replace(/[ \t]+(\r?\n)/g, '$1');
-              // 处理 ANSI 清屏后的多余空行
-              text = text.replace(/(\x1b\[2J|\x1b\[H)[\r\n]*/g, '$1');
-            }
-
+            // Write to terminal
             xtermRef.current.write(text);
+
             // Save to store for persistence
             appendOutput(sessionId, text);
 
-            // Auto-scroll to bottom on new output
-            // Only if user hasn't scrolled recently (within 2 seconds)
-            const timeSinceInteraction = Date.now() - lastInteractionRef.current;
-            if (timeSinceInteraction > 2000) {
+            // Auto-scroll to bottom ONLY if user is not actively viewing history
+            if (!isUserScrollingRef.current) {
               xtermRef.current.scrollToBottom();
             }
           }
@@ -438,16 +455,16 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       unlistenOutput?.();
       unlistenClosed?.();
       unlistenError?.();
-      // Clear auto-scroll timer
-      if (autoScrollTimerRef.current) {
-        clearTimeout(autoScrollTimerRef.current);
-        autoScrollTimerRef.current = null;
+      // Clear user scroll timeout
+      if (userScrollTimeoutRef.current) {
+        clearTimeout(userScrollTimeoutRef.current);
+        userScrollTimeoutRef.current = null;
       }
       term.dispose();
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, appendOutput, getOutputBuffer, resetAutoScrollTimer]); // Only re-run if sessionId changes
+  }, [sessionId, appendOutput, getOutputBuffer, handleUserScroll]); // Only re-run if sessionId changes
 
   // Set up paste and drag-drop event listeners
   useEffect(() => {

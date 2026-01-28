@@ -61,33 +61,6 @@ pub async fn register_terminal_session(
     }
 }
 
-/// Switch a terminal session to use a different proxy config
-///
-/// # Arguments
-/// - `session_id`: Session to switch
-/// - `new_config_id`: New API configuration ID
-#[tauri::command]
-pub async fn switch_terminal_provider(
-    session_id: String,
-    new_config_id: i64,
-) -> Result<TerminalSessionInfo, String> {
-    log::info!(
-        "Switching terminal provider: {} -> config_id={}",
-        session_id,
-        new_config_id
-    );
-
-    if SESSION_CONFIG_MAP.switch(&session_id, new_config_id) {
-        if let Some(entry) = SESSION_CONFIG_MAP.get_entry(&session_id) {
-            Ok(TerminalSessionInfo::from((session_id, entry)))
-        } else {
-            Err("Failed to get session after switch".to_string())
-        }
-    } else {
-        Err(format!("Session not found: {}", session_id))
-    }
-}
-
 /// Get info about a specific terminal session
 #[tauri::command]
 pub async fn get_terminal_session(session_id: String) -> Result<Option<TerminalSessionInfo>, String> {
@@ -355,27 +328,6 @@ pub async fn get_pty_session_count(
 ) -> Result<usize, String> {
     let manager = pty_state.manager();
     Ok(manager.session_count().await)
-}
-
-/// Switch provider for a PTY session at runtime
-///
-/// # Arguments
-/// - `session_id`: Session to switch
-/// - `new_config_id`: New API config ID
-#[tauri::command]
-pub async fn switch_pty_provider(
-    session_id: String,
-    new_config_id: i64,
-    pty_state: State<'_, PtyManagerState>,
-) -> Result<(), String> {
-    log::info!(
-        "Switching PTY provider: {} -> config_id={}",
-        session_id,
-        new_config_id
-    );
-
-    let manager = pty_state.manager();
-    manager.switch_config(&session_id, new_config_id).await
 }
 
 /// Resize a PTY terminal session

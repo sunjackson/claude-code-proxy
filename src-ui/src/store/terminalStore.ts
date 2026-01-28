@@ -3,20 +3,48 @@
  *
  * Manages terminal sessions, output buffers, and session history.
  * Terminal sessions continue running in the background even when switching pages.
+ *
+ * Optimizations (v1.2.2):
+ * - Safe buffer truncation at line boundaries to preserve ANSI sequences
+ * - Reduced buffer size for better memory management
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { TerminalTab } from '../components/terminal';
 
-/** Maximum buffer size per session (characters) */
-const MAX_BUFFER_SIZE = 500000; // ~500KB per session
+/** Maximum buffer size per session (characters) - reduced for better memory */
+const MAX_BUFFER_SIZE = 200000; // ~200KB per session
 
 /** Maximum history entries */
 const MAX_HISTORY_ENTRIES = 50;
 
 /** Default group ID */
 const DEFAULT_GROUP_ID = 'default';
+
+/**
+ * Find a safe truncation point at a line boundary.
+ * This prevents truncating in the middle of ANSI escape sequences.
+ */
+function findSafeTruncationPoint(buffer: string, targetSize: number): number {
+  if (buffer.length <= targetSize) return 0;
+
+  // Start from the position where we want to truncate from
+  const startPos = buffer.length - targetSize;
+
+  // Search forward for a newline character
+  let pos = startPos;
+  while (pos < buffer.length && buffer[pos] !== '\n') {
+    pos++;
+  }
+
+  // Move past the newline if found
+  if (pos < buffer.length && buffer[pos] === '\n') {
+    pos++;
+  }
+
+  return pos;
+}
 
 /** Terminal group */
 export interface TerminalGroup {
@@ -216,16 +244,17 @@ export const useTerminalStore = create<TerminalState>()(
           },
         })),
 
-      // Append output to buffer
+      // Append output to buffer with safe truncation
       appendOutput: (sessionId, data) =>
         set((state) => {
           const newBuffers = new Map(state.outputBuffers);
           const existing = newBuffers.get(sessionId) || '';
           let newBuffer = existing + data;
 
-          // Trim buffer if too large (keep last part)
+          // Trim buffer if too large (truncate at line boundary to preserve ANSI sequences)
           if (newBuffer.length > MAX_BUFFER_SIZE) {
-            newBuffer = newBuffer.slice(-MAX_BUFFER_SIZE);
+            const truncatePoint = findSafeTruncationPoint(newBuffer, MAX_BUFFER_SIZE);
+            newBuffer = newBuffer.slice(truncatePoint);
           }
 
           newBuffers.set(sessionId, newBuffer);

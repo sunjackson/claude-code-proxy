@@ -2,10 +2,49 @@
 
 use crate::db::DbPool;
 use crate::models::node_environment::EnhancedEnvironmentStatus;
-use crate::services::{ClaudeInstaller, EnhancedEnvironmentDetector, EnvironmentStatus, InstallOptions, InstallProgress};
+use crate::services::{ClaudeInstaller, EnvironmentStatus, InstallOptions, InstallProgress};
 use std::sync::Arc;
 use tauri::{Emitter, State, Window};
 use rusqlite::params;
+
+fn disabled_environment_status() -> EnvironmentStatus {
+    EnvironmentStatus {
+        os_type: std::env::consts::OS.to_string(),
+        os_version: "Disabled".to_string(),
+        shell: None,
+        claude_installed: false,
+        claude_version: None,
+        claude_path: None,
+        homebrew_installed: false,
+        wsl_installed: false,
+        git_bash_installed: false,
+        node_installed: false,
+        node_version: None,
+        node_path: None,
+        ripgrep_installed: false,
+        network_available: true,
+    }
+}
+
+fn disabled_enhanced_environment_status() -> EnhancedEnvironmentStatus {
+    EnhancedEnvironmentStatus {
+        os_type: std::env::consts::OS.to_string(),
+        os_version: "Disabled".to_string(),
+        shell: None,
+        node_environments: vec![],
+        default_environment_id: None,
+        claude_installed: false,
+        claude_version: None,
+        claude_path: None,
+        homebrew_installed: false,
+        wsl_installed: false,
+        git_bash_installed: false,
+        ripgrep_installed: false,
+        network_available: true,
+        detected_at: chrono::Utc::now().to_rfc3339(),
+        detection_duration_ms: 0,
+    }
+}
 
 /// 检查系统是否已完成初始配置
 /// 通过检查数据库中是否有配置项来判断
@@ -24,7 +63,7 @@ pub async fn check_system_configured(pool: State<'_, Arc<DbPool>>) -> Result<boo
 /// 检测系统环境
 #[tauri::command]
 pub async fn detect_environment() -> Result<EnvironmentStatus, String> {
-    EnvironmentStatus::detect().map_err(|e| e.to_string())
+    Ok(disabled_environment_status())
 }
 
 /// 安装 Claude Code
@@ -78,15 +117,16 @@ pub async fn uninstall_claude_code(
 /// 生成环境报告
 #[tauri::command]
 pub async fn generate_environment_report() -> Result<String, String> {
-    let env = EnvironmentStatus::detect().map_err(|e| e.to_string())?;
-    Ok(env.generate_report())
+    Ok(format!(
+        "环境检测已禁用\n操作系统: {}\n",
+        std::env::consts::OS
+    ))
 }
 
 /// 检查是否可以安装
 #[tauri::command]
 pub async fn check_can_install() -> Result<(bool, Vec<String>), String> {
-    let env = EnvironmentStatus::detect().map_err(|e| e.to_string())?;
-    Ok(env.can_install())
+    Ok((true, vec![]))
 }
 
 /// 检查 Claude Code 更新
@@ -122,21 +162,8 @@ pub async fn update_claude_code(
 pub async fn detect_environment_enhanced(
     pool: State<'_, Arc<DbPool>>,
 ) -> Result<EnhancedEnvironmentStatus, String> {
-    // 从数据库读取用户配置的默认环境 ID
-    let default_env_id = pool
-        .with_connection(|conn| {
-            Ok(conn
-                .query_row(
-                    "SELECT environment_id FROM NodeEnvironmentConfig WHERE is_default = 1 LIMIT 1",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok())
-        })
-        .ok()
-        .flatten();
-
-    EnhancedEnvironmentDetector::detect(default_env_id).map_err(|e| e.to_string())
+    let _ = pool; // 环境检测已禁用，忽略默认环境配置
+    Ok(disabled_enhanced_environment_status())
 }
 
 /// 设置默认 Node 环境
@@ -225,19 +252,6 @@ pub struct NodeEnvironmentConfig {
 pub async fn check_can_install_enhanced(
     pool: State<'_, Arc<DbPool>>,
 ) -> Result<(bool, Vec<String>), String> {
-    let default_env_id = pool
-        .with_connection(|conn| {
-            Ok(conn
-                .query_row(
-                    "SELECT environment_id FROM NodeEnvironmentConfig WHERE is_default = 1 LIMIT 1",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok())
-        })
-        .ok()
-        .flatten();
-
-    let env = EnhancedEnvironmentDetector::detect(default_env_id).map_err(|e| e.to_string())?;
-    Ok(env.can_install_claude())
+    let _ = pool; // 环境检测已禁用
+    Ok((true, vec![]))
 }

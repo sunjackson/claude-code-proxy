@@ -72,18 +72,62 @@ pub struct OpenAIStreamOptions {
     pub include_usage: Option<bool>,
 }
 
+/// OpenAI 工具调用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIToolCall {
+    /// 工具调用 ID
+    pub id: String,
+    /// 类型 (固定: "function")
+    #[serde(rename = "type")]
+    pub call_type: String,
+    /// 函数调用详情
+    pub function: OpenAIFunctionCall,
+}
+
+/// OpenAI 函数调用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIFunctionCall {
+    /// 函数名称
+    pub name: String,
+    /// 函数参数 (JSON 字符串)
+    pub arguments: String,
+}
+
+impl OpenAIToolCall {
+    /// 创建新的工具调用
+    pub fn new(id: &str, name: &str, arguments: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            call_type: "function".to_string(),
+            function: OpenAIFunctionCall {
+                name: name.to_string(),
+                arguments: arguments.to_string(),
+            },
+        }
+    }
+}
+
 /// OpenAI 消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAIMessage {
-    /// 角色: "system", "user", "assistant"
+    /// 角色: "system", "user", "assistant", "tool"
     pub role: String,
 
     /// 消息内容
-    pub content: OpenAIMessageContent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<OpenAIMessageContent>,
 
     /// 函数调用名称 (用于 function calling)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+
+    /// 工具调用列表 (assistant 消息发起 function calling)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<OpenAIToolCall>>,
+
+    /// 工具调用 ID (tool 消息返回结果)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 /// OpenAI 消息内容 (支持文本和多模态)
@@ -363,8 +407,10 @@ impl OpenAIMessage {
     pub fn system(content: &str) -> Self {
         Self {
             role: "system".to_string(),
-            content: OpenAIMessageContent::Text(content.to_string()),
+            content: Some(OpenAIMessageContent::Text(content.to_string())),
             name: None,
+            tool_calls: None,
+            tool_call_id: None,
         }
     }
 
@@ -372,8 +418,10 @@ impl OpenAIMessage {
     pub fn user(content: &str) -> Self {
         Self {
             role: "user".to_string(),
-            content: OpenAIMessageContent::Text(content.to_string()),
+            content: Some(OpenAIMessageContent::Text(content.to_string())),
             name: None,
+            tool_calls: None,
+            tool_call_id: None,
         }
     }
 
@@ -381,8 +429,32 @@ impl OpenAIMessage {
     pub fn assistant(content: &str) -> Self {
         Self {
             role: "assistant".to_string(),
-            content: OpenAIMessageContent::Text(content.to_string()),
+            content: Some(OpenAIMessageContent::Text(content.to_string())),
             name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// 创建一个助手消息带工具调用
+    pub fn assistant_with_tool_calls(tool_calls: Vec<OpenAIToolCall>) -> Self {
+        Self {
+            role: "assistant".to_string(),
+            content: None,
+            name: None,
+            tool_calls: Some(tool_calls),
+            tool_call_id: None,
+        }
+    }
+
+    /// 创建一个工具结果消息
+    pub fn tool_result(tool_call_id: &str, content: &str) -> Self {
+        Self {
+            role: "tool".to_string(),
+            content: Some(OpenAIMessageContent::Text(content.to_string())),
+            name: None,
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.to_string()),
         }
     }
 
@@ -400,6 +472,16 @@ impl OpenAIMessage {
     pub fn is_assistant(&self) -> bool {
         self.role == "assistant"
     }
+
+    /// 检查是否为工具结果消息
+    pub fn is_tool(&self) -> bool {
+        self.role == "tool"
+    }
+
+    /// 获取内容文本
+    pub fn content_text(&self) -> String {
+        self.content.as_ref().map(|c| c.as_text()).unwrap_or_default()
+    }
 }
 
 impl OpenAIResponse {
@@ -407,7 +489,7 @@ impl OpenAIResponse {
     pub fn first_content(&self) -> Option<String> {
         self.choices
             .first()
-            .map(|choice| choice.message.content.as_text())
+            .map(|choice| choice.message.content_text())
     }
 
     /// 获取结束原因
@@ -443,15 +525,15 @@ mod tests {
     fn test_openai_message_creation() {
         let system = OpenAIMessage::system("You are helpful.");
         assert!(system.is_system());
-        assert_eq!(system.content.as_text(), "You are helpful.");
+        assert_eq!(system.content_text(), "You are helpful.");
 
         let user = OpenAIMessage::user("Hello");
         assert!(user.is_user());
-        assert_eq!(user.content.as_text(), "Hello");
+        assert_eq!(user.content_text(), "Hello");
 
         let assistant = OpenAIMessage::assistant("Hi there!");
         assert!(assistant.is_assistant());
-        assert_eq!(assistant.content.as_text(), "Hi there!");
+        assert_eq!(assistant.content_text(), "Hi there!");
     }
 
     #[test]

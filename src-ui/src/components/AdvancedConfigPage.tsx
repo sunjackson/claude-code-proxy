@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { McpServerManager } from './McpServerManager';
 import { PermissionsManager } from './PermissionsManager';
-import { SkillsManager } from './SkillsManager';
+import { SlashCommandsManager } from './SlashCommandsManager';
 
 type ConfigTab = 'mcp' | 'permissions' | 'skills';
 
@@ -50,7 +50,7 @@ export const AdvancedConfigPage: React.FC = () => {
       case 'permissions':
         return <PermissionsManager />;
       case 'skills':
-        return <SkillsManager />;
+        return <SlashCommandsManager />;
       default:
         return null;
     }
@@ -143,7 +143,7 @@ export const AdvancedConfigCompact: React.FC<{
       case 'permissions':
         return <PermissionsManager />;
       case 'skills':
-        return <SkillsManager />;
+        return <SlashCommandsManager />;
       default:
         return null;
     }

@@ -87,19 +87,6 @@ export async function registerTerminalSession(
 }
 
 /**
- * Switch a terminal session to use a different proxy config
- */
-export async function switchTerminalProvider(
-  sessionId: string,
-  newConfigId: number
-): Promise<TerminalSessionInfo> {
-  return invoke('switch_terminal_provider', {
-    sessionId,
-    newConfigId,
-  });
-}
-
-/**
  * Get info about a specific terminal session
  */
 export async function getTerminalSession(sessionId: string): Promise<TerminalSessionInfo | null> {
@@ -256,13 +243,6 @@ export async function listPtySessions(): Promise<PtySessionInfo[]> {
  */
 export async function getPtySessionCount(): Promise<number> {
   return invoke('get_pty_session_count');
-}
-
-/**
- * Switch provider for a PTY session at runtime
- */
-export async function switchPtyProvider(sessionId: string, newConfigId: number): Promise<void> {
-  return invoke('switch_pty_provider', { sessionId, newConfigId });
 }
 
 /**

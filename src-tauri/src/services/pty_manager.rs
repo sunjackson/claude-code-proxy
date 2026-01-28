@@ -254,7 +254,24 @@ impl PtyManager {
         let master = pair.master;
 
         // Register session in SessionConfigMap for proxy routing
+        log::info!(
+            "[PTY Manager] Registering session in SESSION_CONFIG_MAP: session_id={}, config_id={}, name={:?}",
+            session_id, config_id, name
+        );
         SESSION_CONFIG_MAP.register(session_id.clone(), config_id, name.clone());
+
+        // Verify registration
+        if let Some(registered_config_id) = SESSION_CONFIG_MAP.get_config_id(&session_id) {
+            log::info!(
+                "[PTY Manager] Session registered successfully: session_id={}, config_id={}",
+                session_id, registered_config_id
+            );
+        } else {
+            log::error!(
+                "[PTY Manager] Failed to verify session registration: session_id={}",
+                session_id
+            );
+        }
 
         // Clone reader for output thread
         let reader = master
@@ -434,31 +451,6 @@ impl PtyManager {
         self.sessions.lock().await.len()
     }
 
-    /// Switch the config ID for a session (runtime provider switch)
-    /// 
-    /// This method updates the session's config mapping in SESSION_CONFIG_MAP,
-    /// which is used by the proxy server for routing decisions.
-    /// No terminal commands are sent - the switch is completely silent.
-    pub async fn switch_config(&self, session_id: &str, new_config_id: i64) -> Result<(), String> {
-        // Update SessionConfigMap (proxy routing will use this)
-        if SESSION_CONFIG_MAP.switch(session_id, new_config_id) {
-            // Also update our local session record
-            let mut sessions = self.sessions.lock().await;
-            if let Some(session) = sessions.get_mut(session_id) {
-                session.config_id = new_config_id;
-                
-                log::info!(
-                    "Switched session {} to config_id={} (silent switch - no terminal commands sent)", 
-                    session_id, 
-                    new_config_id
-                );
-            }
-            Ok(())
-        } else {
-            Err(format!("Session not found: {}", session_id))
-        }
-    }
-
     /// Build environment variables for a terminal session
     fn build_env_vars(&self, session_id: &str, config_id: i64) -> HashMap<String, String> {
         let mut env = HashMap::new();
@@ -470,8 +462,21 @@ impl PtyManager {
         // We include session_id in the path for routing
         let anthropic_base_url = format!("http://127.0.0.1:{}/session/{}", self.proxy_port, session_id);
 
+        // Use a special API key format to pass session_id through Authorization header
+        // Format: "proxy-session:{session_id}" - the proxy server will extract session_id and replace with real API key
+        let proxy_api_key = format!("proxy-session:{}", session_id);
+
+        log::info!(
+            "[PTY Manager] Setting environment variables: session_id={}, config_id={}, ANTHROPIC_BASE_URL={}, API_KEY=proxy-session:{}",
+            session_id, config_id, anthropic_base_url, session_id
+        );
+
         // Set ANTHROPIC_BASE_URL for Claude Code to use our proxy with session routing
         env.insert("ANTHROPIC_BASE_URL".to_string(), anthropic_base_url);
+
+        // Set ANTHROPIC_API_KEY with session encoding for reliable routing
+        // The proxy server will extract session_id from this and replace with real API key
+        env.insert("ANTHROPIC_API_KEY".to_string(), proxy_api_key);
 
         // Standard proxy environment variables (for other tools that might need them)
         env.insert("HTTP_PROXY".to_string(), proxy_url.clone());
@@ -515,6 +520,21 @@ impl PtyManager {
     fn detect_default_shell() -> String {
         #[cfg(target_os = "windows")]
         {
+            if let Ok(shell) = std::env::var("CLAUDE_PROXY_SHELL") {
+                let shell = shell.trim().to_string();
+                if !shell.is_empty() {
+                    return shell;
+                }
+            }
+
+            if Self::windows_path_has_exe("pwsh.exe") || Self::windows_path_has_exe("pwsh") {
+                return "pwsh.exe".to_string();
+            }
+
+            if Self::windows_path_has_exe("powershell.exe") || Self::windows_path_has_exe("powershell") {
+                return "powershell.exe".to_string();
+            }
+
             std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
         }
 
@@ -524,11 +544,89 @@ impl PtyManager {
         }
     }
 
+    fn escape_powershell_single_quoted(s: &str) -> String {
+        s.replace('\'', "''")
+    }
+
+    fn is_cmd_shell(shell: &str) -> bool {
+        let shell = shell.trim().to_ascii_lowercase();
+        shell == "cmd"
+            || shell == "cmd.exe"
+            || shell.ends_with("\\cmd.exe")
+            || shell.ends_with("/cmd.exe")
+    }
+
+    fn is_powershell_shell(shell: &str) -> bool {
+        let shell = shell.trim().to_ascii_lowercase();
+        shell == "powershell"
+            || shell == "powershell.exe"
+            || shell.ends_with("\\powershell.exe")
+            || shell.ends_with("/powershell.exe")
+            || shell == "pwsh"
+            || shell == "pwsh.exe"
+            || shell.ends_with("\\pwsh.exe")
+            || shell.ends_with("/pwsh.exe")
+    }
+
+    #[cfg(target_os = "windows")]
+    fn windows_path_has_exe(exe_name: &str) -> bool {
+        let exe_name = exe_name.trim();
+        if exe_name.is_empty() {
+            return false;
+        }
+
+        if let Some(paths) = std::env::var_os("PATH") {
+            for path in std::env::split_paths(&paths) {
+                let candidate = path.join(exe_name);
+                if candidate.is_file() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn build_powershell_utf8_init_script() -> &'static str {
+        "[Console]::InputEncoding=[System.Text.Encoding]::UTF8; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; chcp 65001 | Out-Null;"
+    }
+
+    fn build_powershell_claude_script(args: &[String]) -> String {
+        let args_literal = if args.is_empty() {
+            "@()".to_string()
+        } else {
+            let joined = args
+                .iter()
+                .map(|a| format!("'{}'", Self::escape_powershell_single_quoted(a)))
+                .collect::<Vec<String>>()
+                .join(",");
+            format!("@({})", joined)
+        };
+
+        format!(
+            "{} $claudeArgs = {}; & 'claude' @claudeArgs;",
+            Self::build_powershell_utf8_init_script(),
+            args_literal
+        )
+    }
+
     /// Build shell command for normal terminal mode
     fn build_shell_command(&self, work_dir: &str, session_id: &str, config_id: i64) -> CommandBuilder {
         let shell = Self::detect_default_shell();
         let mut cmd = CommandBuilder::new(&shell);
         cmd.cwd(work_dir);
+
+        #[cfg(target_os = "windows")]
+        {
+            if Self::is_powershell_shell(&shell) {
+                cmd.arg("-NoLogo");
+                cmd.arg("-NoExit");
+                cmd.arg("-Command");
+                cmd.arg(Self::build_powershell_utf8_init_script());
+            } else if Self::is_cmd_shell(&shell) {
+                cmd.arg("/K");
+                cmd.arg("chcp 65001>nul");
+            }
+        }
 
         // Inject proxy environment variables
         let env_vars = self.build_env_vars(session_id, config_id);
@@ -556,8 +654,8 @@ impl PtyManager {
         let mut cmd = CommandBuilder::new(&shell);
         cmd.cwd(work_dir);
 
-        // Build claude command with arguments
-        let mut claude_args = vec!["claude".to_string()];
+        // Build claude arguments (excluding command itself)
+        let mut claude_args: Vec<String> = Vec::new();
 
         if let Some(opts) = options {
             // Add flags based on options
@@ -587,18 +685,38 @@ impl PtyManager {
             }
         }
 
-        // Join arguments into a single command string
-        let claude_cmd = claude_args.join(" ");
+        // Join arguments into a single command string (for logging only)
+        let claude_cmd = std::iter::once("claude".to_string())
+            .chain(claude_args.iter().cloned())
+            .collect::<Vec<String>>()
+            .join(" ");
 
         // Platform-specific shell invocation
         // Key: Run claude first, then exec into interactive shell regardless of claude's exit status
         // This ensures user can continue using the terminal even if claude fails/exits
         #[cfg(target_os = "windows")]
         {
-            // Windows: run claude, then start a new cmd
-            let script = format!("{} & cmd", claude_cmd);
-            cmd.arg("/K");
-            cmd.arg(&script);
+            if Self::is_powershell_shell(&shell) {
+                let script = Self::build_powershell_claude_script(&claude_args);
+                cmd.arg("-NoLogo");
+                cmd.arg("-NoExit");
+                cmd.arg("-Command");
+                cmd.arg(script);
+            } else {
+                // cmd.exe fallback：/K 本身会保持交互，无需再额外启动一个 cmd
+                let script = if claude_args.is_empty() {
+                    "chcp 65001>nul & claude".to_string()
+                } else {
+                    format!("chcp 65001>nul & {}",
+                        std::iter::once("claude".to_string())
+                            .chain(claude_args.iter().cloned())
+                            .collect::<Vec<String>>()
+                            .join(" ")
+                    )
+                };
+                cmd.arg("/K");
+                cmd.arg(&script);
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -723,5 +841,24 @@ mod tests {
         // HTTP_PROXY should NOT contain path (standard proxy format)
         let proxy_url = env.get("HTTP_PROXY").unwrap();
         assert!(!proxy_url.contains("/session/"));
+    }
+
+    #[test]
+    fn test_escape_powershell_single_quoted() {
+        assert_eq!(PtyManager::escape_powershell_single_quoted("abc"), "abc");
+        assert_eq!(PtyManager::escape_powershell_single_quoted("a'b"), "a''b");
+        assert_eq!(PtyManager::escape_powershell_single_quoted("'"), "''");
+    }
+
+    #[test]
+    fn test_build_powershell_claude_script_contains_args() {
+        let args = vec!["--model".to_string(), "claude-3-5-sonnet".to_string(), "hello world".to_string()];
+        let script = PtyManager::build_powershell_claude_script(&args);
+        assert!(script.contains("OutputEncoding"));
+        assert!(script.contains("$claudeArgs"));
+        assert!(script.contains("'--model'"));
+        assert!(script.contains("'claude-3-5-sonnet'"));
+        assert!(script.contains("'hello world'"));
+        assert!(script.contains("& 'claude'"));
     }
 }

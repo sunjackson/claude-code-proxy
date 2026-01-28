@@ -396,12 +396,43 @@ impl RequestRouter {
 
         // 2. Extract client request path and query
         let client_uri = req.uri().clone();
-        let client_path_and_query = client_uri.path_and_query()
+        let raw_path_and_query = client_uri.path_and_query()
             .map(|pq| pq.as_str())
             .unwrap_or("/");
 
-        log::debug!("Client request path: {}", client_path_and_query);
-        log::info!("原始请求头 Original request headers: {:?}", req.headers());
+        // Strip /session/{session_id} prefix if present
+        // This allows session-based routing while keeping the actual API path clean
+        let client_path_and_query = if raw_path_and_query.starts_with("/session/") {
+            // Find the end of session_id (next '/' or end of path)
+            if let Some(rest) = raw_path_and_query.strip_prefix("/session/") {
+                // Skip session_id to find the actual path
+                if let Some(slash_pos) = rest.find('/') {
+                    &rest[slash_pos..]
+                } else {
+                    // Only session prefix, no further path
+                    "/"
+                }
+            } else {
+                raw_path_and_query
+            }
+        } else {
+            raw_path_and_query
+        };
+
+        log::debug!("Client request path: {} (original: {})", client_path_and_query, raw_path_and_query);
+
+        // Log original Authorization header for debugging session routing
+        let original_auth = req.headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| {
+                if s.len() > 30 {
+                    format!("{}...(truncated)", &s[..30])
+                } else {
+                    s.to_string()
+                }
+            });
+        log::info!("原始请求头 Original request headers: {:?}, Authorization: {:?}", req.headers(), original_auth);
 
         // 2.1 创建智能路由上下文 - 检测客户端类型并决定转换方向
         let routing_ctx = RoutingContext::new(

@@ -84,7 +84,7 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/', titleKey: 'nav.dashboard' },
     { path: '/terminal', titleKey: 'nav.terminal' },
-    { path: '/claude-code-setup', titleKey: 'nav.advancedConfig' },
+    { path: '/claude-code-setup', titleKey: 'nav.claudeCode' },
     { path: '/recommendations', titleKey: 'nav.recommendations' },
     { path: '/settings', titleKey: 'nav.systemSettings' },
   ];

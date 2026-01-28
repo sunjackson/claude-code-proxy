@@ -267,9 +267,7 @@ mod tests {
             candidates: vec![GeminiCandidate {
                 content: GeminiContent {
                     role: Some("model".to_string()),
-                    parts: vec![GeminiPart {
-                        text: Some("Hello! How can I help you?".to_string()),
-                    }],
+                    parts: vec![GeminiPart::text("Hello! How can I help you?")],
                 },
                 finish_reason: Some("STOP".to_string()),
                 index: Some(0),
@@ -295,6 +293,7 @@ mod tests {
             ClaudeContentBlock::Text { text } => {
                 assert_eq!(text, "Hello! How can I help you?");
             }
+            _ => panic!("Expected text content block"),
         }
 
         assert_eq!(claude_resp.stop_reason, Some("end_turn".to_string()));
@@ -308,9 +307,7 @@ mod tests {
             candidates: vec![GeminiCandidate {
                 content: GeminiContent {
                     role: Some("model".to_string()),
-                    parts: vec![GeminiPart {
-                        text: Some("Response text".to_string()),
-                    }],
+                    parts: vec![GeminiPart::text("Response text")],
                 },
                 finish_reason: Some("MAX_TOKENS".to_string()),
                 index: Some(0),

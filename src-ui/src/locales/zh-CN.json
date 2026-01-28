@@ -738,8 +738,9 @@
   },
   "setup": {
     "title": "Claude Code 配置",
-    "subtitle": "环境检测 · MCP服务 · 权限管理 · 技能配置",
+    "subtitle": "快速检测 · MCP服务 · 权限管理 · 技能配置",
     "tabs": {
+      "quickCheck": "快速检测",
       "environment": "环境检测",
       "mcp": "MCP 服务",
       "permissions": "权限管理",

@@ -6,7 +6,6 @@
 import React from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { UpdateNotification } from './UpdateNotification';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -30,9 +29,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children, title, subtitle 
           {children}
         </main>
       </div>
-
-      {/* 版本更新通知 */}
-      <UpdateNotification />
     </div>
   );
 };

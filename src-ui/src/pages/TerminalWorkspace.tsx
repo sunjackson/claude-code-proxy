@@ -1,13 +1,13 @@
 /**
  * TerminalWorkspace Page
  *
- * Main terminal workspace with multi-tab support, provider switching,
+ * Main terminal workspace with multi-tab support,
  * left sidebar for group management, and right-side drawer for history.
  * 使用 CompactLayout 统一布局框架，与其他页面保持一致的导航体验。
  */
 
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { RefreshCw, Trash2, PanelRight, ChevronLeft, ChevronRight, Zap, Plus, X, Terminal, FolderOpen, History } from 'lucide-react';
+import { RefreshCw, Trash2, PanelRight, ChevronLeft, ChevronRight, Zap, Plus, Terminal, FolderOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import {
@@ -16,18 +16,14 @@ import {
   TerminalTab,
   NewTerminalDialog,
   ClaudeCodeDialog,
-  ProviderSwitchMenu,
   TerminalSidebar,
-  TerminalQuickActions,
-  ProjectMemoryDialog,
-  ProjectPathDialog,
+  ProjectContextPanel,
 } from '../components/terminal';
 
 import {
   createPtySession,
   createClaudeCodeSession,
   closePtySession,
-  switchPtyProvider,
   listPtySessions,
   generateSessionId,
   PtySessionInfo,
@@ -36,7 +32,7 @@ import {
 
 import { listApiConfigs } from '../api/config';
 import { ApiConfig } from '../types/tauri';
-import { useTerminalStore, SessionHistoryEntry } from '../store/terminalStore';
+import { useTerminalStore } from '../store/terminalStore';
 import { CompactLayout } from '../components/CompactLayout';
 import { useFullscreenResize } from '../hooks/useFullscreenResize';
 
@@ -57,7 +53,6 @@ const TerminalWorkspace: React.FC = () => {
     drawerOpen,
     activeGroupId,
     tabGroupMap,
-    history,
     setTabs,
     addTab,
     removeTab,
@@ -66,8 +61,6 @@ const TerminalWorkspace: React.FC = () => {
     clearOutputBuffer,
     setInitialized,
     addToHistory,
-    removeFromHistory,
-    clearHistory,
     setDrawerOpen,
   } = useTerminalStore();
 
@@ -76,18 +69,10 @@ const TerminalWorkspace: React.FC = () => {
   const [isClaudeCodeDialogOpen, setIsClaudeCodeDialogOpen] = React.useState(false);
   const [newTerminalGroupId, setNewTerminalGroupId] = React.useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
-  const [switchMenuState, setSwitchMenuState] = React.useState<{
-    sessionId: string;
-    configId: number;
-    position: { x: number; y: number };
-  } | null>(null);
   const [configs, setConfigs] = React.useState<ApiConfig[]>([]);
   const [isLoading, setIsLoading] = React.useState(!initialized);
   // Store session info with workDir
   const [sessionInfoMap, setSessionInfoMap] = React.useState<Map<string, PtySessionInfo>>(new Map());
-  // Quick actions dialogs
-  const [isProjectMemoryDialogOpen, setIsProjectMemoryDialogOpen] = React.useState(false);
-  const [isProjectPathDialogOpen, setIsProjectPathDialogOpen] = React.useState(false);
 
   // Load configs and existing sessions on mount
   useEffect(() => {
@@ -239,27 +224,6 @@ const TerminalWorkspace: React.FC = () => {
     [configs, addTab, setActiveSessionId, activeGroupId]
   );
 
-  // Restore session from history
-  const handleRestoreSession = useCallback(
-    async (entry: SessionHistoryEntry) => {
-      // Check if config still exists and is enabled
-      const config = configs.find((c) => c.id === entry.configId && c.is_enabled);
-      if (!config) {
-        toast.error(`Provider "${entry.configName || entry.configId}" is no longer available`);
-        return;
-      }
-
-      try {
-        await handleCreateTerminal(entry.configId, entry.name, entry.workDir);
-        toast.success(`Restored session: ${entry.name}`);
-      } catch (error) {
-        console.error('Failed to restore session:', error);
-        toast.error(`Failed to restore session: ${error}`);
-      }
-    },
-    [configs, handleCreateTerminal]
-  );
-
   // Close terminal and save to history
   const handleCloseTab = useCallback(
     async (sessionId: string) => {
@@ -299,42 +263,6 @@ const TerminalWorkspace: React.FC = () => {
       }
     },
     [tabs, sessionInfoMap, clearOutputBuffer, removeTab, addToHistory]
-  );
-
-  // Switch provider
-  const handleSwitchProvider = useCallback(
-    async (sessionId: string, newConfigId: number) => {
-      try {
-        await switchPtyProvider(sessionId, newConfigId);
-
-        const config = configs.find((c) => c.id === newConfigId);
-        updateTab(sessionId, { configId: newConfigId, configName: config?.name });
-
-        toast.success(`已切换到 ${config?.name || '新服务商'}，路由已自动生效`);
-      } catch (error) {
-        console.error('Failed to switch provider:', error);
-        toast.error(`切换服务商失败: ${error}`);
-      }
-    },
-    [configs, updateTab]
-  );
-
-  // Open provider switch menu
-  const handleOpenSwitchMenu = useCallback(
-    (sessionId: string, event?: React.MouseEvent) => {
-      const tab = tabs.find((t) => t.sessionId === sessionId);
-      if (!tab) return;
-
-      const rect = (event?.currentTarget as HTMLElement)?.getBoundingClientRect();
-      setSwitchMenuState({
-        sessionId,
-        configId: tab.configId,
-        position: rect
-          ? { x: rect.left, y: rect.bottom + 4 }
-          : { x: 100, y: 100 },
-      });
-    },
-    [tabs]
   );
 
   // Handle terminal close event (from PTY)
@@ -413,109 +341,6 @@ const TerminalWorkspace: React.FC = () => {
     if (!activeSessionId) return null;
     return sessionInfoMap.get(activeSessionId);
   }, [activeSessionId, sessionInfoMap]);
-
-  // Quick actions handlers
-  const handleSaveProjectMemory = useCallback((content: string) => {
-    // TODO: Implement saving project memory to CLAUDE.md
-    console.log('Save project memory:', content);
-    toast.success('项目记忆已保存');
-  }, []);
-
-  const handleSaveProjectPath = useCallback(async (newPath: string) => {
-    if (!activeSessionId || !currentSessionInfo) {
-      toast.error('无活动会话');
-      return;
-    }
-
-    try {
-      // Get current session info
-      const currentTab = tabs.find(t => t.sessionId === activeSessionId);
-      if (!currentTab) {
-        toast.error('会话信息丢失');
-        return;
-      }
-
-      // Close current session
-      await closePtySession(activeSessionId);
-      clearOutputBuffer(activeSessionId);
-      removeTab(activeSessionId);
-
-      // Remove from session info map
-      setSessionInfoMap((prev) => {
-        const next = new Map(prev);
-        next.delete(activeSessionId);
-        return next;
-      });
-
-      // Create new session with new path
-      const newSessionId = generateSessionId();
-
-      // Check if it was a Claude Code session
-      if (currentSessionInfo.is_claude_code && currentSessionInfo.claude_options) {
-        // Recreate as Claude Code session
-        const session = await createClaudeCodeSession(
-          newSessionId,
-          currentTab.configId,
-          newPath,
-          currentSessionInfo.claude_options,
-          currentTab.name
-        );
-
-        const newTab: TerminalTab & { workDir?: string } = {
-          sessionId: session.session_id,
-          name: session.name || currentTab.name || 'Claude Code',
-          configId: session.config_id,
-          configName: currentTab.configName,
-          isRunning: true,
-          isClaudeCode: true,
-          workDir: session.work_dir,
-        };
-
-        // Update session info map
-        setSessionInfoMap((prev) => {
-          const next = new Map(prev);
-          next.set(session.session_id, session);
-          return next;
-        });
-
-        addTab(newTab, tabGroupMap[activeSessionId]);
-        setActiveSessionId(session.session_id);
-      } else {
-        // Recreate as regular terminal
-        const session = await createPtySession(
-          newSessionId,
-          currentTab.configId,
-          currentTab.name,
-          newPath
-        );
-
-        const newTab: TerminalTab & { workDir?: string } = {
-          sessionId: session.session_id,
-          name: session.name || currentTab.name || 'Terminal',
-          configId: session.config_id,
-          configName: currentTab.configName,
-          isRunning: true,
-          isClaudeCode: false,
-          workDir: session.work_dir,
-        };
-
-        // Update session info map
-        setSessionInfoMap((prev) => {
-          const next = new Map(prev);
-          next.set(session.session_id, session);
-          return next;
-        });
-
-        addTab(newTab, tabGroupMap[activeSessionId]);
-        setActiveSessionId(session.session_id);
-      }
-
-      toast.success('项目路径已更新，会话已重新创建');
-    } catch (error) {
-      console.error('Failed to update project path:', error);
-      toast.error(`更新项目路径失败: ${error}`);
-    }
-  }, [activeSessionId, currentSessionInfo, tabs, tabGroupMap, clearOutputBuffer, removeTab, addTab, setActiveSessionId]);
 
   return (
     <CompactLayout>
@@ -600,12 +425,6 @@ const TerminalWorkspace: React.FC = () => {
             onSelectTab={setActiveSessionId}
             onCloseTab={handleCloseTab}
             onNewTerminal={() => setIsNewDialogOpen(true)}
-            onSwitchProvider={(sessionId) => {
-              const tab = tabs.find((t) => t.sessionId === sessionId);
-              if (tab) {
-                handleOpenSwitchMenu(sessionId);
-              }
-            }}
           />
 
           {/* Terminal area - 使用 flex-1 和 min-h-0 确保自适应 */}
@@ -666,16 +485,6 @@ const TerminalWorkspace: React.FC = () => {
               </div>
             )}
           </div>
-
-          {/* Quick actions bar at bottom */}
-          <TerminalQuickActions
-            sessionId={activeSessionId}
-            workDir={currentSessionInfo?.work_dir}
-            onEditProjectPath={() => setIsProjectPathDialogOpen(true)}
-            onEditProjectMemory={() => setIsProjectMemoryDialogOpen(true)}
-            onOpenSettings={() => toast('终端设置功能开发中...')}
-            onShowInfo={() => toast('会话信息功能开发中...')}
-          />
         </div>
 
         {/* Right Sidebar (Project Info Panel) with collapse toggle */}
@@ -770,83 +579,13 @@ const TerminalWorkspace: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Stats */}
-                  <div className="p-3 border-b border-gray-800">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                      状态统计
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 bg-gray-800/50 rounded-lg p-2 text-center">
-                        <div className="text-lg font-bold text-white">{tabs.length}</div>
-                        <div className="text-xs text-gray-500">活动会话</div>
-                      </div>
-                      <div className="flex-1 bg-gray-800/50 rounded-lg p-2 text-center">
-                        <div className="text-lg font-bold text-white">{history.length}</div>
-                        <div className="text-xs text-gray-500">历史记录</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Recent History */}
-                  <div className="p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        最近历史
-                      </h3>
-                      {history.length > 0 && (
-                        <button
-                          onClick={() => {
-                            if (confirm('清空所有历史记录？')) {
-                              clearHistory();
-                            }
-                          }}
-                          className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-                        >
-                          清空
-                        </button>
-                      )}
-                    </div>
-
-                    {history.length === 0 ? (
-                      <div className="text-center py-4">
-                        <History className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-                        <p className="text-xs text-gray-500">暂无历史记录</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {history.slice(0, 5).map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="group flex items-center gap-2 p-2 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors cursor-pointer"
-                            onClick={() => handleRestoreSession(entry)}
-                            title="点击恢复会话"
-                          >
-                            <Terminal className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs text-white truncate">{entry.name}</div>
-                              <div className="text-xs text-gray-500 truncate">
-                                {entry.workDir?.split('/').pop() || '无目录'}
-                              </div>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeFromHistory(entry.id);
-                              }}
-                              className="p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                        {history.length > 5 && (
-                          <p className="text-xs text-gray-600 text-center pt-1">
-                            还有 {history.length - 5} 条历史记录
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {/* Project Context Info - Memories, Commands, CLAUDE.md */}
+                  {currentSessionInfo?.work_dir && (
+                    <ProjectContextPanel
+                      projectPath={currentSessionInfo.work_dir}
+                      isLoading={isLoading}
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -877,34 +616,6 @@ const TerminalWorkspace: React.FC = () => {
           setNewTerminalGroupId(null);
         }}
         defaultConfigId={configs[0]?.id}
-      />
-
-      {/* Provider switch menu */}
-      {switchMenuState && (
-        <ProviderSwitchMenu
-          currentConfigId={switchMenuState.configId}
-          position={switchMenuState.position}
-          onSelect={(configId) =>
-            handleSwitchProvider(switchMenuState.sessionId, configId)
-          }
-          onClose={() => setSwitchMenuState(null)}
-        />
-      )}
-
-      {/* Project memory dialog */}
-      <ProjectMemoryDialog
-        isOpen={isProjectMemoryDialogOpen}
-        onClose={() => setIsProjectMemoryDialogOpen(false)}
-        workDir={currentSessionInfo?.work_dir}
-        onSave={handleSaveProjectMemory}
-      />
-
-      {/* Project path dialog */}
-      <ProjectPathDialog
-        isOpen={isProjectPathDialogOpen}
-        onClose={() => setIsProjectPathDialogOpen(false)}
-        currentPath={currentSessionInfo?.work_dir}
-        onSave={handleSaveProjectPath}
       />
       </div>
     </CompactLayout>

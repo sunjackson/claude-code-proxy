@@ -843,6 +843,85 @@ export interface SkillDefinition {
 }
 
 // ============================================
+// 斜杠命令 (Slash Commands) 相关类型 - 新版 Claude Code 规范
+// ============================================
+
+/**
+ * 命令作用域
+ */
+export type CommandScope = 'user' | 'project';
+
+/**
+ * 斜杠命令元数据 (YAML frontmatter)
+ */
+export interface SlashCommandMeta {
+  /** 命令描述 (必需) */
+  description: string;
+  /** 允许使用的工具列表 */
+  allowedTools: string[];
+  /** 参数提示 */
+  argumentHint?: string;
+  /** 使用的模型 (sonnet, opus, haiku) */
+  model?: string;
+}
+
+/**
+ * 斜杠命令完整信息
+ */
+export interface SlashCommand {
+  /** 命令名称 (不含 / 前缀) */
+  name: string;
+  /** 命令作用域 */
+  scope: CommandScope;
+  /** 文件路径 */
+  filePath: string;
+  /** 元数据 */
+  meta: SlashCommandMeta;
+  /** 命令主体内容 (不含 frontmatter) */
+  body?: string;
+}
+
+/**
+ * 创建/更新斜杠命令的请求
+ */
+export interface SlashCommandInput {
+  /** 命令名称 */
+  name: string;
+  /** 命令作用域 */
+  scope: CommandScope;
+  /** 命令描述 */
+  description: string;
+  /** 允许使用的工具列表 */
+  allowedTools: string[];
+  /** 参数提示 */
+  argumentHint?: string;
+  /** 使用的模型 */
+  model?: string;
+  /** 命令主体内容 */
+  body: string;
+}
+
+/**
+ * 斜杠命令列表项 (用于前端展示)
+ */
+export interface SlashCommandInfo {
+  /** 命令名称 (不含 / 前缀) */
+  name: string;
+  /** 完整命令 (含 / 前缀) */
+  fullCommand: string;
+  /** 命令作用域 */
+  scope: CommandScope;
+  /** 描述 */
+  description: string;
+  /** 参数提示 */
+  argumentHint?: string;
+  /** 使用的模型 */
+  model?: string;
+  /** 文件路径 */
+  filePath: string;
+}
+
+// ============================================
 // 多环境检测相关类型
 // ============================================
 
@@ -1102,4 +1181,51 @@ export interface ModelMappingExport {
   exported_at: string;
   /** 映射列表 */
   mappings: ModelMappingExportItem[];
+}
+
+// ============================================================
+// 项目上下文信息类型定义
+// ============================================================
+
+/**
+ * 记忆作用域
+ */
+export type MemoryScope = 'user' | 'project';
+
+/**
+ * 记忆信息
+ */
+export interface MemoryInfo {
+  /** 记忆名称 (文件名，不含 .md 后缀) */
+  name: string;
+  /** 记忆作用域 */
+  scope: MemoryScope;
+  /** 文件路径 */
+  filePath: string;
+  /** 内容摘要 (前100字符) */
+  summary: string;
+  /** 文件大小 (字节) */
+  size: number;
+  /** 最后修改时间 (Unix 时间戳) */
+  modifiedAt: number;
+}
+
+/**
+ * 项目上下文信息 (整合项目记忆和命令)
+ */
+export interface ProjectContextInfo {
+  /** 项目路径 */
+  projectPath: string;
+  /** 是否有 CLAUDE.md 文件 */
+  hasClaudeMd: boolean;
+  /** CLAUDE.md 内容摘要 */
+  claudeMdSummary: string | null;
+  /** 项目级记忆列表 */
+  memories: MemoryInfo[];
+  /** 项目级命令列表 */
+  commands: SlashCommandInfo[];
+  /** 用户级记忆数量 */
+  userMemoryCount: number;
+  /** 用户级命令数量 */
+  userCommandCount: number;
 }

@@ -263,12 +263,6 @@ const GroupItem: React.FC<{
                 <span className="flex-1 text-sm truncate">
                   {tab.name || `Terminal ${tab.sessionId.slice(-4)}`}
                 </span>
-                {/* Provider badge */}
-                {tab.configName && (
-                  <span className="text-xs px-1 py-0.5 bg-gray-700/50 rounded truncate max-w-[60px]">
-                    {tab.configName}
-                  </span>
-                )}
                 {/* Close button */}
                 <button
                   onClick={(e) => {

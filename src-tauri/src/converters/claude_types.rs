@@ -23,13 +23,105 @@ pub enum ClaudeContent {
     Blocks(Vec<ClaudeContentBlock>),
 }
 
+/// Claude 图片来源
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeImageSource {
+    /// 来源类型: "base64" 或 "url"
+    #[serde(rename = "type")]
+    pub source_type: String,
+    /// 媒体类型: "image/jpeg", "image/png", "image/gif", "image/webp"
+    pub media_type: String,
+    /// Base64 编码的图片数据或 URL
+    pub data: String,
+}
+
+impl ClaudeImageSource {
+    /// 创建 Base64 图片来源
+    pub fn base64(media_type: &str, data: &str) -> Self {
+        Self {
+            source_type: "base64".to_string(),
+            media_type: media_type.to_string(),
+            data: data.to_string(),
+        }
+    }
+
+    /// 创建 URL 图片来源
+    pub fn url(media_type: &str, url: &str) -> Self {
+        Self {
+            source_type: "url".to_string(),
+            media_type: media_type.to_string(),
+            data: url.to_string(),
+        }
+    }
+
+    /// 检查是否为 Base64 格式
+    pub fn is_base64(&self) -> bool {
+        self.source_type == "base64"
+    }
+
+    /// 检查是否为 URL 格式
+    pub fn is_url(&self) -> bool {
+        self.source_type == "url"
+    }
+
+    /// 获取支持的媒体类型列表
+    pub fn supported_media_types() -> &'static [&'static str] {
+        &["image/jpeg", "image/png", "image/gif", "image/webp"]
+    }
+
+    /// 验证媒体类型是否支持
+    pub fn is_valid_media_type(&self) -> bool {
+        Self::supported_media_types().contains(&self.media_type.as_str())
+    }
+}
+
+/// Claude 工具使用内容 (Function Calling 请求)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeToolUse {
+    /// 工具调用 ID
+    pub id: String,
+    /// 工具名称
+    pub name: String,
+    /// 工具输入参数 (JSON 对象)
+    pub input: serde_json::Value,
+}
+
+/// Claude 工具结果内容
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ClaudeToolResultContent {
+    /// 文本结果
+    Text(String),
+    /// 复杂内容块列表
+    Blocks(Vec<ClaudeContentBlock>),
+}
+
 /// Claude 内容块
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClaudeContentBlock {
+    /// 文本内容
     #[serde(rename = "text")]
     Text { text: String },
-    // 可扩展其他类型如图片等
+    /// 图片内容
+    #[serde(rename = "image")]
+    Image { source: ClaudeImageSource },
+    /// 工具使用 (Function Calling 请求)
+    #[serde(rename = "tool_use")]
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    /// 工具结果 (Function Calling 响应)
+    #[serde(rename = "tool_result")]
+    ToolResult {
+        tool_use_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        content: Option<ClaudeToolResultContent>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
+    },
 }
 
 /// Claude 消息
